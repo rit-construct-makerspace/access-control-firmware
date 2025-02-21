@@ -665,7 +665,7 @@ void SendStatus(String StatusSource = "Scheduled"){ //Done?
   }
 }
 
-void ValidateCard(){
+void ValidateCard(){ 
   //Allows a card to be verified without doing an access check. Only works if the user has put their card into the machine for an auth request before.
   //First, activate the NFC reader
   Debug.println(F("Performing non-authentication verification of card against internal records."));
