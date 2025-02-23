@@ -1,0 +1,166 @@
+/*
+
+LED Control
+
+This task is responsible for running lighting animations on the front of the device.
+Animation patterns are pre-defined, and swapped between as system states change. 
+Many situations have a static LED color. 
+The task independently monitors the system state, and sets the animations accordingly.
+
+Animation 0: Flashing Red
+* Overtemperature condition
+* Unable to reach NFC reader after multiple attempts
+
+Animation 1: Solid Red
+* Lockout State
+* Access Denied, until card removed
+
+Animation 2: Solid Green
+* Unlocked State
+* AlwaysOn State
+
+Animation 3: Solid Yellow
+* Idle State
+
+Animation 4: Flashing Yellow
+* Card inserted, but not verified yet.
+
+Animation 5: Cycle green/white
+* Unlocked or AlwaysOn and no network
+
+Animation 6: Solid white
+* Idle and no network
+
+Global Variables Used:
+Red: LED Red Channel
+Blue: LED Blue Channel
+Green: LED Green Channel
+NewLED: Indicates a new set of LED colors is ready to send
+
+*/
+
+void LEDControl(void *pvParameters) {
+  byte LEDAnimation;
+  byte OldLEDAnimation;
+  unsigned long AnimationTime;
+  bool AnimationBlock;
+  while(1){
+    vTaskDelay(10 / portTICK_PERIOD_MS);
+    //First, set the animation state:
+    //Many animations deal with the State string, so make sure that's not being edited;
+    if (StateChange) {
+      vTaskDelay(1 / portTICK_PERIOD_MS);
+    }
+    //Animation triggers are not exclusive, so if statements written in reverse-priority order.
+    if(State.equals("Idle")){
+      //Animation 3: Solid Yellow
+      LEDAnimation = 3;
+    }
+    if((CardUnread || CardPresent) && !CardVerified){
+      //Animation 4: Flashing Yellow
+    }
+    if(NoNetwork){
+      //Animation 6: Solid White
+      LEDAnimation = 6;
+    }
+    if(State.equals("Unlocked") || State.equals("AlwaysOn")){
+      //Animation 2: Solid Green
+      LEDAnimation = 2;
+    }
+    if((LEDAnimation == 2) && NoNetwork){
+      //Animation 5: Cycle green/white
+      LEDAnimation = 5;
+    }
+    if((CardVerified && !CardStatus && CardPresent) || (State.equals("Lockout"))){
+      //Animation 1: Solid Red
+      LEDAnimation = 1;
+    }
+    if(TemperatureFault || NFCFault){
+      //Animation 0: Flashing Red
+      LEDAnimation = 0;
+    }
+
+    //Next, see if the animation changed;
+    if(LEDAnimation != OldLEDAnimation){
+      OldLEDAnimation = LEDAnimation;
+      AnimationTime = 0; //Force an update of the animation block
+    }
+    if(AnimationTime <= millis()){
+      //It is time to advance to the next animation block
+      AnimationBlock = !AnimationBlock;
+      if(LEDAnimation == 5){
+        //Animation 5 runs at a slower speed
+        AnimationTime = millis() + LEDBlinkTime;
+      } else{
+        AnimationTime = millis() + LEDFlashTime;
+      }
+      //Set the animation block here;
+      switch(LEDAnimation){
+      case 0:
+        //Flashing Red
+        if(AnimationBlock){
+          Red = 255;
+          Green = 000;
+          Blue = 000;
+        } else{
+          Red = 000;
+          Green = 000;
+          Blue = 000;
+        }
+      break;
+      case 1:
+        //Solid Red
+        Red = 255;
+        Green = 000;
+        Blue = 000;
+      break;
+      case 2:
+        //Solid Green
+        Red = 000;
+        Green = 255;
+        Blue = 000;
+      break;
+      case 3:
+        //Solid Yellow
+        Red = 255;
+        Green = 255;
+        Blue = 000;
+      break;
+      case 4:
+        //Flashing Yellow
+        if(AnimationBlock){
+          Red = 255;
+          Green = 255;
+          Blue = 000;
+        } else{
+          Red = 000;
+          Green = 000;
+          Blue = 000;
+        }
+      break;
+      case 5:
+        //Cycle Green/White
+        if(AnimationBlock){
+          Red = 000;
+          Green = 255;
+          Blue = 000;
+        } else{
+          Red = 255;
+          Green = 255;
+          Blue = 255;
+        }
+      break;
+      case 6:
+        //Solid White
+        Red = 255;
+        Green = 255;
+        Blue = 255;
+      break;
+      NewLED = 1;
+      }
+    } else{
+      //Animation doesn't need updating
+      continue;
+    }
+  }
+}

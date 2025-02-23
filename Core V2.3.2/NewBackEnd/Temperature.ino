@@ -60,6 +60,23 @@ void Temperature(void *pvParameters){
       Debug.print(F("Maximum Temp: ")); Debug.println(SysMaxTemp);
       DebugPrinting = 0;
     }
+    if(SysMaxTemp > TempLimit){
+      if(DebugMode && !DebugPrinting){
+        DebugPrinting = 1;
+        Debug.println(F("Overtemperature Error!"));
+        DebugPrinting = 0;
+      }
+      TemperatureFault = 1;
+      TemperatureStatus = 1;
+    }
+    if(((SysMaxTemp + 5.0) <= TempLimit) && TemperatureFault == 1){
+      TemperatureFault = 0;
+      if(DebugMode && !DebugPrinting){
+        DebugPrinting = 1;
+        Debug.println(F("Overtemperature Error Cleared"));
+        DebugPrinting = 0;
+      }
+    }
 		vTaskDelay(TemperatureTime / portTICK_PERIOD_MS);
 	}
 }
