@@ -83,13 +83,10 @@ bool Key2; //State of key input 2
 void setup() {
   // put your setup code here, to run once:
 
-  //Swap the UART to the internal connectors;
-  if (digitalRead(UART_MODE)) {
-    Serial.swap(1);
-  }
-
   //Startup the LEDs
   LED.begin();
+  LED.clear();
+  LED.show();
 
   //Set PinModes
   pinMode(FE_DEBUG, OUTPUT);
@@ -98,6 +95,7 @@ void setup() {
   digitalWrite(NO, LOW);
   
   //Start serial:
+  Serial.swap(1);
   Serial.begin(115200);
 
   //Read initial states;
@@ -154,9 +152,9 @@ void loop() {
         //012??????????
         //Since numbers can be different lengths, need to search and find by commas
         Red = incoming.substring(2, incoming.indexOf(',')).toInt();
-        incoming.remove(0, incoming.indexOf(','));
+        incoming.remove(0, incoming.indexOf(',')+1);
         Green = incoming.substring(0, incoming.indexOf(',')).toInt();
-        incoming.remove(0, incoming.indexOf(','));
+        incoming.remove(0, incoming.indexOf(',')+1);
         Blue = incoming.toInt();
         LED.setPixelColor(0, Red, Green, Blue);
         LED.show();
