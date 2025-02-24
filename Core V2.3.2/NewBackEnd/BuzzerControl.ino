@@ -14,7 +14,11 @@ Melody 2:
 
 Melody 3:
 * Used for error conditions, like an internal fault
-* Low - Low - Low
+* Low - Off - Low - Off - Low
+
+Melody 4:
+* Single beep for minor notifications
+* High
 
 Global Variables Used:
 
@@ -39,8 +43,13 @@ void BuzzerControl(void *pvParameters) {
     if(CardVerified && !CardStatus && CardPresent){
       Melody = 2;
     }
-    if(TemperatureFault || NFCFault){
+    if(TemperatureFault || NFCFault || ReadError){
+      ReadError = 0;
       Melody = 3;
+    }
+    if(VerifiedBeep){
+      VerifiedBeep = 0;
+      Melody = 4;
     }
     if(Melody == 0){
       //No tone to play
@@ -108,6 +117,17 @@ void BuzzerControl(void *pvParameters) {
             Tone = LOW_TONE;
           break;
           case 5:
+            Tone = 0;
+            DonePlaying = 1;
+          break;
+        }
+      break;
+      case 4:
+        switch(MelodyStep){
+          case 0:
+            Tone = HIGH_TONE;
+          break;
+          case 1:
             Tone = 0;
             DonePlaying = 1;
           break;

@@ -26,6 +26,8 @@ StateChange: flag to indicate a change of the state string is underway.
 
 void StatusReport(void *pvParameters){
   xTaskCreate(RegularReport, "RegularReport", 1024, NULL, 2, NULL);
+  bool StatusSuccess = 0;
+  bool StatusFailed = 0;
   while(1){
     if(StartupStatus){
       SendReport("Startup");
@@ -71,8 +73,6 @@ void RegularReport(void *pvParameters){
 
 void SendReport(String Reason){
   //This function is what specifically handles sending a status report.
-  bool StatusSuccess = 0;
-  bool StatusFailed = 0;
   while(StatusSuccess == 0){
     //First, we gather all the data needed for a status report.
     JsonDocument status;

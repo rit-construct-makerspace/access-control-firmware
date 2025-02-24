@@ -42,6 +42,7 @@ USBConfig: Allows programatic changing of settings over USB
 #define DSTOffset 3600 //How much to offset time in daylight savings, usually 3600 seconds, or 1 hour.
 #define NTP1 "pool.ntp.org" //The primary NTP server to check time against on startup.
 #define NTP2 "time.nist.gov" //The secondary NTP server to check time against on startup.
+#define KEYSWITCH_DEBOUNCE 150 //time in milliseconds between checks of the key switch, to help prevent rapid state changes.
 
 //Global Variables:
 bool TemperatureUpdate;                  //1 when writing new information, to indicate other devices shouldn't read temperature-related info
@@ -85,7 +86,7 @@ bool CheckNetwork;                       //Flag to indicate repeat network commu
 bool UsingNetwork;                       //Flag to indicate exclusive use of the network connection.
 unsigned long SessionTime;               //How long a user has been using a machine for
 bool LogoffSent;                         //Flag to indicate that the system has sent the message to end a session, so data can be cleared.
-String State;                            //Plaintext indication of the state of the system for status reports.
+String State;                            //Plaintext indication of the state of the system for status reports. Idle, Unlocked, AlwayOn, or Lockout.
 bool StateChange;                        //Flag to indicate the state string is currently being updated, and not to use it.
 bool CardVerified;                       //Flag set to 1 once the results of the ID check are complete and CardStatus is valid.
 bool CardStatus;                         //Set to 1 if a card is authorized to use the machine, 0 if not,
@@ -104,6 +105,7 @@ bool NoNetwork;                          //Indicates inability to connect to the
 bool TemperatureFault;                   //1 Indicates an overtemperature condition
 bool NFCFault;                           //Flag indicates a failure to interface with the NFC reader.
 bool CardUnread;                         //A card is preesnt in the machine but hasn't been read yet. 
+bool VerifiedBeep;                       //Flag, set to 1 to sound a beep when a card is verified. Lets staff knw it is valid to use their key when the machine is in a non-idle state.
 
 //Libraries:
 #include <OneWireESP32.h>         //Version 2.0.2 | Source: https://github.com/junkfix/esp32-ds18b20

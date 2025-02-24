@@ -35,6 +35,7 @@ void VerifyID(void *pvParameters) {
           }
           InternalStatus = 1;
           InternalVerified = 1;
+          VerifiedBeep = 1;
           break;
         }
       }
@@ -101,6 +102,7 @@ void VerifyID(void *pvParameters) {
               file.println(UID);
               file.close();
               InternalVerified = 1;
+              VerifiedBeep = 1;
               InternalStatus = 1;
             }
           } else{

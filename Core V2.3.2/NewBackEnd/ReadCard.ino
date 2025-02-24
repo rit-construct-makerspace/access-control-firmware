@@ -89,11 +89,13 @@ void ReadCard(void *pvParameters) {
           SendMessage = 1;
           Message = "NFCReaderFail";
           ReadyToSend = 1;
+        } else{
+          //NFC reader is fine but we couldn't read the card. Definitely not an NFC card.
+          ReadError = 1;
         }
       }
       if(success){
         //The NFC reader was successful.
-        CardPresent = 0;
         UID = "";
         if(DebugMode && DebugPrinting){
           //Wait for debug to be free
