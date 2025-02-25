@@ -6,7 +6,6 @@ This task will check IDs against the server and internal list for if they are ap
 
 Global Variables Used:
 DebugMode: Sets verbose output
-DebugPrinting: Used to reserve the debug uart output
 CardPresent: bool representing if a card has been detected and read
 UID: The UID of the detected card.
 CardVerified: Flag set to 1 once the results of the ID check are complete.
@@ -28,10 +27,9 @@ void VerifyID(void *pvParameters) {
         temp.trim();
         if(UID.equalsIgnoreCase(temp)){
           //ID was found in list.
-          if(DebugMode && !DebugPrinting){
-            DebugPrinting = 1;
+          if(DebugMode && xSemaphoreTake(DebugMutex,(5/portTICK_PERIOD_MS)) == pdTRUE){
             Debug.println(F("ID Found on internal list."));
-            DebugPrinting = 0;
+            xSemaphoreGive(DebugMutex);
           }
           InternalStatus = 1;
           InternalVerified = 1;
@@ -48,26 +46,21 @@ void VerifyID(void *pvParameters) {
           //This is the second attempt
           AuthRetry = 0;
         }
-        //Wait for the network to become available;
-        while(UsingNetwork){
-          vTaskDelay(1 / portTICK_PERIOD_MS);
-        }
-        UsingNetwork = 1;
+        //Reserve the network;
+        xSemaphoreTake(NetworkMutex, portMAX_DELAY); 
         HTTPClient http;
         String ServerPath = Server + "api/auth?type=" + MachineType + "&machine=" + MachineID + "&zone=" + Zone + "&needswelcome=" + NeedsWelcome + "&id=" + UID;
-        if(DebugMode && !DebugPrinting){
-          DebugPrinting = 1;
+        if(DebugMode && xSemaphoreTake(DebugMutex,(5/portTICK_PERIOD_MS)) == pdTRUE){
           Debug.print(F("Sending Auth Request: ")); Debug.println(ServerPath);
-          DebugPrinting = 0;
+          xSemaphoreGive(DebugMutex);
         } 
         http.begin(client, ServerPath);
         int httpCode = http.GET();
         if(httpCode < 200 || httpCode > 299){
           //Invalid HTTP code
-          if(DebugMode && !DebugPrinting){
-            DebugPrinting = 1;
+          if(DebugMode && xSemaphoreTake(DebugMutex,(5/portTICK_PERIOD_MS)) == pdTRUE){
             Debug.print(F("Got invalid HTTP code ")); Debug.println(httpCode);
-            DebugPrinting = 0;
+            xSemaphoreGive(DebugMutex);
           }
           if(AuthFailed == 1){
             //Failed for a second time.
@@ -78,21 +71,24 @@ void VerifyID(void *pvParameters) {
           //Correct HTTP code
           LastServer = millis();
           String payload = http.getString();
-          if(DebugMode && !DebugPrinting){
-            DebugPrinting = 1;
+          if(DebugMode && xSemaphoreTake(DebugMutex,(5/portTICK_PERIOD_MS)) == pdTRUE){
             Debug.print(F("Got response ")); Debug.println(payload);
-            DebugPrinting = 0;
+            xSemaphoreGive(DebugMutex);
           }
           http.end();
-          UsingNetwork = 0;
+          //Release the mutex
+          xSemaphoreGive(NetworkMutex);
+          if(!CardPresent){
+            //The card was removed while we were waiting for the network :(
+            continue;
+          }
           JsonDocument auth;
           deserializeJson(auth, payload);
           if((auth["UID"] == UID) && (auth["Allowed"] == 1)){
             //Authorization granted!
-            if(DebugMode && !DebugPrinting){
-              DebugPrinting = 1;
+            if(DebugMode && xSemaphoreTake(DebugMutex,(5/portTICK_PERIOD_MS)) == pdTRUE){
               Debug.println(F("Authorization Granted."));
-              DebugPrinting = 0;
+              xSemaphoreGive(DebugMutex);
             }
             CardStatus = 1;
             CardVerified = 1;
@@ -107,10 +103,9 @@ void VerifyID(void *pvParameters) {
             }
           } else{
             //Authorization Denied!
-            if(DebugMode && !DebugPrinting){
-              DebugPrinting = 1;
+            if(DebugMode && xSemaphoreTake(DebugMutex,(5/portTICK_PERIOD_MS)) == pdTRUE){
               Debug.println(F("Authorization Denied!"));
-              DebugPrinting = 0;
+              xSemaphoreGive(DebugMutex);
             }
             //Set permission level to 0 on both internal and card. 
             CardStatus = 0;

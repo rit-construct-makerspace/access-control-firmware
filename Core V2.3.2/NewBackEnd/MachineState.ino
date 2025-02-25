@@ -8,7 +8,6 @@ This task is responsible for the core logic of the system, tieing everything els
 Global Variables Used:
 LogoffSent: Flag to indicate that the status report "Session End" has been sent, so data can be cleared and reset.
 State: Plaintext indication of the state of the system for status reports.
-StateChange: Flag to indicate the state string is currently being updated, and not to use it.
 ReadFailed: set to 1 if a card was not read properly repeatedly, indicating it is not an NFC card.
 
 */
@@ -18,12 +17,18 @@ void MachineState(void *pvParameters) {
   bool OldKey1 = 0;
   bool OldKey2 = 0;
   while(1){
+    //Release the semaphore we took last loop;
+    xSemaphoreGive(StateMutex);
+    //Only needs to run every 10 milliseconds
+    vTaskDelay(10 / portTICK_PERIOD_MS);
     //Clear the data after a logoff message is sent, if it doesn't appear there is another card present.
     if(LogoffSent && !CardPresent && !CardUnread){
       UID = "";
       SessionTime = 0;
       LogoffSent = 0;
     }
+    //The rest of this loop requires the State string, so let's reserve it;
+    xSemaphoreTake(StateMutex, portMAX_DELAY);
     //Read the key switches and set the state, with a debounce time
     if(millis() >= LastKeyState){
       //it has been more than the debounce time
@@ -50,15 +55,15 @@ void MachineState(void *pvParameters) {
             vTaskDelay(1 / portTICK_PERIOD_MS);
           }
           if(InternalStatus && InternalVerified){
-            //Card is verified, so proceed to state
-            //TODO
+            //Card is verified, so set the state;
+            State = "AlwaysOn";
           } else{
             //Card was not verified, throw an error
             //TODO
           }
         } else if(Key1){
           //Locked off
-          //TODO
+            State = "Lockout";
         } else if(Key2){
           //Normal mode
           //Entering this mode requires a valid ID, check that now;
@@ -77,8 +82,8 @@ void MachineState(void *pvParameters) {
             vTaskDelay(1 / portTICK_PERIOD_MS);
           }
           if(InternalStatus && InternalVerified){
-            //Card is verified, so proceed to state
-            //TODO
+            //Card is verified, so set the state
+            State = "Idle";
           } else{
             //Card was not verified, throw an error
             //TODO
@@ -86,13 +91,20 @@ void MachineState(void *pvParameters) {
         }
       }
     }
+    //If we are in a temperature fault, set lockout;
+    if(TemperatureFault){
+      State == "Lockout";
+    }
     //Check for what state we should be in based on the card, and assert that if it isn't already;
     if(State == "Idle" && CardVerified && CardStatus){
       //The keycard is present and verified, but we are in the idle state.
-      //TODO
+      //We should be unlocked
+      State = "Unlocked";
     }
     if(State == "Unlocked" && !CardPresent){
       //The machine is unlocked, but the keycard was removed.
+      //We should be in idle mode
+      State = "Idle";
     }
     //Set the ACS output based on state;
     if(State == "AlwaysOn" || State == "Unlocked"){

@@ -83,11 +83,9 @@ bool ChangeStatus;                       //Set to 1 to iindicate to send a repor
 String FEVer;                            //Stores the version number of the frontend.
 unsigned long LastServer;                //Tracks the last time we had a good communication from the server
 bool CheckNetwork;                       //Flag to indicate repeat network communication failures. Needs investigating.
-bool UsingNetwork;                       //Flag to indicate exclusive use of the network connection.
 unsigned long SessionTime;               //How long a user has been using a machine for
 bool LogoffSent;                         //Flag to indicate that the system has sent the message to end a session, so data can be cleared.
 String State;                            //Plaintext indication of the state of the system for status reports. Idle, Unlocked, AlwayOn, or Lockout.
-bool StateChange;                        //Flag to indicate the state string is currently being updated, and not to use it.
 bool CardVerified;                       //Flag set to 1 once the results of the ID check are complete and CardStatus is valid.
 bool CardStatus;                         //Set to 1 if a card is authorized to use the machine, 0 if not,
 bool InternalVerified;                   //Set to 1 when the card has been verified against the internal list, and InternalStatus is valid.
@@ -106,6 +104,7 @@ bool TemperatureFault;                   //1 Indicates an overtemperature condit
 bool NFCFault;                           //Flag indicates a failure to interface with the NFC reader.
 bool CardUnread;                         //A card is preesnt in the machine but hasn't been read yet. 
 bool VerifiedBeep;                       //Flag, set to 1 to sound a beep when a card is verified. Lets staff knw it is valid to use their key when the machine is in a non-idle state.
+bool ReadError;                          //Flag, set 1 when we fail to read a card to flash lights/buzzers.
 
 //Libraries:
 #include <OneWireESP32.h>         //Version 2.0.2 | Source: https://github.com/junkfix/esp32-ds18b20
@@ -151,21 +150,43 @@ HardwareSerial Internal(1);
 HardwareSerial Debug(0);
 JsonDocument usbjson;
 
+//Mutexes:
+SemaphoreHandle_t DebugMutex; //Reserves the USB serial output, priamrily for debugging purposes.
+SemaphoreHandle_t NetworkMutex; //Reserves the network connection
+SemaphoreHandle_t OneWireMutex; //Reserves the OneWire connection. Currently only used for temperature measurement, eventually will measure system integrity.
+SemaphoreHandle_t StateMutex; //Reserves the State string, since it takes a long time to change.
+
 void setup(){
 	delay(100);
   
-  Internal.begin(115200);
-  //Set the LEDs blue for startup.
-  Internal.println("L, 000, 000, 255");
+  //Create mutexes:
+  DebugMutex = xSemaphoreCreateMutex();
+  NetworkMutex = xSemaphoreCreateMutex();
+  OneWireMutex = xSemaphoreCreateMutex();
+  StateMutex = xSemaphoreCreateMutex();
 
-  delay(1000);
+  Internal.begin(115200);
+
+  delay(5000); 
+
+  //Set the LEDs blue for startup.
+  Internal.println("L 0,0,255");
 
 	Debug.begin(115200);
+  Debug.println(F("STARTUP"));
 
   //First, load all settings from memory
   settings.begin("settings", false);
-  SSID = settings.getString("SSID");
+  SecurityCode = settings.getString("SecurityCode");
+  if(SecurityCode == NULL){
+    Debug.println(F("CAN'T FIND SETTINGS - FRESH INSTALL?"));
+    Debug.println(F("HOLDING FOR UPDATE FOREVER..."));
+    xTaskCreate(USBConfig, "USBConfig", 4096, NULL, 2, NULL);
+    //Nuke the rest of this process - we can't do anything without our config.
+    vTaskSuspend(NULL);
+  }
   Password = settings.getString("Password");
+  SSID = settings.getString("SSID");
   Server = settings.getString("Server");
   Key = settings.getString("Key");
   MachineID = settings.getString("MachineID");
@@ -174,7 +195,6 @@ void setup(){
   Zone = settings.getString("Zone");
   TempLimit = settings.getString("TempLimit").toInt();
   Frequency = settings.getString("Frequency").toInt();
-  SecurityCode = settings.getString("SecurityCode");
   NetworkMode = settings.getString("NetworkMode").toInt();
   NeedsWelcome = settings.getString("NeedsWelcome").toInt();
 
@@ -229,6 +249,8 @@ void setup(){
   configTime(GMTOffset, DSTOffset, NTP1, NTP2);
 
   //Check to make sure we can connect to the NFC reader and it isn't damaged.
+  pinMode(NFCPWR, OUTPUT);
+  pinMode(NFCRST, OUTPUT);
   digitalWrite(NFCPWR, HIGH);
   digitalWrite(NFCRST, HIGH);
   delay(100);
@@ -251,9 +273,7 @@ void setup(){
   digitalWrite(NFCRST, LOW);
   digitalWrite(NFCPWR, LOW);
 
-
   //Lastly, create all tasks and begin operating normally.
-
   xTaskCreate(Temperature, "Temperature", 2048, NULL, 2, NULL);
   xTaskCreate(USBConfig, "USBConfig", 4096, NULL, 2, NULL);
   xTaskCreate(InternalRead, "InternalRead", 2048, NULL, 1, NULL);
@@ -270,7 +290,9 @@ void setup(){
 }
 
 void loop(){
-  //Nothing to do here! 
+  while(1){
+    vTaskDelay(10000 / portTICK_PERIOD_MS);
+  }
 }
 
 void callback_percent(int offset, int totallength) {

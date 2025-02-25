@@ -6,7 +6,6 @@ This task handles reading cards with the NFC reader, reporting the UID.
 
 Global Variables Used:
 DebugMode: Sets verbose output
-DebugPrinting: Used to reserve the debug uart output
 CardPresent: bool representing if a card has been detected and read
 UID: The UID of the detected card.
 ReadFailed: set to 1 if a card was not read properly.
@@ -44,10 +43,9 @@ void ReadCard(void *pvParameters) {
           NFCFault = 0;
           break;
         } else{
-          if(DebugMode && !DebugPrinting){
-            DebugPrinting = 1;
+          if(DebugMode && xSemaphoreTake(DebugMutex,(5/portTICK_PERIOD_MS)) == pdTRUE){
             Debug.println(F("Failed to read an NFC card."));
-            DebugPrinting = 0;
+            xSemaphoreGive(DebugMutex);
           }
           digitalWrite(NFCRST, LOW);
           vTaskDelay(50 / portTICK_PERIOD_MS);
@@ -59,10 +57,9 @@ void ReadCard(void *pvParameters) {
       if(NFCRetryCount == 6){
         //Card read failed too many times. Must not be an NFC card?
         ReadFailed = 1;
-        if(DebugMode && !DebugPrinting){
-          DebugPrinting = 1;
+        if(DebugMode && xSemaphoreTake(DebugMutex,(5/portTICK_PERIOD_MS)) == pdTRUE){
           Debug.println(F("Failed to read card too many times. Maybe not an NFC card?"));
-          DebugPrinting = 0;
+          xSemaphoreGive(DebugMutex);
         }
         //Restart the NFC reader and see if we can detect it.
         digitalWrite(NFCRST, LOW);
@@ -74,13 +71,10 @@ void ReadCard(void *pvParameters) {
         nfc.wakeup();
         uint32_t versiondata = nfc.getFirmwareVersion();
         if(!versiondata){
-          while(DebugPrinting){
-            //Wait for the debug terminal to become available
-            vTaskDelay(1 / portTICK_PERIOD_MS);
-          }
-          DebugPrinting = 1;
+          //Wait until we can take the debug port no matter how long it takes...
+          xSemaphoreTake(StateMutex, portMAX_DELAY); 
           Debug.println(F("CRITICAL ERROR: NFC READER MALFUNCTION."));
-          DebugPrinting = 0;
+          xSemaphoreGive(DebugMutex);
           NFCFault = 1;
           while(SendMessage){
             //Wait for the send message task to become available
@@ -97,13 +91,8 @@ void ReadCard(void *pvParameters) {
       if(success){
         //The NFC reader was successful.
         UID = "";
-        if(DebugMode && DebugPrinting){
-          //Wait for debug to be free
-          vTaskDelay(1 / portTICK_PERIOD_MS);
-        }
         bool readreserved;
-        if(DebugMode && !DebugPrinting){
-          DebugPrinting = 1;
+        if(DebugMode && xSemaphoreTake(DebugMutex,(50/portTICK_PERIOD_MS)) == pdTRUE){
           readreserved = 1;
           Debug.print(F("Detected Card: "));
         }
@@ -115,7 +104,7 @@ void ReadCard(void *pvParameters) {
           UID += String(uid[i], HEX);
         }
         if(readreserved){
-          DebugPrinting = 0;
+          xSemaphoreGive(DebugMutex);
         }
         CardPresent = 1;
         CardUnread = 0;

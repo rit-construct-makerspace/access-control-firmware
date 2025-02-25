@@ -31,6 +31,9 @@ DebugMode used to turn on verbose outputs
 */
 
 void USBConfig(void *pvParameters){
+    if(SecurityCode == NULL){
+      Debug.println(F("ERROR: NO CONFIG?"));
+    }
   while(1){
     if(Debug.available() > 10){
       //There is a message of substance in the serial buffer
@@ -41,8 +44,17 @@ void USBConfig(void *pvParameters){
       //Check if the passwords match
       String OldPassword = usbjson["OldPassword"];
       SecurityCode = settings.getString("SecurityCode"); //Make sure we have the most up-to-date code to be safe
-      if(OldPassword.equals(SecurityCode)){
-        //Passwords match! Load the JSON info;
+      if(OldPassword.equals(SecurityCode) || (SecurityCode == NULL)){
+        //Passwords match or there is no password. Load the JSON info;
+        if(usbjson["NewPassword"]){
+          //New password present, update that...
+          const char* Temp = usbjson["NewPassword"];
+          settings.putString("SecurityCode", Temp);
+          xSemaphoreTake(DebugMutex, portMAX_DELAY);
+          Debug.print(F("Updated Password to:"));
+          Debug.println(Temp);
+          xSemaphoreGive(DebugMutex);
+        }
         UpdateSetting("SSID");
         UpdateSetting("Password");
         UpdateSetting("Server");
@@ -53,33 +65,24 @@ void USBConfig(void *pvParameters){
         UpdateSetting("Zone");
         UpdateSetting("NeedsWelcome");
         UpdateSetting("TempLimit");
-        UpdateSetting("NewPassword");
         UpdateSetting("NetworkMode");
         UpdateSetting("Frequency");
         UpdateSetting("DebugMode");
 
         //Restart to apply settings.
-        while (DebugPrinting) {
-          //Wait until the serial port is free...
-          vTaskDelay(1 / portTICK_PERIOD_MS);
-        }
-        DebugPrinting = 1;
+        xSemaphoreTake(DebugMutex, portMAX_DELAY);
         Debug.println(F("Settings Applied."));   
         Debug.println(F("Rebooting in 5 seconds..."));
         Debug.flush();
-        DebugPrinting = 0;
+        xSemaphoreGive(DebugMutex);
         vTaskDelay(5000 / portTICK_PERIOD_MS);
         ESP.restart();
       } else{
         //Bad input, disregard.
-        while(DebugPrinting){
-          //Wait until the serial port is free...
-          vTaskDelay(1 / portTICK_PERIOD_MS);
-        }
-        DebugPrinting = 1;
+        xSemaphoreTake(DebugMutex, portMAX_DELAY);
         Debug.println(F("Bad Input"));
         Debug.flush();
-        DebugPrinting = 0;
+        xSemaphoreGive(DebugMutex);
       }
     }
     //Wait another 10 seconds before checking again.
@@ -94,13 +97,12 @@ void UpdateSetting(String Key) {
   if (!Temp) {
     return;
   }
-  if(DebugMode && !DebugPrinting){
-    DebugPrinting = 1;
+  if(DebugMode && xSemaphoreTake(DebugMutex,(5/portTICK_PERIOD_MS)) == pdTRUE){
     Debug.print(F("Updating key "));
     Debug.print(KeyArray);
     Debug.print(F(" with value "));
     Debug.println(Temp);
-    DebugPrinting = 0;
+    xSemaphoreGive(DebugMutex);
   }
   //Key is present
   settings.putString(Key.c_str(), Temp);

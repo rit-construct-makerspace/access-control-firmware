@@ -13,7 +13,6 @@ The frontend MCU responds to the following messages;
 
 Global Variables Used:
 DebugMode: Enables verbose output
-DebugPrinting: Used to reserve the debug serial output
 PollCheck: Flag to do an all-call check of the frontend.
 NewLED: Flag that there is new LED information to send
 Red: Red channel of LED

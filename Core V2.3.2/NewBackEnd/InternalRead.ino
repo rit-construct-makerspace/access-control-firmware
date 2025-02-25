@@ -18,7 +18,6 @@ Global Variables Used:
 * Switch2 - state of card detect switch 2
 * Key1 - state of keyswitch input 1
 * Key2 - state of keyswitch input 2
-* DebugPrinting - Used to see if debug is currently printing and to reserve it
 * DebugMode - Determines if there should be a verbose output.
 
 */
@@ -29,12 +28,11 @@ void InternalRead(void *pvParameters){
       //There is a new message incoming.
       String incoming = Internal.readStringUntil('\n');
       incoming.trim();
-      if(DebugMode && !DebugPrinting){
-        DebugPrinting = 1;
+      if(DebugMode && (xSemaphoreTake(DebugMutex,(5/portTICK_PERIOD_MS)) == pdTRUE)){
         Debug.print("Received ");
         Debug.print(incoming);
         Debug.println(F(" from the frontend."));
-        DebugPrinting = 0;
+        xSemaphoreGive(DebugMutex);
       }
       if(incoming.charAt(0) == 'B'){
         //Button state
@@ -43,21 +41,19 @@ void InternalRead(void *pvParameters){
         } else{
           Button = 0;
         }
-        if(DebugMode && !DebugPrinting){
-          DebugPrinting = 1;
+        if(DebugMode && xSemaphoreTake(DebugMutex,(5/portTICK_PERIOD_MS)) == pdTRUE){
           Debug.print(F("Button state changed to "));
           Debug.println(Button);
-          DebugPrinting = 0;
+          xSemaphoreGive(DebugMutex);
         }
         continue;
       }
       if(incoming.charAt(0) == 'V'){
         //Version info
         FEVer = incoming.substring(2);
-        if(DebugMode && !DebugPrinting){
-          DebugPrinting = 1;
+        if(DebugMode && xSemaphoreTake(DebugMutex,(5/portTICK_PERIOD_MS)) == pdTRUE){
           Debug.print(F("Front Version Reported: ")); Debug.println(FEVer);
-          DebugPrinting = 0;
+          xSemaphoreGive(DebugMutex);
         }
         continue;
       }
@@ -68,8 +64,7 @@ void InternalRead(void *pvParameters){
         state = 0;
       }
       bool internalreserved = 0;
-      if(DebugMode && !DebugPrinting){
-        DebugPrinting = 1;
+      if(DebugMode && xSemaphoreTake(DebugMutex,(5/portTICK_PERIOD_MS)) == pdTRUE){
         internalreserved = 1;
         Debug.print("Setting state ");
         Debug.print(state);
@@ -79,28 +74,28 @@ void InternalRead(void *pvParameters){
         Switch1 = state;
         if (internalreserved) {
           Debug.println(F("Switch1"));
-          DebugPrinting = 0;
+          xSemaphoreGive(DebugMutex);
         }
       }
       if (incoming.substring(0, 2).equals("S2")) {
         Switch2 = state;
         if (internalreserved) {
           Debug.println(F("Switch2"));
-          DebugPrinting = 0;
+          xSemaphoreGive(DebugMutex);
         }
       }
       if (incoming.substring(0, 2).equals("K1")) {
         Key1 = state;
         if (internalreserved) {
           Debug.println(F("Key1"));
-          DebugPrinting = 0;
+          xSemaphoreGive(DebugMutex);
         }
       }
       if (incoming.substring(0, 2).equals("K2")) {
         Key2 = state;
         if (internalreserved) {
           Debug.println(F("Key2"));
-          DebugPrinting = 0;
+          xSemaphoreGive(DebugMutex);
         }
       }
     }

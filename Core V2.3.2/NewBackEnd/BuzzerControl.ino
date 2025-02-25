@@ -37,14 +37,18 @@ void BuzzerControl(void *pvParameters) {
     vTaskDelay(10 / portTICK_PERIOD_MS);
     //First, check the situations to see if we should be playing any tones right now:
     Melody = 0; //Set to 0 so if no situations apply, we stop playing
+    //Reserve the State string so it doesn't change while we are comparing it.
+    xSemaphoreTake(StateMutex, portMAX_DELAY); 
     if(State.equals("Unlocked")){
+      //The machine has been unlocked
+      //Since we only play a tone on a melody change, constalty checking this should be fine...
       Melody = 1;
     }
+    xSemaphoreGive(StateMutex);
     if(CardVerified && !CardStatus && CardPresent){
       Melody = 2;
     }
     if(TemperatureFault || NFCFault || ReadError){
-      ReadError = 0;
       Melody = 3;
     }
     if(VerifiedBeep){
@@ -118,6 +122,7 @@ void BuzzerControl(void *pvParameters) {
           break;
           case 5:
             Tone = 0;
+            ReadError = 0; //Turn off this flag in case that's the trigger.
             DonePlaying = 1;
           break;
         }

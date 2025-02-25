@@ -7,7 +7,6 @@ Some are periodic, some are event-based
 
 Global Variables:
 DebugMode: Turns on verbose outputs
-DebugPrinting: Used to reserve the debug output
 UsingNetwork: Set to 1 to reserve the network connection.
 
 Global Variables Representing Message Types:
@@ -20,14 +19,11 @@ ChangeStatus: Set to 1 to iindicate to send a report that the machine's state ha
 SessionTime: Tracks in milliseconds how long the machine has been used for.
 CheckNetwork: Flag indicating a potential network failure to investigate.
 State: Plaintext representation of the system, for use in status updates.
-StateChange: flag to indicate a change of the state string is underway.
 
 */
 
 void StatusReport(void *pvParameters){
   xTaskCreate(RegularReport, "RegularReport", 1024, NULL, 2, NULL);
-  bool StatusSuccess = 0;
-  bool StatusFailed = 0;
   while(1){
     if(StartupStatus){
       SendReport("Startup");
@@ -73,6 +69,8 @@ void RegularReport(void *pvParameters){
 
 void SendReport(String Reason){
   //This function is what specifically handles sending a status report.
+  bool StatusSuccess = 0;
+  bool StatusFailed = 0;
   while(StatusSuccess == 0){
     //First, we gather all the data needed for a status report.
     JsonDocument status;
@@ -80,19 +78,17 @@ void SendReport(String Reason){
     status["Machine"] = MachineID;
     status["MachineType"] = MachineType;
     status["Zone"] = Zone;
-    while (TemperatureUpdate) {
-      //Delay to wait for temperature measurement to complete
-      vTaskDelay(1 / portTICK_PERIOD_MS);
-    }
+    //Grab the onewire mutex, so we know the temperatures are not being updated as we read it
+    xSemaphoreTake(OneWireMutex, portMAX_DELAY); 
     status["Temp"] = String(SysMaxTemp, 3);
+    xSemaphoreGive(OneWireMutex);
     status["BEVer"] = Version;
     status["FEVer"] = FEVer;
     status["HWVer"] = Hardware;
-    if(StateChange){
-      //Wait for a state change to finish
-      vTaskDelay(1 / portTICK_PERIOD_MS);
-    }
+    //Reserve the state so it doesn't change;
+    xSemaphoreTake(StateMutex, portMAX_DELAY); 
     status["State"] = State;
+    xSemaphoreGive(StateMutex);
     if (CardPresent) {
       status["UID"] = UID;
     } else {
@@ -105,29 +101,24 @@ void SendReport(String Reason){
     String statuspayload;
     serializeJson(status, statuspayload);
     //Before we can transmit, we need to reserve the network peripehral.
-    while (UsingNetwork) {
-      vTaskDelay(1 / portTICK_PERIOD_MS);
-    }
-    UsingNetwork = 1;
-    if (DebugMode && !DebugPrinting) {
-      DebugPrinting = 1;
+    xSemaphoreTake(NetworkMutex, portMAX_DELAY); 
+    if(DebugMode && xSemaphoreTake(DebugMutex,(5/portTICK_PERIOD_MS)) == pdTRUE){
       Debug.println(F("Sending Status Message: "));
       Debug.println(statuspayload);
-      DebugPrinting = 0;
+      xSemaphoreGive(DebugMutex);
     }
     HTTPClient http;
     String ServerPath = Server + "/api/status";
     http.begin(client, ServerPath);
     http.addHeader("Content-Type", "application/json");
     int httpCode = http.PUT(statuspayload);
-    if (DebugMode && !DebugPrinting) {
-      DebugPrinting = 1;
+    if(DebugMode && xSemaphoreTake(DebugMutex,(5/portTICK_PERIOD_MS)) == pdTRUE){
       Debug.print(F("HTTP Response: "));
       Debug.println(httpCode);
-      DebugPrinting = 0;
+      xSemaphoreGive(DebugMutex);
     }
     http.end();
-    UsingNetwork = 0;
+    xSemaphoreGive(NetworkMutex);
     if (httpCode == 200) {
       LastServer = millis();
       StatusSuccess = 1;
