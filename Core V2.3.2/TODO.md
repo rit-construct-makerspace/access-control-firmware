@@ -8,3 +8,4 @@
 * Occasionally check OneWire to ensure all devices are there
 * occasionally check for the same/old ID card UID
 * Re-write code for handling no server connection, no WiFi and checking for them
+* Implement CA Certificates and verification of servers.
