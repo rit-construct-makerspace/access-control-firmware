@@ -2,7 +2,7 @@
 
 Verify ID
 
-This task will check IDs against the server for if they are approved or not. This information is then used by MachineState to set the system.
+This task will check IDs against the server and internal list for if they are approved or not. This information is then used by MachineState to set the system.
 
 Global Variables Used:
 DebugMode: Sets verbose output
