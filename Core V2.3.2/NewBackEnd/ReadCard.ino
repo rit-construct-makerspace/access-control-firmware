@@ -21,6 +21,8 @@ CardUnread: Flag that indicates a card is present but not yet read for animation
 void ReadCard(void *pvParameters) {
   bool NewCard = 1;  //Used to track if this is the first time the card has been inserted.
   while(1){
+    //Check for a card every 50mS
+    vTaskDelay(50 / portTICK_PERIOD_MS);
     if(Switch1 && Switch2 && NewCard){
       //A new card has been inserted
       NewCard = 0;
@@ -43,9 +45,11 @@ void ReadCard(void *pvParameters) {
           NFCFault = 0;
           break;
         } else{
-          if(DebugMode && xSemaphoreTake(DebugMutex,(5/portTICK_PERIOD_MS)) == pdTRUE){
-            Debug.println(F("Failed to read an NFC card."));
-            xSemaphoreGive(DebugMutex);
+          if(DebugMode){
+            if(xSemaphoreTake(DebugMutex,(5/portTICK_PERIOD_MS)) == pdTRUE){
+              Debug.println(F("Failed to read an NFC card."));
+              xSemaphoreGive(DebugMutex);
+            }
           }
           digitalWrite(NFCRST, LOW);
           vTaskDelay(50 / portTICK_PERIOD_MS);
@@ -57,9 +61,11 @@ void ReadCard(void *pvParameters) {
       if(NFCRetryCount == 6){
         //Card read failed too many times. Must not be an NFC card?
         ReadFailed = 1;
-        if(DebugMode && xSemaphoreTake(DebugMutex,(5/portTICK_PERIOD_MS)) == pdTRUE){
-          Debug.println(F("Failed to read card too many times. Maybe not an NFC card?"));
-          xSemaphoreGive(DebugMutex);
+        if(DebugMode){
+          if(xSemaphoreTake(DebugMutex,(50/portTICK_PERIOD_MS)) == pdTRUE){
+            Debug.println(F("Failed to read card too many times. Maybe not an NFC card?"));
+            xSemaphoreGive(DebugMutex);
+          }
         }
         //Restart the NFC reader and see if we can detect it.
         digitalWrite(NFCRST, LOW);
@@ -91,10 +97,12 @@ void ReadCard(void *pvParameters) {
       if(success){
         //The NFC reader was successful.
         UID = "";
-        bool readreserved;
-        if(DebugMode && xSemaphoreTake(DebugMutex,(50/portTICK_PERIOD_MS)) == pdTRUE){
-          readreserved = 1;
-          Debug.print(F("Detected Card: "));
+        bool readreserved = 0;
+        if(DebugMode){
+          if(xSemaphoreTake(DebugMutex,(50/portTICK_PERIOD_MS)) == pdTRUE){
+            readreserved = 1;
+            Debug.print(F("Detected Card: "));
+          }
         }
         for (uint8_t i = 0; i < uidLength; i++) {
           if(readreserved){

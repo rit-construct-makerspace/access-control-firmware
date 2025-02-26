@@ -20,55 +20,69 @@ Global Variables Used:
 * Key2 - state of keyswitch input 2
 * DebugMode - Determines if there should be a verbose output.
 
+InternalReadDebug is a define that turns on or off debug messages in this task, since it does fill the terminal with a lot of crap.
+
 */
 
 void InternalRead(void *pvParameters){
   while(1){
+    //Check every 50mS for a new message
+    vTaskDelay(50 / portTICK_PERIOD_MS);
     if(Internal.available()){
       //There is a new message incoming.
       String incoming = Internal.readStringUntil('\n');
       incoming.trim();
-      if(DebugMode && (xSemaphoreTake(DebugMutex,(5/portTICK_PERIOD_MS)) == pdTRUE)){
-        Debug.print("Received ");
-        Debug.print(incoming);
-        Debug.println(F(" from the frontend."));
-        xSemaphoreGive(DebugMutex);
+      if(DebugMode && InternalReadDebug){
+        if(xSemaphoreTake(DebugMutex,portMAX_DELAY) == pdTRUE){
+          Debug.print("Received ");
+          Debug.print(incoming);
+          Debug.println(F(" from the frontend."));
+          xSemaphoreGive(DebugMutex);
+        }
       }
       if(incoming.charAt(0) == 'B'){
         //Button state
         if(incoming.charAt(2) == '1'){
-          Button = 1;
-        } else{
+          //inverted logic, button press to ground.
           Button = 0;
+        } else{
+          Button = 1;
         }
-        if(DebugMode && xSemaphoreTake(DebugMutex,(5/portTICK_PERIOD_MS)) == pdTRUE){
-          Debug.print(F("Button state changed to "));
-          Debug.println(Button);
-          xSemaphoreGive(DebugMutex);
+        if(DebugMode && InternalReadDebug){
+          if(xSemaphoreTake(DebugMutex,portMAX_DELAY) == pdTRUE){
+            Debug.print(F("Button state changed to "));
+            Debug.println(Button);
+            xSemaphoreGive(DebugMutex);
+          }
         }
         continue;
       }
       if(incoming.charAt(0) == 'V'){
         //Version info
         FEVer = incoming.substring(2);
-        if(DebugMode && xSemaphoreTake(DebugMutex,(5/portTICK_PERIOD_MS)) == pdTRUE){
-          Debug.print(F("Front Version Reported: ")); Debug.println(FEVer);
-          xSemaphoreGive(DebugMutex);
+        if(DebugMode && InternalReadDebug){
+          if(xSemaphoreTake(DebugMutex,portMAX_DELAY) == pdTRUE){
+            Debug.print(F("Front Version Reported: ")); Debug.println(FEVer);
+            xSemaphoreGive(DebugMutex);
+          }
         }
         continue;
       }
       bool state;
       if(incoming.charAt(3) == '1'){
-        state = 1;
-      } else{
+        //Inverted logic, button press is 0
         state = 0;
+      } else{
+        state = 1;
       }
       bool internalreserved = 0;
-      if(DebugMode && xSemaphoreTake(DebugMutex,(5/portTICK_PERIOD_MS)) == pdTRUE){
-        internalreserved = 1;
-        Debug.print("Setting state ");
-        Debug.print(state);
-        Debug.print(" on ");
+      if(DebugMode && InternalReadDebug){
+        if(xSemaphoreTake(DebugMutex,portMAX_DELAY) == pdTRUE){
+          internalreserved = 1;
+          Debug.print("Setting state ");
+          Debug.print(state);
+          Debug.print(" on ");
+        }
       }
       if(incoming.substring(0, 2).equals("S1")){
         Switch1 = state;

@@ -25,6 +25,8 @@ State: Plaintext representation of the system, for use in status updates.
 void StatusReport(void *pvParameters){
   xTaskCreate(RegularReport, "RegularReport", 1024, NULL, 2, NULL);
   while(1){
+    //Check for a status reason every 50mS
+    vTaskDelay(50 / portTICK_PERIOD_MS);
     if(StartupStatus){
       SendReport("Startup");
       StartupStatus = 0;
@@ -102,20 +104,31 @@ void SendReport(String Reason){
     serializeJson(status, statuspayload);
     //Before we can transmit, we need to reserve the network peripehral.
     xSemaphoreTake(NetworkMutex, portMAX_DELAY); 
-    if(DebugMode && xSemaphoreTake(DebugMutex,(5/portTICK_PERIOD_MS)) == pdTRUE){
-      Debug.println(F("Sending Status Message: "));
-      Debug.println(statuspayload);
-      xSemaphoreGive(DebugMutex);
+    if(DebugMode){
+      if(xSemaphoreTake(DebugMutex,(5/portTICK_PERIOD_MS)) == pdTRUE){
+        Debug.println(F("Sending Status Message: "));
+        Debug.println(statuspayload);
+        xSemaphoreGive(DebugMutex);
+      }
     }
     HTTPClient http;
     String ServerPath = Server + "/api/status";
+    if(DebugMode){
+      if(xSemaphoreTake(DebugMutex,portMAX_DELAY) == pdTRUE){
+        Debug.print(F("To: "));
+        Debug.println(ServerPath);
+        xSemaphoreGive(DebugMutex);
+      }
+    }
     http.begin(client, ServerPath);
     http.addHeader("Content-Type", "application/json");
     int httpCode = http.PUT(statuspayload);
-    if(DebugMode && xSemaphoreTake(DebugMutex,(5/portTICK_PERIOD_MS)) == pdTRUE){
-      Debug.print(F("HTTP Response: "));
-      Debug.println(httpCode);
-      xSemaphoreGive(DebugMutex);
+    if(DebugMode){
+      if(xSemaphoreTake(DebugMutex,(5/portTICK_PERIOD_MS)) == pdTRUE){
+        Debug.print(F("HTTP Response: "));
+        Debug.println(httpCode);
+        xSemaphoreGive(DebugMutex);
+      }
     }
     http.end();
     xSemaphoreGive(NetworkMutex);
@@ -124,6 +137,13 @@ void SendReport(String Reason){
       StatusSuccess = 1;
     } else {
       //Bad HTTP response? Try only once more.
+      if(httpCode < 0){
+        //Error code
+        xSemaphoreTake(DebugMutex, portMAX_DELAY);
+        Debug.print(F("HTTP ERROR: "));
+        Debug.println(http.errorToString(httpCode));
+        xSemaphoreGive(DebugMutex);
+      }
       if(StatusFailed){
         //Failed twice. 
         CheckNetwork = 1;

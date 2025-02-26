@@ -15,47 +15,52 @@ TemperatureTime: how long, in milliseconds, should be between system-wide temper
 
 void Temperature(void *pvParameters){
 	OneWire32 ds(TEMP); //gpio pin
-	
+
 	//First time running, find the addresses
+  xSemaphoreTake(DebugMutex, portMAX_DELAY);
+  Debug.println(F("First time running temperature..."));
+  xSemaphoreGive(DebugMutex);
   xSemaphoreTake(OneWireMutex, portMAX_DELAY); 
 	uint8_t devices = ds.search(SerialNumbers, MAX_DEVICES);
 	for (uint8_t i = 0; i < devices; i += 1) {
-    if(DebugMode && xSemaphoreTake(DebugMutex,(5/portTICK_PERIOD_MS)) == pdTRUE){
-      Debug.printf("%d: 0x%llx,\n", i, SerialNumbers[i]);
-      xSemaphoreGive(DebugMutex);
+    if(DebugMode){
+      if(xSemaphoreTake(DebugMutex,(5/portTICK_PERIOD_MS)) == pdTRUE){
+        Debug.printf("%d: 0x%llx,\n", i, SerialNumbers[i]);
+        xSemaphoreGive(DebugMutex);
+      }
     }
 	}
+  xSemaphoreGive(OneWireMutex);
 
   //Infinite loop, measure all temperatures
 	while(1){
     //Reserve the OneWire bus
     xSemaphoreTake(OneWireMutex, portMAX_DELAY); 
     float currTemp[MAX_DEVICES]; //Array to store all temperatures
-    SysMaxTemp = 0;
 		ds.request();
 		vTaskDelay(750 / portTICK_PERIOD_MS); //Give some time for measurement and conversion
 		for(byte i = 0; i < MAX_DEVICES; i++){ 
 			uint8_t err = ds.getTemp(SerialNumbers[i], currTemp[i]);
 			if(err){
 				const char *errt[] = {"", "CRC", "BAD","DC","DRV"};
-        if(DebugMode && xSemaphoreTake(DebugMutex,(50/portTICK_PERIOD_MS)) == pdTRUE){
-          Debug.print(i); Debug.print(": "); Debug.println(errt[err]);
-          xSemaphoreGive(DebugMutex);
+        if(DebugMode){
+          if(xSemaphoreTake(DebugMutex,(50/portTICK_PERIOD_MS)) == pdTRUE){
+            Debug.print(i); Debug.print(": "); Debug.println(errt[err]);
+            xSemaphoreGive(DebugMutex);
+          }
         }
 			}else{
         if(currTemp[i] > SysMaxTemp){
           SysMaxTemp = currTemp[i];
         }
-        if(DebugMode && xSemaphoreTake(DebugMutex,(50/portTICK_PERIOD_MS)) == pdTRUE){
-          Debug.print("Temperature Sensor "); Debug.print(i); Debug.print(": "); Debug.println(currTemp[i]);
-          xSemaphoreGive(DebugMutex);
-        }
 			}
 		}
     TemperatureUpdate = 0;
-    if(DebugMode && xSemaphoreTake(DebugMutex,(50/portTICK_PERIOD_MS)) == pdTRUE){
-      Debug.print(F("Maximum Temp: ")); Debug.println(SysMaxTemp);
-      xSemaphoreGive(DebugMutex);
+    if(DebugMode){
+      if(xSemaphoreTake(DebugMutex,(50/portTICK_PERIOD_MS)) == pdTRUE){
+        Debug.print(F("Maximum Temp: ")); Debug.println(SysMaxTemp);
+        xSemaphoreGive(DebugMutex);
+      }
     }
     if(SysMaxTemp > TempLimit){
       TemperatureFault = 1;
@@ -66,9 +71,11 @@ void Temperature(void *pvParameters){
     }
     if(((SysMaxTemp + 5.0) <= TempLimit) && TemperatureFault == 1){
       TemperatureFault = 0;
-      if(DebugMode && xSemaphoreTake(DebugMutex,(5/portTICK_PERIOD_MS)) == pdTRUE){
-        Debug.println(F("Overtemperature Error Cleared"));
-        xSemaphoreGive(DebugMutex);
+      if(DebugMode){
+        if(xSemaphoreTake(DebugMutex,(5/portTICK_PERIOD_MS)) == pdTRUE){
+          Debug.println(F("Overtemperature Error Cleared"));
+          xSemaphoreGive(DebugMutex);
+        }
       }
     }
     //Release the OneWire bus;

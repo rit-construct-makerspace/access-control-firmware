@@ -16,6 +16,10 @@ void MachineState(void *pvParameters) {
   unsigned long LastKeyState = 0;
   bool OldKey1 = 0;
   bool OldKey2 = 0;
+
+  //Set the machine initial state to lockout
+  State = "Lockout";
+  
   while(1){
     //Release the semaphore we took last loop;
     xSemaphoreGive(StateMutex);

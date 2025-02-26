@@ -45,7 +45,7 @@ void LEDControl(void *pvParameters) {
   unsigned long AnimationTime;
   bool AnimationBlock;
   while(1){
-    vTaskDelay(10 / portTICK_PERIOD_MS);
+    vTaskDelay(50 / portTICK_PERIOD_MS);
     //First, set the animation state:
     //Reserve the State string for checks;
     xSemaphoreTake(StateMutex, portMAX_DELAY); 

@@ -25,7 +25,7 @@ The frontend MCU sends the following messages;
 
 */
 
-#define Version "1,2.0"
+#define Version "1.2.0"
 
 #include <tinyNeoPixel.h> //Inherent to MegaTinyCore
 

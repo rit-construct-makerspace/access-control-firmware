@@ -43,6 +43,7 @@ USBConfig: Allows programatic changing of settings over USB
 #define NTP1 "pool.ntp.org" //The primary NTP server to check time against on startup.
 #define NTP2 "time.nist.gov" //The secondary NTP server to check time against on startup.
 #define KEYSWITCH_DEBOUNCE 150 //time in milliseconds between checks of the key switch, to help prevent rapid state changes.
+#define InternalReadDebug 0 //Set to 0 to disable debug messages from the internal read, since it ends up spamming the terminal.
 
 //Global Variables:
 bool TemperatureUpdate;                  //1 when writing new information, to indicate other devices shouldn't read temperature-related info
@@ -112,7 +113,7 @@ bool ReadError;                          //Flag, set 1 when we fail to read a ca
 #include <ArduinoJson.h>          //Version 7.3.0 | Source: https://github.com/bblanchon/ArduinoJson
 #include <ArduinoJson.hpp>        //Version 7.3.0 | Source: https://github.com/bblanchon/ArduinoJson
 #include <ESP32OTAPull.h>         //Version 1.0.0 | Source: https://github.com/mikalhart/ESP32-OTA-Pull
-#include <NetworkClientSecure.h>  //Version 3.1.1 | Inherent to ESP32 Arduino
+#include <WiFiClientSecure.h>     //Version 3.1.1 | Inherent to ESP32 Arduino
 #include <HTTPClient.h>           //Version 3.1.1 | Inherent to ESP32 Arduino
 #include <Preferences.h>          //Version 3.1.1 | Inherent to ESP32 Arduino
 #include <esp_wifi.h>             //Version 3.1.1 | Inherent to ESP32 Arduino
@@ -145,7 +146,7 @@ const int NFCRST = 4;
 //Objects:
 Adafruit_PN532 nfc(SCKPin, MISOPin, MOSIPin, NFCCS);
 Preferences settings;
-NetworkClientSecure client;
+WiFiClientSecure client;
 HardwareSerial Internal(1);
 HardwareSerial Debug(0);
 JsonDocument usbjson;
@@ -165,7 +166,7 @@ void setup(){
   OneWireMutex = xSemaphoreCreateMutex();
   StateMutex = xSemaphoreCreateMutex();
 
-  Internal.begin(115200);
+  Internal.begin(115200, SERIAL_8N1, TOESP, TOTINY);
 
   delay(5000); 
 
@@ -198,11 +199,6 @@ void setup(){
   NetworkMode = settings.getString("NetworkMode").toInt();
   NeedsWelcome = settings.getString("NeedsWelcome").toInt();
 
-  if(DebugMode){
-    Debug.print(F("Wireless MAC: ")); Debug.println(WiFi.macAddress());
-    Debug.print(F("Ethernet MAC: ")); Debug.println(F("Not yet implemented..."));
-  }
-
   if(NetworkMode != 2){
     if (DebugMode) {
       Debug.print("Attempting to connect to SSID: ");
@@ -217,6 +213,12 @@ void setup(){
       }
       WiFi.begin(SSID);
     }
+
+    if(DebugMode){
+      Debug.print(F("Wireless MAC: ")); Debug.println(WiFi.macAddress());
+      Debug.print(F("Ethernet MAC: ")); Debug.println(F("Not yet implemented..."));
+    }
+
     //Attempt to connect to Wifi network:
     while (WiFi.status() != WL_CONNECTED) {
       Debug.print(".");
@@ -244,7 +246,9 @@ void setup(){
     .SetCallback(callback_percent)
     .SetConfig(Hardware)
     .CheckForOTAUpdate(OTA_URL, Version, ESP32OTAPull::UPDATE_AND_BOOT);
-
+  if(DebugMode){
+    Debug.println(F("We're still here, so there must not have been an update."));
+  }
   //Sync the time against an NTP Server
   configTime(GMTOffset, DSTOffset, NTP1, NTP2);
 
@@ -262,9 +266,9 @@ void setup(){
     Debug.println("Didn't find PN532 board. Trying again...");
     delay(250);
     if(StartupFault){
-      Internal.println(F("L, 255, 000, 000"));
+      Internal.println(F("L 255,0,0"));
     } else{
-      Internal.println(F("L, 000, 000, 000"));
+      Internal.println(F("L 0,0,0"));
     }
     Internal.flush();
     StartupFault =! StartupFault;
@@ -272,21 +276,23 @@ void setup(){
   }
   digitalWrite(NFCRST, LOW);
   digitalWrite(NFCPWR, LOW);
+  Debug.println(F("NFC Setup"));
 
   //Lastly, create all tasks and begin operating normally.
-  xTaskCreate(Temperature, "Temperature", 2048, NULL, 2, NULL);
-  xTaskCreate(USBConfig, "USBConfig", 4096, NULL, 2, NULL);
-  xTaskCreate(InternalRead, "InternalRead", 2048, NULL, 1, NULL);
-  xTaskCreate(ReadCard, "ReadCard", 2048, NULL, 1, NULL);
-  xTaskCreate(StatusReport, "StatusReport", 4096, NULL, 1, NULL);
-  xTaskCreate(VerifyID, "VerifyID", 4096, NULL, 1, NULL);
-  xTaskCreate(InternalWrite, "InternalWrite", 2048, NULL, 1, NULL);
-  xTaskCreate(LEDControl, "LEDControl", 2048, NULL, 1, NULL);
-  xTaskCreate(BuzzerControl, "BuzzerControl", 2048, NULL, 1, NULL);
-  xTaskCreate(NetworkCheck, "NetworkCheck", 4096, NULL, 1, NULL);
-  xTaskCreate(TimeManager, "TimeManager", 1024, NULL, 1, NULL);
+  xTaskCreate(Temperature, "Temperature", 4096, NULL, 5, NULL);
+  xTaskCreate(USBConfig, "USBConfig", 8192, NULL, 5, NULL);
+  xTaskCreate(InternalRead, "InternalRead", 4096, NULL, 5, NULL);
+  xTaskCreate(ReadCard, "ReadCard", 4096, NULL, 5, NULL);
+  xTaskCreate(StatusReport, "StatusReport", 8192, NULL, 2, NULL);
+  xTaskCreate(VerifyID, "VerifyID", 8192, NULL, 1, NULL);
+  xTaskCreate(InternalWrite, "InternalWrite", 4096, NULL, 5, NULL);
+  xTaskCreate(LEDControl, "LEDControl", 4098, NULL, 5, NULL);
+  xTaskCreate(BuzzerControl, "BuzzerControl", 4096, NULL, 5, NULL);
+  //xTaskCreate(NetworkCheck, "NetworkCheck", 8192, NULL, 3, NULL);
+  //xTaskCreate(TimeManager, "TimeManager", 4096, NULL, 4, NULL);
 
   StartupStatus = 1;
+  Debug.println(F("Setup done."));
 }
 
 void loop(){

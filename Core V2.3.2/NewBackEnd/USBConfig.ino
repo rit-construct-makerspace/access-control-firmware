@@ -35,6 +35,8 @@ void USBConfig(void *pvParameters){
       Debug.println(F("ERROR: NO CONFIG?"));
     }
   while(1){
+    //Check once a second;
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
     if(Debug.available() > 10){
       //There is a message of substance in the serial buffer
       Debug.setTimeout(3);
@@ -97,12 +99,14 @@ void UpdateSetting(String Key) {
   if (!Temp) {
     return;
   }
-  if(DebugMode && xSemaphoreTake(DebugMutex,(5/portTICK_PERIOD_MS)) == pdTRUE){
-    Debug.print(F("Updating key "));
-    Debug.print(KeyArray);
-    Debug.print(F(" with value "));
-    Debug.println(Temp);
-    xSemaphoreGive(DebugMutex);
+  if(DebugMode){
+    if(xSemaphoreTake(DebugMutex,(5/portTICK_PERIOD_MS)) == pdTRUE){
+      Debug.print(F("Updating key "));
+      Debug.print(KeyArray);
+      Debug.print(F(" with value "));
+      Debug.println(Temp);
+      xSemaphoreGive(DebugMutex);
+    }
   }
   //Key is present
   settings.putString(Key.c_str(), Temp);

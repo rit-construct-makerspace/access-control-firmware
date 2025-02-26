@@ -18,6 +18,9 @@ LastServer: Tracks the last time we had a good connection to the server.
 
 void VerifyID(void *pvParameters) {
   while(1){
+    //Check every 50mS
+    vTaskDelay(50 / portTICK_PERIOD_MS);
+    continue; //Testing TODO remove
     if(!CardVerified && CardPresent){
       //New card that needs verification
       //First, try to verify the card against the internal list;
@@ -27,9 +30,11 @@ void VerifyID(void *pvParameters) {
         temp.trim();
         if(UID.equalsIgnoreCase(temp)){
           //ID was found in list.
-          if(DebugMode && xSemaphoreTake(DebugMutex,(5/portTICK_PERIOD_MS)) == pdTRUE){
-            Debug.println(F("ID Found on internal list."));
-            xSemaphoreGive(DebugMutex);
+          if(DebugMode){
+            if(xSemaphoreTake(DebugMutex,(portMAX_DELAY)) == pdTRUE){
+              Debug.println(F("ID Found on internal list."));
+              xSemaphoreGive(DebugMutex);
+            }
           }
           InternalStatus = 1;
           InternalVerified = 1;
@@ -58,9 +63,11 @@ void VerifyID(void *pvParameters) {
         int httpCode = http.GET();
         if(httpCode < 200 || httpCode > 299){
           //Invalid HTTP code
-          if(DebugMode && xSemaphoreTake(DebugMutex,(5/portTICK_PERIOD_MS)) == pdTRUE){
-            Debug.print(F("Got invalid HTTP code ")); Debug.println(httpCode);
-            xSemaphoreGive(DebugMutex);
+          if(DebugMode){
+            if(xSemaphoreTake(DebugMutex,(5/portTICK_PERIOD_MS)) == pdTRUE){
+              Debug.print(F("Got invalid HTTP code ")); Debug.println(httpCode);
+              xSemaphoreGive(DebugMutex);
+            }
           }
           if(AuthFailed == 1){
             //Failed for a second time.
@@ -71,9 +78,11 @@ void VerifyID(void *pvParameters) {
           //Correct HTTP code
           LastServer = millis();
           String payload = http.getString();
-          if(DebugMode && xSemaphoreTake(DebugMutex,(5/portTICK_PERIOD_MS)) == pdTRUE){
-            Debug.print(F("Got response ")); Debug.println(payload);
-            xSemaphoreGive(DebugMutex);
+          if(DebugMode){
+            if(xSemaphoreTake(DebugMutex,(5/portTICK_PERIOD_MS)) == pdTRUE){
+              Debug.print(F("Got response ")); Debug.println(payload);
+              xSemaphoreGive(DebugMutex);
+            }
           }
           http.end();
           //Release the mutex
@@ -86,9 +95,11 @@ void VerifyID(void *pvParameters) {
           deserializeJson(auth, payload);
           if((auth["UID"] == UID) && (auth["Allowed"] == 1)){
             //Authorization granted!
-            if(DebugMode && xSemaphoreTake(DebugMutex,(5/portTICK_PERIOD_MS)) == pdTRUE){
-              Debug.println(F("Authorization Granted."));
-              xSemaphoreGive(DebugMutex);
+            if(DebugMode){
+              if(xSemaphoreTake(DebugMutex,(5/portTICK_PERIOD_MS)) == pdTRUE){
+                Debug.println(F("Authorization Granted."));
+                xSemaphoreGive(DebugMutex);
+              }
             }
             CardStatus = 1;
             CardVerified = 1;
@@ -103,9 +114,11 @@ void VerifyID(void *pvParameters) {
             }
           } else{
             //Authorization Denied!
-            if(DebugMode && xSemaphoreTake(DebugMutex,(5/portTICK_PERIOD_MS)) == pdTRUE){
-              Debug.println(F("Authorization Denied!"));
-              xSemaphoreGive(DebugMutex);
+            if(DebugMode){
+              if(xSemaphoreTake(DebugMutex,(5/portTICK_PERIOD_MS)) == pdTRUE){
+                Debug.println(F("Authorization Denied!"));
+                xSemaphoreGive(DebugMutex);
+              }
             }
             //Set permission level to 0 on both internal and card. 
             CardStatus = 0;
