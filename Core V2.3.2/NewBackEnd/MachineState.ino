@@ -16,13 +16,8 @@ void MachineState(void *pvParameters) {
   unsigned long LastKeyState = 0;
   bool OldKey1 = 0;
   bool OldKey2 = 0;
-
-  //Set the machine initial state to lockout
-  State = "Lockout";
   
   while(1){
-    //Release the semaphore we took last loop;
-    xSemaphoreGive(StateMutex);
     //Only needs to run every 10 milliseconds
     vTaskDelay(10 / portTICK_PERIOD_MS);
     //Clear the data after a logoff message is sent, if it doesn't appear there is another card present.
@@ -58,7 +53,7 @@ void MachineState(void *pvParameters) {
             }
             vTaskDelay(1 / portTICK_PERIOD_MS);
           }
-          if(InternalStatus && InternalVerified){
+          if(InternalStatus || InternalVerified){
             //Card is verified, so set the state;
             State = "AlwaysOn";
           } else{
@@ -85,7 +80,7 @@ void MachineState(void *pvParameters) {
             }
             vTaskDelay(1 / portTICK_PERIOD_MS);
           }
-          if(InternalStatus && InternalVerified){
+          if(InternalStatus || InternalVerified){
             //Card is verified, so set the state
             State = "Idle";
           } else{
@@ -117,5 +112,7 @@ void MachineState(void *pvParameters) {
       //Lockout, Idle, or other unknown modes
       Switch = 0;
     }
+    //Release the semaphore;
+    xSemaphoreGive(StateMutex);
   }
 }

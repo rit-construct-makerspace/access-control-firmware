@@ -34,7 +34,7 @@ USBConfig: Allows programatic changing of settings over USB
 #define MAX_DEVICES 10 //How many possible temperature sensors to scan for
 #define OTA_URL "https://example.com/myimages/Basic-OTA-Example.json"
 #define TemperatureTime 5000 //How long to delay between temperature measurements, in milliseconds
-#define FEPollRate 1000 //How long, in milliseconds, to go between an all-values poll of the frontend (in addition to event-based)
+#define FEPollRate 10000 //How long, in milliseconds, to go between an all-values poll of the frontend (in addition to event-based)
 #define LEDFlashTime 250 //Time in milliseconds between aniimation steps of the LED when flashing or similar. 
 #define LEDBlinkTime 5000 //Time in milliseconds between animation stepf of an LED when doing a slower blink indication.
 #define BuzzerNoteTime 250 //Time in milliseconds between different tones
@@ -43,7 +43,7 @@ USBConfig: Allows programatic changing of settings over USB
 #define NTP1 "pool.ntp.org" //The primary NTP server to check time against on startup.
 #define NTP2 "time.nist.gov" //The secondary NTP server to check time against on startup.
 #define KEYSWITCH_DEBOUNCE 150 //time in milliseconds between checks of the key switch, to help prevent rapid state changes.
-#define InternalReadDebug 0 //Set to 0 to disable debug messages from the internal read, since it ends up spamming the terminal.
+#define InternalReadDebug 1 //Set to 0 to disable debug messages from the internal read, since it ends up spamming the terminal.
 
 //Global Variables:
 bool TemperatureUpdate;                  //1 when writing new information, to indicate other devices shouldn't read temperature-related info
@@ -150,6 +150,7 @@ WiFiClientSecure client;
 HardwareSerial Internal(1);
 HardwareSerial Debug(0);
 JsonDocument usbjson;
+HTTPClient http;
 
 //Mutexes:
 SemaphoreHandle_t DebugMutex; //Reserves the USB serial output, priamrily for debugging purposes.
@@ -214,6 +215,10 @@ void setup(){
       WiFi.begin(SSID);
     }
 
+    //Maybe will fix refuse to connect issue?
+    WiFi.setSleep(false);
+    WiFi.setAutoReconnect(true);
+
     if(DebugMode){
       Debug.print(F("Wireless MAC: ")); Debug.println(WiFi.macAddress());
       Debug.print(F("Ethernet MAC: ")); Debug.println(F("Not yet implemented..."));
@@ -237,6 +242,8 @@ void setup(){
   client.setInsecure();
 
   //Then, check for an OTA update.
+  //Turned off temp TODO re enable
+  /*
   if(DebugMode){
     Debug.println(F("Checking for OTA Updates..."));
     Debug.println(F("If any are found, will install immediately."));
@@ -249,8 +256,10 @@ void setup(){
   if(DebugMode){
     Debug.println(F("We're still here, so there must not have been an update."));
   }
+  */
+
   //Sync the time against an NTP Server
-  configTime(GMTOffset, DSTOffset, NTP1, NTP2);
+  //configTime(GMTOffset, DSTOffset, NTP1, NTP2);
 
   //Check to make sure we can connect to the NFC reader and it isn't damaged.
   pinMode(NFCPWR, OUTPUT);
@@ -278,26 +287,67 @@ void setup(){
   digitalWrite(NFCPWR, LOW);
   Debug.println(F("NFC Setup"));
 
+  //Load up the SPIFFS file of verified IDs, format/create if it is not there.
+  if(!SPIFFS.begin(1)){ //Format SPIFFS if fails
+    Serial.println("SPIFFS Mount Failed");
+    while(1);
+  }
+  if(SPIFFS.exists("/validids.txt")){
+    Debug.println(F("Valid ID List already exists."));
+  } else{
+    Debug.println(F("No Valid ID List file found. Creating..."));
+    File file = SPIFFS.open("/validids.txt", "w");
+    if(!file){
+      Debug.println(F("ERROR: Unable to make file."));
+    }
+    file.print(F("Valid IDs:"));
+    file.println();
+    file.close();
+  }
+
+
+  /*
+  TODO:
+  There is a problem with the tasks below. Enabling too many of them causes WiFi to not work, and not all tasks are started properly.
+  For example, when turning on down to LEDControl it works fine, but turning on BuzzerControl and MachineState doesn't create the MachineState task
+  I do not know what is causing this and I'm not getting any error messages I can see. 
+  Printing task usage shows 97% idle and most of the tasks, but not all of them.
+  Stupid simple next step is to just start combining tasks and see what happens. No need to split into this many really.
+  */
+
   //Lastly, create all tasks and begin operating normally.
-  xTaskCreate(Temperature, "Temperature", 4096, NULL, 5, NULL);
-  xTaskCreate(USBConfig, "USBConfig", 8192, NULL, 5, NULL);
-  xTaskCreate(InternalRead, "InternalRead", 4096, NULL, 5, NULL);
-  xTaskCreate(ReadCard, "ReadCard", 4096, NULL, 5, NULL);
-  xTaskCreate(StatusReport, "StatusReport", 8192, NULL, 2, NULL);
-  xTaskCreate(VerifyID, "VerifyID", 8192, NULL, 1, NULL);
-  xTaskCreate(InternalWrite, "InternalWrite", 4096, NULL, 5, NULL);
-  xTaskCreate(LEDControl, "LEDControl", 4098, NULL, 5, NULL);
-  xTaskCreate(BuzzerControl, "BuzzerControl", 4096, NULL, 5, NULL);
+  vTaskSuspendAll();
+  xTaskCreate(RegularReport, "RegularReport", 1024, NULL, 6, NULL);
+  xTaskCreate(Temperature, "Temperature", 10000, NULL, 5, NULL);
+  xTaskCreate(USBConfig, "USBConfig", 10000, NULL, 5, NULL);
+  xTaskCreate(InternalRead, "InternalRead", 10000, NULL, 5, NULL);
+  xTaskCreate(ReadCard, "ReadCard", 10000, NULL, 5, NULL);
+  xTaskCreate(StatusReport, "StatusReport", 10000, NULL, 2, NULL);
+  xTaskCreate(VerifyID, "VerifyID", 10000, NULL, 1, NULL);
+  xTaskCreate(InternalWrite, "InternalWrite", 10000, NULL, 5, NULL);
+  xTaskCreate(LEDControl, "LEDControl", 10000, NULL, 5, NULL);
+  //xTaskCreate(BuzzerControl, "BuzzerControl", 10000, NULL, 5, NULL);
+  xTaskCreate(MachineState, "MachineState", 10000, NULL, 5, NULL);
+  xTaskCreate(TestTask, "TestTask", 10000, NULL, 5, NULL);
   //xTaskCreate(NetworkCheck, "NetworkCheck", 8192, NULL, 3, NULL);
   //xTaskCreate(TimeManager, "TimeManager", 4096, NULL, 4, NULL);
+  xTaskResumeAll();
 
   StartupStatus = 1;
   Debug.println(F("Setup done."));
 }
 
 void loop(){
+  char buffer[2048] = {0};
+  vTaskGetRunTimeStats(buffer);
+  Debug.println(buffer);
+  delay(1000);
+}
+
+void TestTask(void *pvParameters) {
   while(1){
-    vTaskDelay(10000 / portTICK_PERIOD_MS);
+    Debug.println(F("TEST TASK!"));
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
   }
 }
 

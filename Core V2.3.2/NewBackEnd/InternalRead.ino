@@ -32,14 +32,6 @@ void InternalRead(void *pvParameters){
       //There is a new message incoming.
       String incoming = Internal.readStringUntil('\n');
       incoming.trim();
-      if(DebugMode && InternalReadDebug){
-        if(xSemaphoreTake(DebugMutex,portMAX_DELAY) == pdTRUE){
-          Debug.print("Received ");
-          Debug.print(incoming);
-          Debug.println(F(" from the frontend."));
-          xSemaphoreGive(DebugMutex);
-        }
-      }
       if(incoming.charAt(0) == 'B'){
         //Button state
         if(incoming.charAt(2) == '1'){

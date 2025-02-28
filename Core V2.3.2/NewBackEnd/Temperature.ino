@@ -43,12 +43,7 @@ void Temperature(void *pvParameters){
 			uint8_t err = ds.getTemp(SerialNumbers[i], currTemp[i]);
 			if(err){
 				const char *errt[] = {"", "CRC", "BAD","DC","DRV"};
-        if(DebugMode){
-          if(xSemaphoreTake(DebugMutex,(50/portTICK_PERIOD_MS)) == pdTRUE){
-            Debug.print(i); Debug.print(": "); Debug.println(errt[err]);
-            xSemaphoreGive(DebugMutex);
-          }
-        }
+        //We don't do anything with the errors but this is where we would if we cared.
 			}else{
         if(currTemp[i] > SysMaxTemp){
           SysMaxTemp = currTemp[i];

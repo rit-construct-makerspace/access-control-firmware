@@ -16,7 +16,6 @@ void NetworkCheck(void *pvParameters) {
       //Network issue reported
       Debug.println(F("Checking network."));
       xSemaphoreTake(NetworkMutex, portMAX_DELAY);
-      HTTPClient http;
       String ServerPath = "https://example.com";
       http.begin(client, ServerPath);
       int httpResponseCode = http.GET();
@@ -32,20 +31,9 @@ void NetworkCheck(void *pvParameters) {
       else {
         Debug.print("Error code: ");
         Debug.println(http.errorToString(httpResponseCode));
-        //Try restarting WiFi?
-        WiFi.disconnect();
-        WiFi.mode(WIFI_OFF);
-        vTaskDelay(50 / portTICK_PERIOD_MS);
-        WiFi.mode(WIFI_STA);
-        //Wireless Initialization:
-        if (Password != "null") {
-          WiFi.begin(SSID, Password);
-        } else {
-          if (DebugMode) {
-            Debug.println(F("Using no password."));
-          }
-          WiFi.begin(SSID);
-        }
+        //We keep getting a -1 refuse to connect here. What's the deal?
+        Debug.println(F("Failed repeatedly. Restarting device."));
+        ESP.restart();
       }
     xSemaphoreGive(NetworkMutex);
     vTaskDelay(10000 / portTICK_PERIOD_MS);

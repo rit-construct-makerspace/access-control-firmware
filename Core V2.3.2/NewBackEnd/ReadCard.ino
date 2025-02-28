@@ -115,6 +115,7 @@ void ReadCard(void *pvParameters) {
           xSemaphoreGive(DebugMutex);
         }
         CardPresent = 1;
+        CardVerified = 0; //Card can't be verified yet
         CardUnread = 0;
       }
     }

@@ -23,40 +23,33 @@ State: Plaintext representation of the system, for use in status updates.
 */
 
 void StatusReport(void *pvParameters){
-  xTaskCreate(RegularReport, "RegularReport", 1024, NULL, 2, NULL);
   while(1){
-    //Check for a status reason every 50mS
-    vTaskDelay(50 / portTICK_PERIOD_MS);
+    //Check for a status reason every 500mS
+    vTaskDelay(500 / portTICK_PERIOD_MS);
     if(StartupStatus){
       SendReport("Startup");
       StartupStatus = 0;
-      continue;
     }
     if(TemperatureStatus){
       SendReport("Temperature");
       TemperatureStatus = 0;
-      continue;
     }
     if(StartStatus){
       SendReport("Session Start");
       StartStatus = 0;
-      continue;
     }
     if(EndStatus){
       SendReport("Session End");
       EndStatus = 0;
       LogoffSent = 1;
-      continue;
     }
     if(ChangeStatus){
       SendReport("State Change");
       ChangeStatus = 0;
-      continue;
     }
     if(RegularStatus){
       SendReport("Scheduled");
       RegularStatus = 0;
-      continue;
     }
   }
 }
@@ -148,6 +141,7 @@ void SendReport(String Reason){
         //Failed twice. 
         CheckNetwork = 1;
         break;
+        vTaskDelay(10000 / portTICK_PERIOD_MS);
       }
       StatusFailed = 1;
     }
