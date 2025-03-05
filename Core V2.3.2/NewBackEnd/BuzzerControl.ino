@@ -34,7 +34,7 @@ void BuzzerControl(void *pvParameters) {
   byte MelodyStep;
   unsigned long MelodyTime = 0;
   while (1) {
-    vTaskDelay(10 / portTICK_PERIOD_MS);
+    vTaskDelay(3 / portTICK_PERIOD_MS);
     //First, check the situations to see if we should be playing any tones right now:
     Melody = 0; //Set to 0 so if no situations apply, we stop playing
     //Reserve the State string so it doesn't change while we are comparing it.
@@ -51,15 +51,15 @@ void BuzzerControl(void *pvParameters) {
     if(TemperatureFault || NFCFault || ReadError){
       Melody = 3;
     }
-    if(VerifiedBeep){
-      VerifiedBeep = 0;
+    if(VerifiedBeep && (State != "Idle" || NoNetwork)){
       Melody = 4;
+    } else{
+      VerifiedBeep = 0;
     }
     if(Melody == 0){
       //No tone to play
       Tone = 0;
       NewBuzzer = 1;
-      continue;
     }
     if(Melody != OldMelody){
       //Melody has changed!
@@ -68,7 +68,7 @@ void BuzzerControl(void *pvParameters) {
       NewBuzzer = 0;
       MelodyTime = 0;
       MelodyStep = 0;
-    } else if((MelodyTime <= millis()) || DonePlaying){
+    } else if((MelodyTime >= millis()) || DonePlaying){
       //Melody didn't change and it's not time to advance to the next tone or the system is done playing a tone
       continue;
     }
@@ -134,6 +134,7 @@ void BuzzerControl(void *pvParameters) {
           break;
           case 1:
             Tone = 0;
+            VerifiedBeep = 0;
             DonePlaying = 1;
           break;
         }

@@ -13,6 +13,7 @@ ReadyToSend: bool, indicates the other task has finished writing its message and
 
 void MessageReport(void *pvParameters) {
   while(1){
+    //TODO Implement this
     if(!ReadyToSend){
       //No message ready to send
       continue;

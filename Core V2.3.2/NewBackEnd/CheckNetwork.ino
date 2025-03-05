@@ -20,7 +20,6 @@ void NetworkCheck(void *pvParameters) {
       http.begin(client, ServerPath);
       int httpResponseCode = http.GET();
       http.end();
-      Debug.println(httpResponseCode);
       if (httpResponseCode>0) {
         Debug.print("HTTP Response code: ");
         Debug.println(httpResponseCode);
@@ -32,8 +31,17 @@ void NetworkCheck(void *pvParameters) {
         Debug.print("Error code: ");
         Debug.println(http.errorToString(httpResponseCode));
         //We keep getting a -1 refuse to connect here. What's the deal?
-        Debug.println(F("Failed repeatedly. Restarting device."));
-        ESP.restart();
+        Debug.println(F("Failed repeatedly to connect to network with an invalid response"));
+        if(State != "Unlocked" && State != "AlwaysOn"){
+          //We are not in a running state
+          Debug.println(F("Since we are not doing anything right now, going to restart the machine."));
+          State = "Lockout";
+          delay(5000);
+          ESP.restart();
+        } else{
+          Debug.println(F("Deferring restart since the machine is in use."));
+          delay(20000);
+        }
       }
     xSemaphoreGive(NetworkMutex);
     vTaskDelay(10000 / portTICK_PERIOD_MS);

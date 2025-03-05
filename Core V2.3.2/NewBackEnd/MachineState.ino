@@ -16,7 +16,7 @@ void MachineState(void *pvParameters) {
   unsigned long LastKeyState = 0;
   bool OldKey1 = 0;
   bool OldKey2 = 0;
-  
+  String OldState; //Stores the last state of the system.
   while(1){
     //Only needs to run every 10 milliseconds
     vTaskDelay(10 / portTICK_PERIOD_MS);
@@ -36,7 +36,7 @@ void MachineState(void *pvParameters) {
         //A key switch has changed
         OldKey1 = Key1;
         OldKey2 = Key2;
-        if(Key1 && Key2){
+        if(Key1){
           //Locked on
           //Entering this mode requires a valid ID, check that now;
           byte delaycount = 0;
@@ -60,9 +60,19 @@ void MachineState(void *pvParameters) {
             //Card was not verified, throw an error
             //TODO
           }
-        } else if(Key1){
+        } else if(!Key1 && !Key2){
           //Locked off
-            State = "Lockout";
+            //We only want to go into lockout if we've been in this key position for a bit
+            //Because this is how the keys report when between positions as well
+            byte KeyDebounce = 0;
+            while(!Key1 && !Key2 && KeyDebounce <= 150){
+              vTaskDelay(1 / portTICK_PERIOD_MS);
+              KeyDebounce++;
+            }
+            if(KeyDebounce >= 150 && !Key1 && !Key2){
+              //WE made it the full debounce time
+              State = "Lockout";
+            }
         } else if(Key2){
           //Normal mode
           //Entering this mode requires a valid ID, check that now;
@@ -104,6 +114,7 @@ void MachineState(void *pvParameters) {
       //The machine is unlocked, but the keycard was removed.
       //We should be in idle mode
       State = "Idle";
+      EndStatus = 1; //Send a message to the server that the session ended
     }
     //Set the ACS output based on state;
     if(State == "AlwaysOn" || State == "Unlocked"){
@@ -111,6 +122,10 @@ void MachineState(void *pvParameters) {
     } else{
       //Lockout, Idle, or other unknown modes
       Switch = 0;
+    }
+    if(State != OldState){
+      OldState = State;
+      ChangeStatus = 1; //Send a message to the server that the state changed.
     }
     //Release the semaphore;
     xSemaphoreGive(StateMutex);

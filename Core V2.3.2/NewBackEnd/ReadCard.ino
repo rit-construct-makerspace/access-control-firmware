@@ -86,9 +86,8 @@ void ReadCard(void *pvParameters) {
             //Wait for the send message task to become available
             vTaskDelay(1 / portTICK_PERIOD_MS);
           }
-          SendMessage = 1;
           Message = "NFCReaderFail";
-          ReadyToSend = 1;
+          SendMessage = 1;
         } else{
           //NFC reader is fine but we couldn't read the card. Definitely not an NFC card.
           ReadError = 1;
@@ -96,6 +95,7 @@ void ReadCard(void *pvParameters) {
       }
       if(success){
         //The NFC reader was successful.
+        ReadError = 0;
         UID = "";
         bool readreserved = 0;
         if(DebugMode){
@@ -121,8 +121,11 @@ void ReadCard(void *pvParameters) {
     }
     if(!Switch1 && !Switch2){
       //Card not present. Reset card-related parameters.
+      ReadFailed = 0;
+      ReadError = 0;
       NewCard = 1;
       CardPresent = 0;
+      CardUnread = 0;
       CardVerified = 0;
       InternalVerified = 0;
       InternalStatus = 0;

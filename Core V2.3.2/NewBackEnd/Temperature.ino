@@ -15,7 +15,6 @@ TemperatureTime: how long, in milliseconds, should be between system-wide temper
 
 void Temperature(void *pvParameters){
 	OneWire32 ds(TEMP); //gpio pin
-
 	//First time running, find the addresses
   xSemaphoreTake(DebugMutex, portMAX_DELAY);
   Debug.println(F("First time running temperature..."));

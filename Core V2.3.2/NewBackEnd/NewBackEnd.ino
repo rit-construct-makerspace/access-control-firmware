@@ -35,7 +35,7 @@ USBConfig: Allows programatic changing of settings over USB
 #define OTA_URL "https://example.com/myimages/Basic-OTA-Example.json"
 #define TemperatureTime 5000 //How long to delay between temperature measurements, in milliseconds
 #define FEPollRate 10000 //How long, in milliseconds, to go between an all-values poll of the frontend (in addition to event-based)
-#define LEDFlashTime 250 //Time in milliseconds between aniimation steps of the LED when flashing or similar. 
+#define LEDFlashTime 150 //Time in milliseconds between aniimation steps of the LED when flashing or similar. 
 #define LEDBlinkTime 5000 //Time in milliseconds between animation stepf of an LED when doing a slower blink indication.
 #define BuzzerNoteTime 250 //Time in milliseconds between different tones
 #define GMTOffset -18000 //Offset from GMT to local time, for Eastern time that's -1800 seconds, or -5 hours. 
@@ -86,7 +86,7 @@ unsigned long LastServer;                //Tracks the last time we had a good co
 bool CheckNetwork;                       //Flag to indicate repeat network communication failures. Needs investigating.
 unsigned long SessionTime;               //How long a user has been using a machine for
 bool LogoffSent;                         //Flag to indicate that the system has sent the message to end a session, so data can be cleared.
-String State;                            //Plaintext indication of the state of the system for status reports. Idle, Unlocked, AlwayOn, or Lockout.
+String State = "Lockout";                //Plaintext indication of the state of the system for status reports. Idle, Unlocked, AlwayOn, or Lockout.
 bool CardVerified;                       //Flag set to 1 once the results of the ID check are complete and CardStatus is valid.
 bool CardStatus;                         //Set to 1 if a card is authorized to use the machine, 0 if not,
 bool InternalVerified;                   //Set to 1 when the card has been verified against the internal list, and InternalStatus is valid.
@@ -207,6 +207,7 @@ void setup(){
     }
     //Wireless Initialization:
     if (Password != "null") {
+      WiFi.mode(WIFI_STA);
       WiFi.begin(SSID, Password);
     } else {
       if (DebugMode) {
@@ -221,8 +222,9 @@ void setup(){
 
     if(DebugMode){
       Debug.print(F("Wireless MAC: ")); Debug.println(WiFi.macAddress());
-      Debug.print(F("Ethernet MAC: ")); Debug.println(F("Not yet implemented..."));
+      Debug.print(F("Ethernet MAC: ")); Debug.println(F("No ethernet on this board."));
     }
+
 
     //Attempt to connect to Wifi network:
     while (WiFi.status() != WL_CONNECTED) {
@@ -241,9 +243,8 @@ void setup(){
 
   client.setInsecure();
 
+
   //Then, check for an OTA update.
-  //Turned off temp TODO re enable
-  /*
   if(DebugMode){
     Debug.println(F("Checking for OTA Updates..."));
     Debug.println(F("If any are found, will install immediately."));
@@ -256,7 +257,6 @@ void setup(){
   if(DebugMode){
     Debug.println(F("We're still here, so there must not have been an update."));
   }
-  */
 
   //Sync the time against an NTP Server
   //configTime(GMTOffset, DSTOffset, NTP1, NTP2);
@@ -305,7 +305,6 @@ void setup(){
     file.close();
   }
 
-
   /*
   TODO:
   There is a problem with the tasks below. Enabling too many of them causes WiFi to not work, and not all tasks are started properly.
@@ -318,18 +317,17 @@ void setup(){
   //Lastly, create all tasks and begin operating normally.
   vTaskSuspendAll();
   xTaskCreate(RegularReport, "RegularReport", 1024, NULL, 6, NULL);
-  xTaskCreate(Temperature, "Temperature", 10000, NULL, 5, NULL);
-  xTaskCreate(USBConfig, "USBConfig", 10000, NULL, 5, NULL);
-  xTaskCreate(InternalRead, "InternalRead", 10000, NULL, 5, NULL);
-  xTaskCreate(ReadCard, "ReadCard", 10000, NULL, 5, NULL);
-  xTaskCreate(StatusReport, "StatusReport", 10000, NULL, 2, NULL);
-  xTaskCreate(VerifyID, "VerifyID", 10000, NULL, 1, NULL);
-  xTaskCreate(InternalWrite, "InternalWrite", 10000, NULL, 5, NULL);
-  xTaskCreate(LEDControl, "LEDControl", 10000, NULL, 5, NULL);
-  //xTaskCreate(BuzzerControl, "BuzzerControl", 10000, NULL, 5, NULL);
-  xTaskCreate(MachineState, "MachineState", 10000, NULL, 5, NULL);
-  xTaskCreate(TestTask, "TestTask", 10000, NULL, 5, NULL);
-  //xTaskCreate(NetworkCheck, "NetworkCheck", 8192, NULL, 3, NULL);
+  xTaskCreate(Temperature, "Temperature", 2048, NULL, 5, NULL);
+  xTaskCreate(USBConfig, "USBConfig", 2048, NULL, 5, NULL);
+  xTaskCreate(InternalRead, "InternalRead", 2048, NULL, 5, NULL);
+  xTaskCreate(ReadCard, "ReadCard", 2048, NULL, 5, NULL);
+  xTaskCreate(StatusReport, "StatusReport", 5000, NULL, 2, NULL);
+  xTaskCreate(VerifyID, "VerifyID", 4096, NULL, 1, NULL);
+  xTaskCreate(InternalWrite, "InternalWrite", 2048, NULL, 5, NULL);
+  xTaskCreate(LEDControl, "LEDControl", 1024, NULL, 5, NULL);
+  xTaskCreate(BuzzerControl, "BuzzerControl", 1024, NULL, 5, NULL);
+  xTaskCreate(MachineState, "MachineState", 2048, NULL, 5, NULL);
+  xTaskCreate(NetworkCheck, "NetworkCheck", 4096, NULL, 3, NULL);
   //xTaskCreate(TimeManager, "TimeManager", 4096, NULL, 4, NULL);
   xTaskResumeAll();
 
@@ -338,17 +336,7 @@ void setup(){
 }
 
 void loop(){
-  char buffer[2048] = {0};
-  vTaskGetRunTimeStats(buffer);
-  Debug.println(buffer);
-  delay(1000);
-}
-
-void TestTask(void *pvParameters) {
-  while(1){
-    Debug.println(F("TEST TASK!"));
-    vTaskDelay(1000 / portTICK_PERIOD_MS);
-  }
+  delay(5000);
 }
 
 void callback_percent(int offset, int totallength) {

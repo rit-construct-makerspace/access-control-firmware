@@ -45,7 +45,7 @@ void LEDControl(void *pvParameters) {
   unsigned long AnimationTime;
   bool AnimationBlock;
   while(1){
-    vTaskDelay(50 / portTICK_PERIOD_MS);
+    vTaskDelay(3 / portTICK_PERIOD_MS);
     //First, set the animation state:
     //Reserve the State string for checks;
     xSemaphoreTake(StateMutex, portMAX_DELAY); 
@@ -56,6 +56,7 @@ void LEDControl(void *pvParameters) {
     }
     if((CardUnread || CardPresent) && !CardVerified){
       //Animation 4: Flashing Yellow
+      LEDAnimation = 4;
     }
     if(NoNetwork){
       //Animation 6: Solid White
@@ -69,7 +70,7 @@ void LEDControl(void *pvParameters) {
       //Animation 5: Cycle green/white
       LEDAnimation = 5;
     }
-    if((CardVerified && !CardStatus && CardPresent) || (State.equals("Lockout"))){
+    if((CardVerified && !CardStatus && CardPresent) || (State.equals("Lockout")) || (ReadFailed && CardUnread)){
       //Animation 1: Solid Red
       LEDAnimation = 1;
     }
@@ -100,50 +101,50 @@ void LEDControl(void *pvParameters) {
         //Flashing Red
         if(AnimationBlock){
           Red = 255;
-          Green = 000;
-          Blue = 000;
+          Green = 0;
+          Blue = 0;
         } else{
-          Red = 000;
-          Green = 000;
-          Blue = 000;
+          Red = 0;
+          Green = 0;
+          Blue = 0;
         }
       break;
       case 1:
         //Solid Red
         Red = 255;
-        Green = 000;
-        Blue = 000;
+        Green = 0;
+        Blue = 0;
       break;
       case 2:
         //Solid Green
-        Red = 000;
+        Red = 0;
         Green = 255;
-        Blue = 000;
+        Blue = 0;
       break;
       case 3:
         //Solid Yellow
         Red = 255;
         Green = 255;
-        Blue = 000;
+        Blue = 0;
       break;
       case 4:
         //Flashing Yellow
         if(AnimationBlock){
           Red = 255;
           Green = 255;
-          Blue = 000;
+          Blue = 0;
         } else{
-          Red = 000;
-          Green = 000;
-          Blue = 000;
+          Red = 0;
+          Green = 0;
+          Blue = 0;
         }
       break;
       case 5:
         //Cycle Green/White
         if(AnimationBlock){
-          Red = 000;
+          Red = 0;
           Green = 255;
-          Blue = 000;
+          Blue = 0;
         } else{
           Red = 255;
           Green = 255;
@@ -156,8 +157,8 @@ void LEDControl(void *pvParameters) {
         Green = 255;
         Blue = 255;
       break;
-      NewLED = 1;
       }
+      NewLED = 1;
     } else{
       //Animation doesn't need updating
       continue;

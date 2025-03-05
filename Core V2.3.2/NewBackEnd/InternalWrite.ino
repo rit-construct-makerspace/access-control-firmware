@@ -27,8 +27,8 @@ DebugLED: Turns on/off the debugLED on the frontend
 void InternalWrite(void *pvParameters) {
   xTaskCreate(PollTimer, "PollTimer", 1024, NULL, 2, NULL);
   while(1){
-    //Check every 50mS
-    vTaskDelay(50 / portTICK_PERIOD_MS);
+    //Check every 30mS
+    vTaskDelay(3 / portTICK_PERIOD_MS);
     Internal.flush();
     //First, check for any of the flags indicating there's a new message to send;
     if(PollCheck){
@@ -42,7 +42,7 @@ void InternalWrite(void *pvParameters) {
       continue;
     }
     if(NewBuzzer){
-      Internal.println("B " + Tone);
+      Internal.println("B " + String(Tone));
       NewBuzzer = 0;
       continue;
     }

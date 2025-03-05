@@ -16,11 +16,10 @@ CheckNetwork: Set to 1 if we have repeated failed network attempts.
 LastServer: Tracks the last time we had a good connection to the server.
 */
 
-void VerifyID(void *pvParameters) {
+void VerifyID(void *pvParameters){
   while(1){
     //Check every 50mS
     vTaskDelay(50 / portTICK_PERIOD_MS);
-    continue; //Testing TODO remove
     if(!CardVerified && CardPresent){
       //New card that needs verification
       //First, try to verify the card against the internal list;
@@ -54,14 +53,20 @@ void VerifyID(void *pvParameters) {
         //Reserve the network;
         xSemaphoreTake(NetworkMutex, portMAX_DELAY); 
         HTTPClient http;
-        String ServerPath = Server + "api/auth?type=" + MachineType + "&machine=" + MachineID + "&zone=" + Zone + "&needswelcome=" + NeedsWelcome + "&id=" + UID;
+        String ServerPath = Server + "/api/auth?type=" + MachineType + "&machine=" + MachineID + "&zone=" + Zone + "&needswelcome=" + NeedsWelcome + "&id=" + UID;
         if(DebugMode && xSemaphoreTake(DebugMutex,(5/portTICK_PERIOD_MS)) == pdTRUE){
           Debug.print(F("Sending Auth Request: ")); Debug.println(ServerPath);
           xSemaphoreGive(DebugMutex);
         } 
         http.begin(client, ServerPath);
         int httpCode = http.GET();
-        if(httpCode < 200 || httpCode > 299){
+        if(DebugMode){
+          if(xSemaphoreTake(DebugMutex,(portMAX_DELAY)) == pdTRUE){
+            Debug.print(F("Got HTTP: ")); Debug.println(httpCode);
+            xSemaphoreGive(DebugMutex);
+          }
+        }
+        if(httpCode != 202 && httpCode != 406){
           //Invalid HTTP code
           if(DebugMode){
             if(xSemaphoreTake(DebugMutex,(5/portTICK_PERIOD_MS)) == pdTRUE){
@@ -74,12 +79,17 @@ void VerifyID(void *pvParameters) {
             CheckNetwork = 1;
           }
           AuthFailed = 1;
+          http.end();
+          //Release the mutex
+          xSemaphoreGive(NetworkMutex);
+          continue;
         } else{
           //Correct HTTP code
+          AuthRetry = 0;
           LastServer = millis();
           String payload = http.getString();
           if(DebugMode){
-            if(xSemaphoreTake(DebugMutex,(5/portTICK_PERIOD_MS)) == pdTRUE){
+            if(xSemaphoreTake(DebugMutex,(portMAX_DELAY)) == pdTRUE){
               Debug.print(F("Got response ")); Debug.println(payload);
               xSemaphoreGive(DebugMutex);
             }
@@ -89,6 +99,12 @@ void VerifyID(void *pvParameters) {
           xSemaphoreGive(NetworkMutex);
           if(!CardPresent){
             //The card was removed while we were waiting for the network :(
+            if(DebugMode){
+              if(xSemaphoreTake(DebugMutex,(portMAX_DELAY)) == pdTRUE){
+                Debug.println(F("Card removed during auth request. Aborting."));
+                xSemaphoreGive(DebugMutex);
+              }
+            }
             continue;
           }
           JsonDocument auth;
@@ -96,7 +112,7 @@ void VerifyID(void *pvParameters) {
           if((auth["UID"] == UID) && (auth["Allowed"] == 1)){
             //Authorization granted!
             if(DebugMode){
-              if(xSemaphoreTake(DebugMutex,(5/portTICK_PERIOD_MS)) == pdTRUE){
+              if(xSemaphoreTake(DebugMutex,(portMAX_DELAY)) == pdTRUE){
                 Debug.println(F("Authorization Granted."));
                 xSemaphoreGive(DebugMutex);
               }
@@ -112,6 +128,7 @@ void VerifyID(void *pvParameters) {
               VerifiedBeep = 1;
               InternalStatus = 1;
             }
+            continue;
           } else{
             //Authorization Denied!
             if(DebugMode){
