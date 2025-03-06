@@ -199,6 +199,7 @@ void setup(){
   Frequency = settings.getString("Frequency").toInt();
   NetworkMode = settings.getString("NetworkMode").toInt();
   NeedsWelcome = settings.getString("NeedsWelcome").toInt();
+  DebugMode = settings.getString("DebugMode").toInt();
 
   if(NetworkMode != 2){
     if (DebugMode) {
@@ -250,10 +251,9 @@ void setup(){
     Debug.println(F("If any are found, will install immediately."));
   }
   ESP32OTAPull ota;
-  int otaresp = ota
-    .SetCallback(callback_percent)
-    .SetConfig(Hardware)
-    .CheckForOTAUpdate(OTA_URL, Version, ESP32OTAPull::UPDATE_AND_BOOT);
+  ota.SetCallback(callback_percent);
+  ota.SetConfig(Hardware);
+  int otaresp = ota.CheckForOTAUpdate(OTA_URL, Version);
   if(DebugMode){
     Debug.print(F("OTA Response Code: ")); Debug.println(otaresp);
     Debug.println(errtext(otaresp));
@@ -338,7 +338,7 @@ void setup(){
 }
 
 void loop(){
-  delay(5000);
+  delay(50000);
 }
 
 void callback_percent(int offset, int totallength) {
