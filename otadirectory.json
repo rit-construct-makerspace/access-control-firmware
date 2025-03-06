@@ -1,0 +1,9 @@
+{
+  "Configurations": [
+    {
+      "Config": "2.3.2-LE",
+      "Version": "1.2.0",
+      "URL": "https://github.com/rit-construct-makerspace/access-control-firmware/releases/1.2.0/download/120for232le.bin?raw=true"
+    }
+  ]
+}
