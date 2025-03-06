@@ -112,7 +112,8 @@ bool ReadError;                          //Flag, set 1 when we fail to read a ca
 #include <Adafruit_PN532.h>       //Version 1.3.4 | Source: https://github.com/adafruit/Adafruit-PN532
 #include <ArduinoJson.h>          //Version 7.3.0 | Source: https://github.com/bblanchon/ArduinoJson
 #include <ArduinoJson.hpp>        //Version 7.3.0 | Source: https://github.com/bblanchon/ArduinoJson
-#include <ESP32OTAPull.h>         //Version 1.0.0 | Source: https://github.com/mrcodetastic/ESP32-OTA-Pull
+//WARNING: The original ESP32-OTA-Pull will not work with this code. Use the forked version linked below!
+#include <ESP32OTAPull.h>         //Version 1.0.1 | Source: https://github.com/JimSHED/ESP32-OTA-Pull-GitHub
 #include <WiFiClientSecure.h>     //Version 3.1.1 | Inherent to ESP32 Arduino
 #include <HTTPClient.h>           //Version 3.1.1 | Inherent to ESP32 Arduino
 #include <Preferences.h>          //Version 3.1.1 | Inherent to ESP32 Arduino
@@ -120,6 +121,9 @@ bool ReadError;                          //Flag, set 1 when we fail to read a ca
 #include <FS.h>                   //Version 3.1.1 | Inherent to ESP32 Arduino
 #include <SPIFFS.h>               //Version 3.1.1 | Inherent to ESP32 Arduino
 #include <time.h>                 //Version 3.1.1 | Inherent to ESP32 Arduino
+#include <HTTPClient.h>           //Version 3.1.1 | Inherent to ESP32 Arduino
+#include <Update.h>               //Version 3.1.1 | Inherent to ESP32 Arduino
+#include <WiFi.h>                 //Version 3.1.1 | Inherent to ESP32 Arduino
 
 //Pin Definitions:
 const int ETHINT = 13;
