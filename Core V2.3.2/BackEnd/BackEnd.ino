@@ -250,9 +250,6 @@ void setup(){
     Debug.println(F("If any are found, will install immediately."));
   }
   ESP32OTAPull ota;
-  if(DebugMode){
-    ota.EnableSerialDebug();
-  }
   int otaresp = ota
     .SetCallback(callback_percent)
     .SetConfig(Hardware)
