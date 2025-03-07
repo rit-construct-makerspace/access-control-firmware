@@ -20,7 +20,7 @@ void VerifyID(void *pvParameters){
   while(1){
     //Check every 50mS
     vTaskDelay(50 / portTICK_PERIOD_MS);
-    if(!CardVerified && CardPresent){
+    if(!InternalVerified && CardPresent){
       //New card that needs verification
       //First, try to verify the card against the internal list;
       File file = SPIFFS.open("/validids.txt", "r");
@@ -42,6 +42,19 @@ void VerifyID(void *pvParameters){
         }
       }
       file.close();
+      //We only need to verify against the server if;
+      //1. We are in idle state OR
+      //2. The ID could not be verified on the internal list.
+      if(InternalVerified && State != "Idle"){
+        //No need to verify, exit out.
+        if(DebugMode){
+          if(xSemaphoreTake(DebugMutex,(portMAX_DELAY)) == pdTRUE){
+            Debug.println(F("No need to check against server."));
+            xSemaphoreGive(DebugMutex);
+          }
+        }
+        continue;
+      }
       //Now verify against the server;
       bool AuthRetry = 1;
       bool AuthFailed = 0;
@@ -50,10 +63,17 @@ void VerifyID(void *pvParameters){
           //This is the second attempt
           AuthRetry = 0;
         }
+        //We only need to check for needs welcome if the machine is in idle mode. Should be able to unlock without signing into the shop.
+        String NeedsWelcomeTemp;
+        if(State == "Idle"){
+          NeedsWelcomeTemp = NeedsWelcome;
+        } else{
+          NeedsWelcomeTemp = "0";
+        }
         //Reserve the network;
         xSemaphoreTake(NetworkMutex, portMAX_DELAY); 
         HTTPClient http;
-        String ServerPath = Server + "/api/auth?type=" + MachineType + "&machine=" + MachineID + "&zone=" + Zone + "&needswelcome=" + NeedsWelcome + "&id=" + UID;
+        String ServerPath = Server + "/api/auth?type=" + MachineType + "&machine=" + MachineID + "&zone=" + Zone + "&needswelcome=" + NeedsWelcomeTemp + "&id=" + UID;
         if(DebugMode && xSemaphoreTake(DebugMutex,(5/portTICK_PERIOD_MS)) == pdTRUE){
           Debug.print(F("Sending Auth Request: ")); Debug.println(ServerPath);
           xSemaphoreGive(DebugMutex);
@@ -66,7 +86,11 @@ void VerifyID(void *pvParameters){
             xSemaphoreGive(DebugMutex);
           }
         }
-        if(httpCode != 202 && httpCode != 406){
+        //HTTP Codes:
+        //202: ID Approved
+        //406: ID Denied
+        //401: ID Denied (Not Documented?)
+        if(httpCode != 202 && httpCode != 406 && httpCode != 401){
           //Invalid HTTP code
           if(DebugMode){
             if(xSemaphoreTake(DebugMutex,(5/portTICK_PERIOD_MS)) == pdTRUE){

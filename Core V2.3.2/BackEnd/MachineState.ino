@@ -75,7 +75,7 @@ void MachineState(void *pvParameters) {
             }
         } else if(Key2){
           //Normal mode
-          //Entering this mode requires a valid ID, check that now;
+          //Entering this mode requires a valid ID if, check that now;
           byte delaycount = 0;
           while(!InternalVerified){
             //Delay until the card is verified or removed...
@@ -89,6 +89,10 @@ void MachineState(void *pvParameters) {
               break;
             }
             vTaskDelay(1 / portTICK_PERIOD_MS);
+          }
+          if(State == "AlwaysOn"){
+            //No need to verify who you are if you are setting a more restrictive permission level.
+            State = "Idle";
           }
           if(InternalStatus || InternalVerified){
             //Card is verified, so set the state

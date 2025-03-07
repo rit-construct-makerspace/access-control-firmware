@@ -26,7 +26,7 @@ void TimeManager(void *pvParameters) {
     strftime(cstrHour, 3, "%H", &timeinfo);
     char cstrWeekDay[2];
     strftime(cstrWeekDay, 10, "%w", &timeinfo);
-    if((cstrHour[0] == '0') && (cstrHour[1] == '4') && (cstrWeekDay[0] == 0) && (Switch == 0)){
+    if((cstrHour[0] == '0') && (cstrHour[1] == '4') && (cstrWeekDay[0] == '0') && (Switch == 0)){
       //The time is 4:xx AM on a Sunday, and the machine is not currently in use
       //Restart the system to check for software updates and reset millis();
       ESP.restart();
