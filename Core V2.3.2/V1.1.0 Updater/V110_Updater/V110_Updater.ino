@@ -15,7 +15,7 @@ This quick program will load all the required settings to transition from 1.1.0 
 #include <HTTPClient.h>           //Version 3.1.1 | Inherent to ESP32 Arduino
 #include <Preferences.h>          //Version 3.1.1 | Inherent to ESP32 Arduino
 #include <esp_wifi.h>             //Version 3.1.1 | Inherent to ESP32 Arduino
-#include <time.h>                 //Version 3.1.1 | Inherent to ESP32 Arduino
+#include <time.h>                 //Version 3.1.1 | Inheren`t to ESP32 Arduino
 #include <Update.h>               //Version 3.1.1 | Inherent to ESP32 Arduino
 #include <WiFi.h>                 //Version 3.1.1 | Inherent to ESP32 Arduino
 
@@ -28,8 +28,6 @@ bool DebugMode = 1;
 //Objects:
 Preferences settings;
 WiFiClientSecure client;
-HardwareSerial Internal(1);
-HardwareSerial Serial(0);
 JsonDocument usbjson;
 HTTPClient http;
 
@@ -81,7 +79,7 @@ void setup() {
     Serial.println(F("If any are found, will install immediately."));
   }
   ESP32OTAPull ota;
-  ota.EnableDebug();
+  ota.EnableSerialDebug();
   ota.SetCallback(callback_percent);
   ota.SetConfig(Hardware);
   int otaresp = ota.CheckForOTAUpdate(OTA_URL, Version);
@@ -90,6 +88,7 @@ void setup() {
     Serial.println(errtext(otaresp));
     Serial.println(F("We're still here, so there must not have been an update."));
   }
+  ESP.restart();
 }
 
 void loop() {

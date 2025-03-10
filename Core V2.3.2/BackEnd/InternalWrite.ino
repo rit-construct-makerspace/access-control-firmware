@@ -47,7 +47,7 @@ void InternalWrite(void *pvParameters) {
       continue;
     }
     //Some items are constantly written and re-asserted.
-    Internal.println("S " + Switch);
+    Internal.println("S " + String(Switch));
     Internal.println("D " + DebugLED);
     vTaskDelay(10 / portTICK_PERIOD_MS);  //Only run once every 10mS
   }
