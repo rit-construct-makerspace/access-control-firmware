@@ -32,7 +32,7 @@ USBConfig: Allows programatic changing of settings over USB
 #define Version "1.2.0"
 #define Hardware "2.3.2-LE"
 #define MAX_DEVICES 10 //How many possible temperature sensors to scan for
-#define OTA_URL "https://github.com/rit-construct-makerspace/access-control-firmware/releases/download/OTA/otadirectory.json"
+#define OTA_URL "https://github.com/rit-construct-makerspace/access-control-firmware/releases/latest/download/otadirectory.json"
 #define TemperatureTime 5000 //How long to delay between temperature measurements, in milliseconds
 #define FEPollRate 10000 //How long, in milliseconds, to go between an all-values poll of the frontend (in addition to event-based)
 #define LEDFlashTime 150 //Time in milliseconds between aniimation steps of the LED when flashing or similar. 
@@ -334,7 +334,7 @@ void setup(){
   xTaskCreate(BuzzerControl, "BuzzerControl", 1024, NULL, 5, NULL);
   xTaskCreate(MachineState, "MachineState", 2048, NULL, 5, NULL);
   xTaskCreate(NetworkCheck, "NetworkCheck", 4096, NULL, 3, NULL);
-  //xTaskCreate(TimeManager, "TimeManager", 4096, NULL, 4, NULL);
+  xTaskCreate(TimeManager, "TimeManager", 4096, NULL, 4, NULL);
   xTaskResumeAll();
 
   StartupStatus = 1;

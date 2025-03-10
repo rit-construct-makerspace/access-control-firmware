@@ -20,15 +20,26 @@ void TimeManager(void *pvParameters) {
     struct tm timeinfo;
     if(!getLocalTime(&timeinfo)){
       //Time server hasn't synced yet.
+      if(DebugMode){
+        xSemaphoreTake(DebugMutex, portMAX_DELAY);
+        Debug.println(F("Time manager error, local time not avaialble yet?"));
+        xSemaphoreGive(DebugMutex);
+      }
       continue;
     }
     char cstrHour[3];
     strftime(cstrHour, 3, "%H", &timeinfo);
     char cstrWeekDay[2];
     strftime(cstrWeekDay, 10, "%w", &timeinfo);
-    if((cstrHour[0] == '0') && (cstrHour[1] == '4') && (cstrWeekDay[0] == '0') && (Switch == 0)){
-      //The time is 4:xx AM on a Sunday, and the machine is not currently in use
+    if((cstrHour[0] == '0') && (cstrHour[1] == '4') && (cstrWeekDay[0] == '1') && (Switch == 0)){
+      //The time is 4:xx AM on a Monday, and the machine is not currently in use
       //Restart the system to check for software updates and reset millis();
+      if(DebugMode){
+        xSemaphoreTake(DebugMutex, portMAX_DELAY);
+        Debug.println(F("It is time to restart and check for updates..."));
+        xSemaphoreGive(DebugMutex);
+      }
+      delay(5000);
       ESP.restart();
     }
   }
