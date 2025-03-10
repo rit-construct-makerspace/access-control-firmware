@@ -34,17 +34,14 @@ void InternalWrite(void *pvParameters) {
     if(PollCheck){
       Internal.println("P");
       PollCheck = 0;
-      continue;
     }
     if(NewLED){
       Internal.println("L " + String(Red) + "," + String(Green) + "," + String(Blue));
       NewLED = 0;
-      continue;
     }
     if(NewBuzzer){
       Internal.println("B " + String(Tone));
       NewBuzzer = 0;
-      continue;
     }
     //Some items are constantly written and re-asserted.
     Internal.println("S " + String(Switch));
