@@ -143,6 +143,9 @@ void MachineState(void *pvParameters) {
     if(millis64() >= ButtonTime){
       //It has been 5 seconds, restart.
       settings.putString("LastState", State);
+      State = "Restart";
+      //Turn off the internal write task so that it doesn't overwrite the restart led color.
+      vTaskSuspend(xHandle);
       Serial.println(F("RESTARTING. Source: Button."));
       Internal.println("L 0,0,255");
       Internal.println("S 0");

@@ -119,16 +119,26 @@ void ReadCard(void *pvParameters) {
         CardUnread = 0;
       }
     }
-    if(!Switch1 && !Switch2){
+    if(Switch1 && Switch2 && !NewCard){
+      //This is likely an indication of an internal switch issue.
+      //We've noticed on many devices they get stuck down over time.
+      //Send a message to the server.
+      //TODO
+    }
+    if(!Switch1 || !Switch2){
       //Card not present. Reset card-related parameters.
       ReadFailed = 0;
       ReadError = 0;
-      NewCard = 1;
       CardPresent = 0;
       CardUnread = 0;
       CardVerified = 0;
       InternalVerified = 0;
       InternalStatus = 0;
+    }
+    if(!Switch1 && !Switch2){
+      //While only one switch needs to be released for us to assume there's no card, both need to be released before we look for a new card.
+      //This does mean that a fail-closed switch state will mean you cannot ever activate the machine.
+      NewCard = 1;
     }
   }
 }

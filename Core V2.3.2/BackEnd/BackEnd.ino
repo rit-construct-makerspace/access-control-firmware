@@ -29,7 +29,7 @@ USBConfig: Allows programatic changing of settings over USB
 
 
 //Settings
-#define Version "1.2.3" //TEMP for testing 
+#define Version "1.2.4" //TEMP for testing 
 #define Hardware "2.3.2-LE"
 #define MAX_DEVICES 10 //How many possible temperature sensors to scan for
 #define OTA_URL "https://github.com/rit-construct-makerspace/access-control-firmware/releases/latest/download/otadirectory.json"
@@ -151,6 +151,7 @@ HardwareSerial Internal(1);
 JsonDocument usbjson;
 HTTPClient http;
 ESP32OTAPull ota;
+TaskHandle_t xHandle;
 
 //Mutexes:
 SemaphoreHandle_t DebugMutex; //Reserves the USB serial output, priamrily for debugging purposes.
@@ -316,6 +317,9 @@ void setup(){
     //Reset for a reason other than power on reset.
     State = settings.getString("LastState");
   }
+  if(State == NULL){
+    State = "Lockout";
+  }
 
   //Lastly, create all tasks and begin operating normally.
   vTaskSuspendAll();
@@ -326,7 +330,8 @@ void setup(){
   xTaskCreate(ReadCard, "ReadCard", 2048, NULL, 5, NULL);
   xTaskCreate(StatusReport, "StatusReport", 5000, NULL, 2, NULL);
   xTaskCreate(VerifyID, "VerifyID", 4096, NULL, 1, NULL);
-  xTaskCreate(InternalWrite, "InternalWrite", 2048, NULL, 5, NULL);
+  //InternalWrite has a handle to allow it to be suspended before a restart.
+  xTaskCreate(InternalWrite, "InternalWrite", 2048, NULL, 5, &xHandle);
   xTaskCreate(LEDControl, "LEDControl", 1024, NULL, 5, NULL);
   xTaskCreate(BuzzerControl, "BuzzerControl", 1024, NULL, 5, NULL);
   xTaskCreate(MachineState, "MachineState", 2048, NULL, 5, NULL);
@@ -338,7 +343,7 @@ void setup(){
 }
 
 void loop(){
-  //No longer need the Arduino code, get rid of it.
+  //No longer need the Arduino loop, get rid of it.
   vTaskDelete(NULL);
 }
 
