@@ -99,17 +99,16 @@ void SendReport(String Reason){
     xSemaphoreTake(NetworkMutex, portMAX_DELAY); 
     if(DebugMode){
       if(xSemaphoreTake(DebugMutex,(5/portTICK_PERIOD_MS)) == pdTRUE){
-        Debug.println(F("Sending Status Message: "));
-        Debug.println(statuspayload);
+        Serial.println(F("Sending Status Message: "));
+        Serial.println(statuspayload);
         xSemaphoreGive(DebugMutex);
       }
     }
-    HTTPClient http;
     String ServerPath = Server + "/api/status";
     if(DebugMode){
       if(xSemaphoreTake(DebugMutex,portMAX_DELAY) == pdTRUE){
-        Debug.print(F("To: "));
-        Debug.println(ServerPath);
+        Serial.print(F("To: "));
+        Serial.println(ServerPath);
         xSemaphoreGive(DebugMutex);
       }
     }
@@ -118,23 +117,23 @@ void SendReport(String Reason){
     int httpCode = http.PUT(statuspayload);
     if(DebugMode){
       if(xSemaphoreTake(DebugMutex,(5/portTICK_PERIOD_MS)) == pdTRUE){
-        Debug.print(F("HTTP Response: "));
-        Debug.println(httpCode);
+        Serial.print(F("HTTP Response: "));
+        Serial.println(httpCode);
         xSemaphoreGive(DebugMutex);
       }
     }
     http.end();
     xSemaphoreGive(NetworkMutex);
     if (httpCode == 200) {
-      LastServer = millis();
+      LastServer = millis64();
       StatusSuccess = 1;
     } else {
       //Bad HTTP response? Try only once more.
       if(httpCode < 0){
         //Error code
         xSemaphoreTake(DebugMutex, portMAX_DELAY);
-        Debug.print(F("HTTP ERROR: "));
-        Debug.println(http.errorToString(httpCode));
+        Serial.print(F("HTTP ERROR: "));
+        Serial.println(http.errorToString(httpCode));
         xSemaphoreGive(DebugMutex);
       }
       if(StatusFailed){

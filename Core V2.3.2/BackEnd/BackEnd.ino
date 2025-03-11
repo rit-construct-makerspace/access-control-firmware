@@ -29,7 +29,7 @@ USBConfig: Allows programatic changing of settings over USB
 
 
 //Settings
-#define Version "1.2.2"
+#define Version "1.2.3" //TEMP for testing 
 #define Hardware "2.3.2-LE"
 #define MAX_DEVICES 10 //How many possible temperature sensors to scan for
 #define OTA_URL "https://github.com/rit-construct-makerspace/access-control-firmware/releases/latest/download/otadirectory.json"
@@ -38,12 +38,8 @@ USBConfig: Allows programatic changing of settings over USB
 #define LEDFlashTime 150 //Time in milliseconds between aniimation steps of the LED when flashing or similar. 
 #define LEDBlinkTime 5000 //Time in milliseconds between animation stepf of an LED when doing a slower blink indication.
 #define BuzzerNoteTime 250 //Time in milliseconds between different tones
-#define GMTOffset -18000 //Offset from GMT to local time, for Eastern time that's -1800 seconds, or -5 hours. 
-#define DSTOffset 3600 //How much to offset time in daylight savings, usually 3600 seconds, or 1 hour.
-#define NTP1 "pool.ntp.org" //The primary NTP server to check time against on startup.
-#define NTP2 "time.nist.gov" //The secondary NTP server to check time against on startup.
 #define KEYSWITCH_DEBOUNCE 150 //time in milliseconds between checks of the key switch, to help prevent rapid state changes.
-#define InternalReadDebug 1 //Set to 0 to disable debug messages from the internal read, since it ends up spamming the terminal.
+#define InternalReadDebug 0 //Set to 0 to disable debug messages from the internal read, since it ends up spamming the terminal.
 
 //Global Variables:
 bool TemperatureUpdate;                  //1 when writing new information, to indicate other devices shouldn't read temperature-related info
@@ -82,9 +78,9 @@ bool StartStatus;                        //Set to 1 to indicate to send a report
 bool EndStatus;                          //Set to 1 to indicate to send a report that a session has ended (card removed).
 bool ChangeStatus;                       //Set to 1 to iindicate to send a report that the machine's state has changed, outside of a session start/end.
 String FEVer;                            //Stores the version number of the frontend.
-unsigned long LastServer;                //Tracks the last time we had a good communication from the server
+uint64_t LastServer;                     //Tracks the last time we had a good communication from the server
 bool CheckNetwork;                       //Flag to indicate repeat network communication failures. Needs investigating.
-unsigned long SessionTime;               //How long a user has been using a machine for
+uint64_t SessionTime;                    //How long a user has been using a machine for
 bool LogoffSent;                         //Flag to indicate that the system has sent the message to end a session, so data can be cleared.
 String State = "Lockout";                //Plaintext indication of the state of the system for status reports. Idle, Unlocked, AlwayOn, or Lockout.
 bool CardVerified;                       //Flag set to 1 once the results of the ID check are complete and CardStatus is valid.
@@ -120,10 +116,10 @@ bool ReadError;                          //Flag, set 1 when we fail to read a ca
 #include <esp_wifi.h>             //Version 3.1.1 | Inherent to ESP32 Arduino
 #include <FS.h>                   //Version 3.1.1 | Inherent to ESP32 Arduino
 #include <SPIFFS.h>               //Version 3.1.1 | Inherent to ESP32 Arduino
-#include <time.h>                 //Version 3.1.1 | Inherent to ESP32 Arduino
-#include <HTTPClient.h>           //Version 3.1.1 | Inherent to ESP32 Arduino
 #include <Update.h>               //Version 3.1.1 | Inherent to ESP32 Arduino
 #include <WiFi.h>                 //Version 3.1.1 | Inherent to ESP32 Arduino
+#include "esp_timer.h"            //Version 3.1.1 | Inherent to ESP32 Arduino
+#include "esp32s2/rom/rtc.h"      //Version 3.1.1 | Inherent to ESP32 Arduino
 
 //Pin Definitions:
 const int ETHINT = 13;
@@ -152,9 +148,9 @@ Adafruit_PN532 nfc(SCKPin, MISOPin, MOSIPin, NFCCS);
 Preferences settings;
 WiFiClientSecure client;
 HardwareSerial Internal(1);
-HardwareSerial Debug(0);
 JsonDocument usbjson;
 HTTPClient http;
+ESP32OTAPull ota;
 
 //Mutexes:
 SemaphoreHandle_t DebugMutex; //Reserves the USB serial output, priamrily for debugging purposes.
@@ -178,15 +174,15 @@ void setup(){
   //Set the LEDs blue for startup.
   Internal.println("L 0,0,255");
 
-	Debug.begin(115200);
-  Debug.println(F("STARTUP"));
+	Serial.begin(115200);
+  Serial.println(F("STARTUP"));
 
   //First, load all settings from memory
   settings.begin("settings", false);
   SecurityCode = settings.getString("SecurityCode");
   if(SecurityCode == NULL){
-    Debug.println(F("CAN'T FIND SETTINGS - FRESH INSTALL?"));
-    Debug.println(F("HOLDING FOR UPDATE FOREVER..."));
+    Serial.println(F("CAN'T FIND SETTINGS - FRESH INSTALL?"));
+    Serial.println(F("HOLDING FOR UPDATE FOREVER..."));
     xTaskCreate(USBConfig, "USBConfig", 4096, NULL, 2, NULL);
     //Nuke the rest of this process - we can't do anything without our config.
     vTaskSuspend(NULL);
@@ -207,8 +203,8 @@ void setup(){
 
   if(NetworkMode != 2){
     if (DebugMode) {
-      Debug.print("Attempting to connect to SSID: ");
-      Debug.println(SSID);
+      Serial.print("Attempting to connect to SSID: ");
+      Serial.println(SSID);
     }
     //Wireless Initialization:
     if (Password != "null") {
@@ -216,7 +212,7 @@ void setup(){
       WiFi.begin(SSID, Password);
     } else {
       if (DebugMode) {
-        Debug.println(F("Using no password."));
+        Serial.println(F("Using no password."));
       }
       WiFi.begin(SSID);
     }
@@ -226,47 +222,45 @@ void setup(){
     WiFi.setAutoReconnect(true);
 
     if(DebugMode){
-      Debug.print(F("Wireless MAC: ")); Debug.println(WiFi.macAddress());
-      Debug.print(F("Ethernet MAC: ")); Debug.println(F("No ethernet on this board."));
+      Serial.print(F("Wireless MAC: ")); Serial.println(WiFi.macAddress());
+      Serial.print(F("Ethernet MAC: ")); Serial.println(F("No ethernet on this board."));
     }
 
 
     //Attempt to connect to Wifi network:
     while (WiFi.status() != WL_CONNECTED) {
-      Debug.print(".");
+      Serial.print(".");
       //Add another dot every second...
       delay(1000);
     }
     if (DebugMode) {
-      Debug.println("");
-      Debug.print("Connected to ");
-      Debug.println(SSID);
-      Debug.print(F("Local IP: "));
-      Debug.println(WiFi.localIP());
+      Serial.println("");
+      Serial.print("Connected to ");
+      Serial.println(SSID);
+      Serial.print(F("Local IP: "));
+      Serial.println(WiFi.localIP());
     }
   }
 
   client.setInsecure();
-
+  http.setReuse(true);
 
   //Then, check for an OTA update.
   if(DebugMode){
-    Debug.println(F("Checking for OTA Updates..."));
-    Debug.println(F("If any are found, will install immediately."));
+    Serial.println(F("Checking for OTA Updates..."));
+    Serial.println(F("If any are found, will install immediately."));
   }
-  ESP32OTAPull ota;
   ota.SetCallback(callback_percent);
   ota.SetConfig(Hardware);
+  if(DebugMode){
+    ota.EnableSerialDebug();
+  }
   int otaresp = ota.CheckForOTAUpdate(OTA_URL, Version);
   if(DebugMode){
-    Debug.print(F("OTA Response Code: ")); Debug.println(otaresp);
-    Debug.println(errtext(otaresp));
-    Debug.println(F("We're still here, so there must not have been an update."));
+    Serial.print(F("OTA Response Code: ")); Serial.println(otaresp);
+    Serial.println(errtext(otaresp));
+    Serial.println(F("We're still here, so there must not have been an update."));
   }
-
-  //Sync the time against an NTP Server
-  //configTime(GMTOffset, DSTOffset, NTP1, NTP2);
-
   //Check to make sure we can connect to the NFC reader and it isn't damaged.
   pinMode(NFCPWR, OUTPUT);
   pinMode(NFCRST, OUTPUT);
@@ -278,7 +272,7 @@ void setup(){
   nfc.begin();
   uint32_t versiondata = nfc.getFirmwareVersion();
   if (!versiondata) {
-    Debug.println("Didn't find PN532 board. Trying again...");
+    Serial.println("Didn't find PN532 board. Trying again...");
     delay(250);
     if(StartupFault){
       Internal.println(F("L 255,0,0"));
@@ -291,34 +285,37 @@ void setup(){
   }
   digitalWrite(NFCRST, LOW);
   digitalWrite(NFCPWR, LOW);
-  Debug.println(F("NFC Setup"));
-
+  if(DebugMode){
+    Serial.println(F("NFC Setup")); 
+  }
   //Load up the SPIFFS file of verified IDs, format/create if it is not there.
   if(!SPIFFS.begin(1)){ //Format SPIFFS if fails
     Serial.println("SPIFFS Mount Failed");
     while(1);
   }
   if(SPIFFS.exists("/validids.txt")){
-    Debug.println(F("Valid ID List already exists."));
+    Serial.println(F("Valid ID List already exists."));
   } else{
-    Debug.println(F("No Valid ID List file found. Creating..."));
+    Serial.println(F("No Valid ID List file found. Creating..."));
     File file = SPIFFS.open("/validids.txt", "w");
     if(!file){
-      Debug.println(F("ERROR: Unable to make file."));
+      Serial.println(F("ERROR: Unable to make file."));
     }
     file.print(F("Valid IDs:"));
     file.println();
     file.close();
   }
 
-  /*
-  TODO:
-  There is a problem with the tasks below. Enabling too many of them causes WiFi to not work, and not all tasks are started properly.
-  For example, when turning on down to LEDControl it works fine, but turning on BuzzerControl and MachineState doesn't create the MachineState task
-  I do not know what is causing this and I'm not getting any error messages I can see. 
-  Printing task usage shows 97% idle and most of the tasks, but not all of them.
-  Stupid simple next step is to just start combining tasks and see what happens. No need to split into this many really.
-  */
+  //Set the inital state
+  //If the ESP32 performed a controlled restart, such as to install an OTA update or try to fix a wireless issue, 
+  if(DebugMode){
+    Serial.print(F("Reset Reason: "));
+    print_reset_reason(rtc_get_reset_reason(0));
+  }
+  if(rtc_get_reset_reason(0) != POWERON_RESET){
+    //Reset for a reason other than power on reset.
+    State = settings.getString("LastState");
+  }
 
   //Lastly, create all tasks and begin operating normally.
   vTaskSuspendAll();
@@ -334,23 +331,25 @@ void setup(){
   xTaskCreate(BuzzerControl, "BuzzerControl", 1024, NULL, 5, NULL);
   xTaskCreate(MachineState, "MachineState", 2048, NULL, 5, NULL);
   xTaskCreate(NetworkCheck, "NetworkCheck", 4096, NULL, 3, NULL);
-  xTaskCreate(TimeManager, "TimeManager", 4096, NULL, 4, NULL);
   xTaskResumeAll();
 
   StartupStatus = 1;
-  Debug.println(F("Setup done."));
+  Serial.println(F("Setup done."));
 }
 
 void loop(){
-  delay(50000);
+  //No longer need the Arduino code, get rid of it.
+  vTaskDelete(NULL);
 }
+
+
 
 void callback_percent(int offset, int totallength) {
   //Used to display percentage of OTA installation
   static int prev_percent = -1;
   int percent = 100 * offset / totallength;
   if (percent != prev_percent && DebugMode) {
-    Debug.printf("Updating %d of %d (%02d%%)...\n", offset, totallength, 100 * offset / totallength);
+    Serial.printf("Updating %d of %d (%02d%%)...\n", offset, totallength, 100 * offset / totallength);
     prev_percent = percent;
   }
 }
@@ -380,4 +379,31 @@ const char *errtext(int code) {
       break;
   }
   return "Unknown error";
+}
+
+void print_reset_reason(int reason) {
+  switch (reason) {
+    case 1:  Serial.println("POWERON_RESET"); break;          /**<1,  Vbat power on reset*/
+    case 3:  Serial.println("SW_RESET"); break;               /**<3,  Software reset digital core*/
+    case 4:  Serial.println("OWDT_RESET"); break;             /**<4,  Legacy watch dog reset digital core*/
+    case 5:  Serial.println("DEEPSLEEP_RESET"); break;        /**<5,  Deep Sleep reset digital core*/
+    case 6:  Serial.println("SDIO_RESET"); break;             /**<6,  Reset by SLC module, reset digital core*/
+    case 7:  Serial.println("TG0WDT_SYS_RESET"); break;       /**<7,  Timer Group0 Watch dog reset digital core*/
+    case 8:  Serial.println("TG1WDT_SYS_RESET"); break;       /**<8,  Timer Group1 Watch dog reset digital core*/
+    case 9:  Serial.println("RTCWDT_SYS_RESET"); break;       /**<9,  RTC Watch dog Reset digital core*/
+    case 10: Serial.println("INTRUSION_RESET"); break;        /**<10, Instrusion tested to reset CPU*/
+    case 11: Serial.println("TGWDT_CPU_RESET"); break;        /**<11, Time Group reset CPU*/
+    case 12: Serial.println("SW_CPU_RESET"); break;           /**<12, Software reset CPU*/
+    case 13: Serial.println("RTCWDT_CPU_RESET"); break;       /**<13, RTC Watch dog Reset CPU*/
+    case 14: Serial.println("EXT_CPU_RESET"); break;          /**<14, for APP CPU, reset by PRO CPU*/
+    case 15: Serial.println("RTCWDT_BROWN_OUT_RESET"); break; /**<15, Reset when the vdd voltage is not stable*/
+    case 16: Serial.println("RTCWDT_RTC_RESET"); break;       /**<16, RTC Watch dog reset digital core and rtc module*/
+    default: Serial.println("NO_MEAN");
+  }
+}
+
+uint64_t millis64(){
+  //This simple function replaces the 32 bit default millis. Means that overflow now occurs in 290,000 years instead of 50 days
+  //Timer runs in microseocnds, so divide by 1000 to get millis.
+  return esp_timer_get_time() / 1000;
 }

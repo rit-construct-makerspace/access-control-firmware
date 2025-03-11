@@ -42,8 +42,8 @@ void InternalRead(void *pvParameters){
         }
         if(DebugMode && InternalReadDebug){
           if(xSemaphoreTake(DebugMutex,portMAX_DELAY) == pdTRUE){
-            Debug.print(F("Button state changed to "));
-            Debug.println(Button);
+            Serial.print(F("Button state changed to "));
+            Serial.println(Button);
             xSemaphoreGive(DebugMutex);
           }
         }
@@ -54,7 +54,7 @@ void InternalRead(void *pvParameters){
         FEVer = incoming.substring(2);
         if(DebugMode && InternalReadDebug){
           if(xSemaphoreTake(DebugMutex,portMAX_DELAY) == pdTRUE){
-            Debug.print(F("Front Version Reported: ")); Debug.println(FEVer);
+            Serial.print(F("Front Version Reported: ")); Serial.println(FEVer);
             xSemaphoreGive(DebugMutex);
           }
         }
@@ -71,36 +71,36 @@ void InternalRead(void *pvParameters){
       if(DebugMode && InternalReadDebug){
         if(xSemaphoreTake(DebugMutex,portMAX_DELAY) == pdTRUE){
           internalreserved = 1;
-          Debug.print("Setting state ");
-          Debug.print(state);
-          Debug.print(" on ");
+          Serial.print("Setting state ");
+          Serial.print(state);
+          Serial.print(" on ");
         }
       }
       if(incoming.substring(0, 2).equals("S1")){
         Switch1 = state;
         if (internalreserved) {
-          Debug.println(F("Switch1"));
+          Serial.println(F("Switch1"));
           xSemaphoreGive(DebugMutex);
         }
       }
       if (incoming.substring(0, 2).equals("S2")) {
         Switch2 = state;
         if (internalreserved) {
-          Debug.println(F("Switch2"));
+          Serial.println(F("Switch2"));
           xSemaphoreGive(DebugMutex);
         }
       }
       if (incoming.substring(0, 2).equals("K1")) {
         Key1 = state;
         if (internalreserved) {
-          Debug.println(F("Key1"));
+          Serial.println(F("Key1"));
           xSemaphoreGive(DebugMutex);
         }
       }
       if (incoming.substring(0, 2).equals("K2")) {
         Key2 = state;
         if (internalreserved) {
-          Debug.println(F("Key2"));
+          Serial.println(F("Key2"));
           xSemaphoreGive(DebugMutex);
         }
       }

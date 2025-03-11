@@ -47,7 +47,7 @@ void ReadCard(void *pvParameters) {
         } else{
           if(DebugMode){
             if(xSemaphoreTake(DebugMutex,(5/portTICK_PERIOD_MS)) == pdTRUE){
-              Debug.println(F("Failed to read an NFC card."));
+              Serial.println(F("Failed to read an NFC card."));
               xSemaphoreGive(DebugMutex);
             }
           }
@@ -63,7 +63,7 @@ void ReadCard(void *pvParameters) {
         ReadFailed = 1;
         if(DebugMode){
           if(xSemaphoreTake(DebugMutex,(50/portTICK_PERIOD_MS)) == pdTRUE){
-            Debug.println(F("Failed to read card too many times. Maybe not an NFC card?"));
+            Serial.println(F("Failed to read card too many times. Maybe not an NFC card?"));
             xSemaphoreGive(DebugMutex);
           }
         }
@@ -79,7 +79,7 @@ void ReadCard(void *pvParameters) {
         if(!versiondata){
           //Wait until we can take the debug port no matter how long it takes...
           xSemaphoreTake(StateMutex, portMAX_DELAY); 
-          Debug.println(F("CRITICAL ERROR: NFC READER MALFUNCTION."));
+          Serial.println(F("CRITICAL ERROR: NFC READER MALFUNCTION."));
           xSemaphoreGive(DebugMutex);
           NFCFault = 1;
           while(SendMessage){
@@ -101,13 +101,13 @@ void ReadCard(void *pvParameters) {
         if(DebugMode){
           if(xSemaphoreTake(DebugMutex,(50/portTICK_PERIOD_MS)) == pdTRUE){
             readreserved = 1;
-            Debug.print(F("Detected Card: "));
+            Serial.print(F("Detected Card: "));
           }
         }
         for (uint8_t i = 0; i < uidLength; i++) {
           if(readreserved){
-            Debug.print(uid[i], HEX);
-            Debug.print(" ");
+            Serial.print(uid[i], HEX);
+            Serial.print(" ");
           }
           UID += String(uid[i], HEX);
         }

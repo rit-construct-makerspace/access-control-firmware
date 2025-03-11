@@ -14,36 +14,49 @@ void NetworkCheck(void *pvParameters) {
     vTaskDelay(200 / portTICK_PERIOD_MS);
     if(CheckNetwork){
       //Network issue reported
-      Debug.println(F("Checking network."));
+      Serial.println(F("Checking network."));
       xSemaphoreTake(NetworkMutex, portMAX_DELAY);
       String ServerPath = "https://example.com";
       http.begin(client, ServerPath);
       int httpResponseCode = http.GET();
       http.end();
+      xSemaphoreGive(NetworkMutex);
       if (httpResponseCode>0) {
-        Debug.print("HTTP Response code: ");
-        Debug.println(httpResponseCode);
+        Serial.print("HTTP Response code: ");
+        Serial.println(httpResponseCode);
         String payload = http.getString();
-        Debug.println(payload);
+        Serial.println(payload);
         CheckNetwork = 0;
+        //So the network works, but not the website maybe? 
+        ServerPath = Server + "/api/check/" + MachineID;
+        xSemaphoreTake(NetworkMutex, portMAX_DELAY);
+        http.begin(client, ServerPath);
+        httpResponseCode = http.GET();
+        http.end();
+        xSemaphoreGive(NetworkMutex);
+        if(httpResponseCode != 200){
+          //Unable to reach server. Not a network or hardware issue though.
+          NoNetwork = 1;
+        }
       }
       else {
-        Debug.print("Error code: ");
-        Debug.println(http.errorToString(httpResponseCode));
+        Serial.print("Error code: ");
+        Serial.println(http.errorToString(httpResponseCode));
         //We keep getting a -1 refuse to connect here. What's the deal?
-        Debug.println(F("Failed repeatedly to connect to network with an invalid response"));
+        Serial.println(F("Failed repeatedly to connect to network with an invalid response"));
+        NoNetwork = 1;
         if(State != "Unlocked" && State != "AlwaysOn"){
           //We are not in a running state
-          Debug.println(F("Since we are not doing anything right now, going to restart the machine."));
+          Serial.println(F("Since we are not doing anything right now, going to restart the machine."));
+          settings.putString("LastState", State);
           State = "Lockout";
           delay(5000);
           ESP.restart();
         } else{
-          Debug.println(F("Deferring restart since the machine is in use."));
+          Serial.println(F("Deferring restart since the machine is in use."));
           delay(20000);
         }
       }
-    xSemaphoreGive(NetworkMutex);
     vTaskDelay(10000 / portTICK_PERIOD_MS);
     }
   }

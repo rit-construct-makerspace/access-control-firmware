@@ -32,7 +32,7 @@ void BuzzerControl(void *pvParameters) {
   byte OldMelody;
   byte DonePlaying;
   byte MelodyStep;
-  unsigned long MelodyTime = 0;
+  uint64_t MelodyTime = 0;
   while (1) {
     vTaskDelay(3 / portTICK_PERIOD_MS);
     //First, check the situations to see if we should be playing any tones right now:
@@ -68,12 +68,12 @@ void BuzzerControl(void *pvParameters) {
       NewBuzzer = 0;
       MelodyTime = 0;
       MelodyStep = 0;
-    } else if((MelodyTime >= millis()) || DonePlaying){
+    } else if((MelodyTime >= millis64()) || DonePlaying){
       //Melody didn't change and it's not time to advance to the next tone or the system is done playing a tone
       continue;
     }
     //If we make it here, there is a tone to be changed.
-    MelodyTime = millis() + BuzzerNoteTime; //Set the time to change the note again.
+    MelodyTime = millis64() + BuzzerNoteTime; //Set the time to change the note again.
     switch (Melody){
       case 1:
         switch (MelodyStep){

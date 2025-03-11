@@ -42,7 +42,7 @@ NewLED: Indicates a new set of LED colors is ready to send
 void LEDControl(void *pvParameters) {
   byte LEDAnimation;
   byte OldLEDAnimation;
-  unsigned long AnimationTime;
+  uint64_t AnimationTime;
   bool AnimationBlock;
   while(1){
     vTaskDelay(3 / portTICK_PERIOD_MS);
@@ -86,14 +86,14 @@ void LEDControl(void *pvParameters) {
       OldLEDAnimation = LEDAnimation;
       AnimationTime = 0; //Force an update of the animation block
     }
-    if(AnimationTime <= millis()){
+    if(AnimationTime <= millis64()){
       //It is time to advance to the next animation block
       AnimationBlock = !AnimationBlock;
       if(LEDAnimation == 5){
         //Animation 5 runs at a slower speed
-        AnimationTime = millis() + LEDBlinkTime;
+        AnimationTime = millis64() + LEDBlinkTime;
       } else{
-        AnimationTime = millis() + LEDFlashTime;
+        AnimationTime = millis64() + LEDFlashTime;
       }
       //Set the animation block here;
       switch(LEDAnimation){

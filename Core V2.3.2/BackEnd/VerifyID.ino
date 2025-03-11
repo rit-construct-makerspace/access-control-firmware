@@ -31,7 +31,7 @@ void VerifyID(void *pvParameters){
           //ID was found in list.
           if(DebugMode){
             if(xSemaphoreTake(DebugMutex,(portMAX_DELAY)) == pdTRUE){
-              Debug.println(F("ID Found on internal list."));
+              Serial.println(F("ID Found on internal list."));
               xSemaphoreGive(DebugMutex);
             }
           }
@@ -49,7 +49,7 @@ void VerifyID(void *pvParameters){
         //No need to verify, exit out.
         if(DebugMode){
           if(xSemaphoreTake(DebugMutex,(portMAX_DELAY)) == pdTRUE){
-            Debug.println(F("No need to check against server."));
+            Serial.println(F("No need to check against server."));
             xSemaphoreGive(DebugMutex);
           }
         }
@@ -72,17 +72,16 @@ void VerifyID(void *pvParameters){
         }
         //Reserve the network;
         xSemaphoreTake(NetworkMutex, portMAX_DELAY); 
-        HTTPClient http;
         String ServerPath = Server + "/api/auth?type=" + MachineType + "&machine=" + MachineID + "&zone=" + Zone + "&needswelcome=" + NeedsWelcomeTemp + "&id=" + UID;
         if(DebugMode && xSemaphoreTake(DebugMutex,(5/portTICK_PERIOD_MS)) == pdTRUE){
-          Debug.print(F("Sending Auth Request: ")); Debug.println(ServerPath);
+          Serial.print(F("Sending Auth Request: ")); Serial.println(ServerPath);
           xSemaphoreGive(DebugMutex);
         } 
         http.begin(client, ServerPath);
         int httpCode = http.GET();
         if(DebugMode){
           if(xSemaphoreTake(DebugMutex,(portMAX_DELAY)) == pdTRUE){
-            Debug.print(F("Got HTTP: ")); Debug.println(httpCode);
+            Serial.print(F("Got HTTP: ")); Serial.println(httpCode);
             xSemaphoreGive(DebugMutex);
           }
         }
@@ -94,7 +93,7 @@ void VerifyID(void *pvParameters){
           //Invalid HTTP code
           if(DebugMode){
             if(xSemaphoreTake(DebugMutex,(5/portTICK_PERIOD_MS)) == pdTRUE){
-              Debug.print(F("Got invalid HTTP code ")); Debug.println(httpCode);
+              Serial.print(F("Got invalid HTTP code ")); Serial.println(httpCode);
               xSemaphoreGive(DebugMutex);
             }
           }
@@ -110,11 +109,11 @@ void VerifyID(void *pvParameters){
         } else{
           //Correct HTTP code
           AuthRetry = 0;
-          LastServer = millis();
+          LastServer = millis64();
           String payload = http.getString();
           if(DebugMode){
             if(xSemaphoreTake(DebugMutex,(portMAX_DELAY)) == pdTRUE){
-              Debug.print(F("Got response ")); Debug.println(payload);
+              Serial.print(F("Got response ")); Serial.println(payload);
               xSemaphoreGive(DebugMutex);
             }
           }
@@ -125,7 +124,7 @@ void VerifyID(void *pvParameters){
             //The card was removed while we were waiting for the network :(
             if(DebugMode){
               if(xSemaphoreTake(DebugMutex,(portMAX_DELAY)) == pdTRUE){
-                Debug.println(F("Card removed during auth request. Aborting."));
+                Serial.println(F("Card removed during auth request. Aborting."));
                 xSemaphoreGive(DebugMutex);
               }
             }
@@ -137,7 +136,7 @@ void VerifyID(void *pvParameters){
             //Authorization granted!
             if(DebugMode){
               if(xSemaphoreTake(DebugMutex,(portMAX_DELAY)) == pdTRUE){
-                Debug.println(F("Authorization Granted."));
+                Serial.println(F("Authorization Granted."));
                 xSemaphoreGive(DebugMutex);
               }
             }
@@ -157,7 +156,7 @@ void VerifyID(void *pvParameters){
             //Authorization Denied!
             if(DebugMode){
               if(xSemaphoreTake(DebugMutex,(5/portTICK_PERIOD_MS)) == pdTRUE){
-                Debug.println(F("Authorization Denied!"));
+                Serial.println(F("Authorization Denied!"));
                 xSemaphoreGive(DebugMutex);
               }
             }

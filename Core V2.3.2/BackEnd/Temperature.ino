@@ -18,7 +18,7 @@ void Temperature(void *pvParameters){
 	//First time running, find the addresses
   if(DebugMode){
     xSemaphoreTake(DebugMutex, portMAX_DELAY);
-    Debug.println(F("First time running temperature..."));
+    Serial.println(F("First time running temperature..."));
     xSemaphoreGive(DebugMutex);
   }
   xSemaphoreTake(OneWireMutex, portMAX_DELAY); 
@@ -26,7 +26,7 @@ void Temperature(void *pvParameters){
 	for (uint8_t i = 0; i < devices; i += 1) {
     if(DebugMode){
       if(xSemaphoreTake(DebugMutex,(5/portTICK_PERIOD_MS)) == pdTRUE){
-        Debug.printf("%d: 0x%llx,\n", i, SerialNumbers[i]);
+        Serial.printf("%d: 0x%llx,\n", i, SerialNumbers[i]);
         xSemaphoreGive(DebugMutex);
       }
     }
@@ -54,7 +54,7 @@ void Temperature(void *pvParameters){
     TemperatureUpdate = 0;
     if(DebugMode){
       if(xSemaphoreTake(DebugMutex,(50/portTICK_PERIOD_MS)) == pdTRUE){
-        Debug.print(F("Maximum Temp: ")); Debug.println(SysMaxTemp);
+        Serial.print(F("Maximum Temp: ")); Serial.println(SysMaxTemp);
         xSemaphoreGive(DebugMutex);
       }
     }
@@ -62,14 +62,14 @@ void Temperature(void *pvParameters){
       TemperatureFault = 1;
       TemperatureStatus = 1;
       xSemaphoreTake(DebugMutex, portMAX_DELAY); 
-      Debug.println(F("CRITICAL ERROR: OVERTEMPERATURE FAULT"));
+      Serial.println(F("CRITICAL ERROR: OVERTEMPERATURE FAULT"));
       xSemaphoreGive(DebugMutex);
     }
     if(((SysMaxTemp + 5.0) <= TempLimit) && TemperatureFault == 1){
       TemperatureFault = 0;
       if(DebugMode){
         if(xSemaphoreTake(DebugMutex,(5/portTICK_PERIOD_MS)) == pdTRUE){
-          Debug.println(F("Overtemperature Error Cleared"));
+          Serial.println(F("Overtemperature Error Cleared"));
           xSemaphoreGive(DebugMutex);
         }
       }

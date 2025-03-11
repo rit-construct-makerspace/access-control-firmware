@@ -13,13 +13,14 @@ ReadFailed: set to 1 if a card was not read properly repeatedly, indicating it i
 */
 
 void MachineState(void *pvParameters) {
-  unsigned long LastKeyState = 0;
+  uint64_t LastKeyState = 0;
+  uint64_t ButtonTime = millis64() + 5000;
   bool OldKey1 = 0;
   bool OldKey2 = 0;
   String OldState; //Stores the last state of the system.
   while(1){
-    //Only needs to run every 10 milliseconds
-    vTaskDelay(10 / portTICK_PERIOD_MS);
+    //Only needs to run every 2 milliseconds
+    vTaskDelay(2 / portTICK_PERIOD_MS);
     //Clear the data after a logoff message is sent, if it doesn't appear there is another card present.
     if(LogoffSent && !CardPresent && !CardUnread){
       UID = "";
@@ -29,9 +30,9 @@ void MachineState(void *pvParameters) {
     //The rest of this loop requires the State string, so let's reserve it;
     xSemaphoreTake(StateMutex, portMAX_DELAY);
     //Read the key switches and set the state, with a debounce time
-    if(millis() >= LastKeyState){
+    if(millis64() >= LastKeyState){
       //it has been more than the debounce time
-      LastKeyState = millis() + KEYSWITCH_DEBOUNCE;
+      LastKeyState = millis64() + KEYSWITCH_DEBOUNCE;
       if((OldKey1 != Key1) || (OldKey2 != Key2)){
         //A key switch has changed
         OldKey1 = Key1;
@@ -133,5 +134,21 @@ void MachineState(void *pvParameters) {
     }
     //Release the semaphore;
     xSemaphoreGive(StateMutex);
+
+    //Check the button on the front panel. If it has been held down for more than 5 seconds, restart. 
+    //Constantly set the reset time 5 seconds in the future when the button isn't pressed.
+    if(Button){
+      ButtonTime = millis64() + 5000;
+    }
+    if(millis64() >= ButtonTime){
+      //It has been 5 seconds, restart.
+      settings.putString("LastState", State);
+      Serial.println(F("RESTARTING. Source: Button."));
+      Internal.println("L 0,0,255");
+      Internal.println("S 0");
+      Internal.flush();
+      delay(100);
+      ESP.restart();
+    }
   }
 }

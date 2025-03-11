@@ -32,15 +32,15 @@ DebugMode used to turn on verbose outputs
 
 void USBConfig(void *pvParameters){
     if(SecurityCode == NULL){
-      Debug.println(F("ERROR: NO CONFIG?"));
+      Serial.println(F("ERROR: NO CONFIG?"));
     }
   while(1){
     //Check once a second;
     vTaskDelay(1000 / portTICK_PERIOD_MS);
-    if(Debug.available() > 10){
+    if(Serial.available() > 10){
       //There is a message of substance in the serial buffer
-      Debug.setTimeout(3);
-      String USBInput = Debug.readString();
+      Serial.setTimeout(3);
+      String USBInput = Serial.readString();
       USBInput.trim();
       deserializeJson(usbjson, USBInput);
       //Check if the passwords match
@@ -53,8 +53,8 @@ void USBConfig(void *pvParameters){
           const char* Temp = usbjson["NewPassword"];
           settings.putString("SecurityCode", Temp);
           xSemaphoreTake(DebugMutex, portMAX_DELAY);
-          Debug.print(F("Updated Password to:"));
-          Debug.println(Temp);
+          Serial.print(F("Updated Password to:"));
+          Serial.println(Temp);
           xSemaphoreGive(DebugMutex);
         }
         UpdateSetting("SSID");
@@ -73,17 +73,17 @@ void USBConfig(void *pvParameters){
 
         //Restart to apply settings.
         xSemaphoreTake(DebugMutex, portMAX_DELAY);
-        Debug.println(F("Settings Applied."));   
-        Debug.println(F("Rebooting in 5 seconds..."));
-        Debug.flush();
+        Serial.println(F("Settings Applied."));   
+        Serial.println(F("Rebooting in 5 seconds..."));
+        Serial.flush();
         xSemaphoreGive(DebugMutex);
         vTaskDelay(5000 / portTICK_PERIOD_MS);
         ESP.restart();
       } else{
         //Bad input, disregard.
         xSemaphoreTake(DebugMutex, portMAX_DELAY);
-        Debug.println(F("Bad Input"));
-        Debug.flush();
+        Serial.println(F("Bad Input"));
+        Serial.flush();
         xSemaphoreGive(DebugMutex);
       }
     }
@@ -101,10 +101,10 @@ void UpdateSetting(String Key) {
   }
   if(DebugMode){
     if(xSemaphoreTake(DebugMutex,(5/portTICK_PERIOD_MS)) == pdTRUE){
-      Debug.print(F("Updating key "));
-      Debug.print(KeyArray);
-      Debug.print(F(" with value "));
-      Debug.println(Temp);
+      Serial.print(F("Updating key "));
+      Serial.print(KeyArray);
+      Serial.print(F(" with value "));
+      Serial.println(Temp);
       xSemaphoreGive(DebugMutex);
     }
   }
