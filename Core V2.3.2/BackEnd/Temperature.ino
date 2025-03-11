@@ -15,6 +15,7 @@ TemperatureTime: how long, in milliseconds, should be between system-wide temper
 
 void Temperature(void *pvParameters){
 	OneWire32 ds(TEMP); //gpio pin
+  bool TemperatureMessage;
 	//First time running, find the addresses
   if(DebugMode){
     xSemaphoreTake(DebugMutex, portMAX_DELAY);
@@ -31,6 +32,11 @@ void Temperature(void *pvParameters){
       }
     }
 	}
+  if(devices == 0){
+    //Something has gone wrong, there should be at least 1 temperature sensor. Restart?
+    Serial.println(F("ERROR: Found no OneWire devices?"));
+    ESP.restart();
+  }
   xSemaphoreGive(OneWireMutex);
 
   //Infinite loop, measure all temperatures
@@ -64,15 +70,22 @@ void Temperature(void *pvParameters){
       xSemaphoreTake(DebugMutex, portMAX_DELAY); 
       Serial.println(F("CRITICAL ERROR: OVERTEMPERATURE FAULT"));
       xSemaphoreGive(DebugMutex);
+      if(!TemperatureMessage){
+        String TempSend = "INTERNAL_TEMPERATURE_OVERHEAT_AT_" + String(SysMaxTemp); + "C";
+        ReadyMessage(TempSend);
+        TemperatureMessage = 1;
+      }
     }
     if(((SysMaxTemp + 5.0) <= TempLimit) && TemperatureFault == 1){
       TemperatureFault = 0;
+      TemperatureMessage = 0;
       if(DebugMode){
         if(xSemaphoreTake(DebugMutex,(5/portTICK_PERIOD_MS)) == pdTRUE){
           Serial.println(F("Overtemperature Error Cleared"));
           xSemaphoreGive(DebugMutex);
         }
       }
+      ReadyMessage("INTERNAL_TEMPERATURE_CLEAR");
     }
     //Release the OneWire bus;
     xSemaphoreGive(OneWireMutex);

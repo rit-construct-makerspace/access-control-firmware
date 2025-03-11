@@ -29,8 +29,19 @@ void MachineState(void *pvParameters) {
     }
     //The rest of this loop requires the State string, so let's reserve it;
     xSemaphoreTake(StateMutex, portMAX_DELAY);
+    if(TemperatureFault && State != "Temperature"){
+      State = "Temperature";
+    }
+    if(Fault && State != "Fault"){
+      State = "Fault";
+    }
+    //Temperature faults are recoverable. If we are no longer in a temperature fault, return to lockout.
+    if(State == "Temperature" && !TemperatureFault){
+      State = "Lockout";
+    }
     //Read the key switches and set the state, with a debounce time
-    if(millis64() >= LastKeyState){
+    //Also no point in reading if we are in a fault state
+    if(millis64() >= LastKeyState && !Fault && !TemperatureFault){
       //it has been more than the debounce time
       LastKeyState = millis64() + KEYSWITCH_DEBOUNCE;
       if((OldKey1 != Key1) || (OldKey2 != Key2)){
@@ -105,10 +116,7 @@ void MachineState(void *pvParameters) {
         }
       }
     }
-    //If we are in a temperature fault, set lockout;
-    if(TemperatureFault){
-      State == "Lockout";
-    }
+
     //Check for what state we should be in based on the card, and assert that if it isn't already;
     if(State == "Idle" && CardVerified && CardStatus){
       //The keycard is present and verified, but we are in the idle state.
@@ -138,7 +146,7 @@ void MachineState(void *pvParameters) {
     //Check the button on the front panel. If it has been held down for more than 5 seconds, restart. 
     //Constantly set the reset time 5 seconds in the future when the button isn't pressed.
     if(Button){
-      ButtonTime = millis64() + 5000;
+      ButtonTime = millis64() + 3000;
     }
     if(millis64() >= ButtonTime){
       //It has been 5 seconds, restart.
@@ -146,11 +154,11 @@ void MachineState(void *pvParameters) {
       State = "Restart";
       //Turn off the internal write task so that it doesn't overwrite the restart led color.
       vTaskSuspend(xHandle);
+      delay(100);
       Serial.println(F("RESTARTING. Source: Button."));
       Internal.println("L 0,0,255");
       Internal.println("S 0");
       Internal.flush();
-      delay(100);
       ESP.restart();
     }
   }

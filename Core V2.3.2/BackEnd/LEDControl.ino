@@ -76,7 +76,7 @@ void LEDControl(void *pvParameters) {
     }
     //Done checking the State, release mutex;
     xSemaphoreGive(StateMutex);
-    if(TemperatureFault || NFCFault){
+    if(TemperatureFault || Fault){
       //Animation 0: Flashing Red
       LEDAnimation = 0;
     }

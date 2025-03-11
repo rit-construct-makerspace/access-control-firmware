@@ -34,6 +34,11 @@ void BuzzerControl(void *pvParameters) {
   byte MelodyStep;
   uint64_t MelodyTime = 0;
   while (1) {
+    if(NoBuzzer){
+      //Buzzer disabled.
+      vTaskDelay(20000 / portTICK_PERIOD_MS);
+      continue;
+    }
     vTaskDelay(3 / portTICK_PERIOD_MS);
     //First, check the situations to see if we should be playing any tones right now:
     Melody = 0; //Set to 0 so if no situations apply, we stop playing
@@ -48,7 +53,7 @@ void BuzzerControl(void *pvParameters) {
     if(CardVerified && !CardStatus && CardPresent){
       Melody = 2;
     }
-    if(TemperatureFault || NFCFault || ReadError){
+    if(TemperatureFault || Fault || ReadError){
       Melody = 3;
     }
     if(VerifiedBeep && (State != "Idle" || NoNetwork)){

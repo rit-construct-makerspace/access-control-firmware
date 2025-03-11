@@ -70,6 +70,7 @@ void USBConfig(void *pvParameters){
         UpdateSetting("NetworkMode");
         UpdateSetting("Frequency");
         UpdateSetting("DebugMode");
+        UpdateSetting("NoBuzzer");
 
         //Restart to apply settings.
         xSemaphoreTake(DebugMutex, portMAX_DELAY);

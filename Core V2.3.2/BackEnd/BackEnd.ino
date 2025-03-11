@@ -68,7 +68,7 @@ bool Key2;                               //state of keyswitch input 2
 String UID;                              //UID of the card detected in the system
 bool CardPresent;                        //1 if a card has been detected and successfuly read.
 bool ReadFailed;                         //set to 1 if a card was not read properly.
-bool SendMessage;                        //set to 1 to indicate a message needs to be sent to the server
+bool WritingMessage;                     //set to 1 to indicate a message is being written, for eventual sending to the server.
 String Message;                          //String containing error message to report via API
 bool ReadyToSend;                        //set to 1 to indicate "Message" is ready to send.
 bool RegularStatus;                      //Used to indicate it is time to send the regular status message.
@@ -98,10 +98,11 @@ bool Switch;                             //Value of the switch to sent to fronte
 bool DebugLED;                           //Turns on/off the debugLED on the frontend
 bool NoNetwork;                          //Indicates inability to connect to the server
 bool TemperatureFault;                   //1 Indicates an overtemperature condition
-bool NFCFault;                           //Flag indicates a failure to interface with the NFC reader.
+bool Fault;                              //Flag indicates a failure of some sort with the system other than temperature. 
 bool CardUnread;                         //A card is preesnt in the machine but hasn't been read yet. 
 bool VerifiedBeep;                       //Flag, set to 1 to sound a beep when a card is verified. Lets staff knw it is valid to use their key when the machine is in a non-idle state.
 bool ReadError;                          //Flag, set 1 when we fail to read a card to flash lights/buzzers.
+bool NoBuzzer;                           //Flag, set to 1 to mute the buzzer.
 
 //Libraries:
 #include <OneWireESP32.h>         //Version 2.0.2 | Source: https://github.com/junkfix/esp32-ds18b20
@@ -152,12 +153,14 @@ JsonDocument usbjson;
 HTTPClient http;
 ESP32OTAPull ota;
 TaskHandle_t xHandle;
+TaskHandle_t xHandle2;
 
 //Mutexes:
 SemaphoreHandle_t DebugMutex; //Reserves the USB serial output, priamrily for debugging purposes.
 SemaphoreHandle_t NetworkMutex; //Reserves the network connection
 SemaphoreHandle_t OneWireMutex; //Reserves the OneWire connection. Currently only used for temperature measurement, eventually will measure system integrity.
 SemaphoreHandle_t StateMutex; //Reserves the State string, since it takes a long time to change.
+SemaphoreHandle_t MessageMutex; //Reserves the ability to send a message.
 
 void setup(){
 	delay(100);
@@ -167,13 +170,13 @@ void setup(){
   NetworkMutex = xSemaphoreCreateMutex();
   OneWireMutex = xSemaphoreCreateMutex();
   StateMutex = xSemaphoreCreateMutex();
+  MessageMutex = xSemaphoreCreateMutex();
 
   Internal.begin(115200, SERIAL_8N1, TOESP, TOTINY);
 
-  delay(5000); 
+  xTaskCreate(GamerMode, "GamerMode", 2048, NULL, 5, &xHandle2);
 
-  //Set the LEDs blue for startup.
-  Internal.println("L 0,0,255");
+  delay(5000); 
 
 	Serial.begin(115200);
   Serial.println(F("STARTUP"));
@@ -201,6 +204,7 @@ void setup(){
   NetworkMode = settings.getString("NetworkMode").toInt();
   NeedsWelcome = settings.getString("NeedsWelcome").toInt();
   DebugMode = settings.getString("DebugMode").toInt();
+  NoBuzzer = settings.getString("NoBuzzer").toInt();
 
   if(NetworkMode != 2){
     if (DebugMode) {
@@ -321,6 +325,9 @@ void setup(){
     State = "Lockout";
   }
 
+  //Disable the startup lights
+  vTaskDelete(xHandle2);
+
   //Lastly, create all tasks and begin operating normally.
   vTaskSuspendAll();
   xTaskCreate(RegularReport, "RegularReport", 1024, NULL, 6, NULL);
@@ -336,6 +343,7 @@ void setup(){
   xTaskCreate(BuzzerControl, "BuzzerControl", 1024, NULL, 5, NULL);
   xTaskCreate(MachineState, "MachineState", 2048, NULL, 5, NULL);
   xTaskCreate(NetworkCheck, "NetworkCheck", 4096, NULL, 3, NULL);
+  xTaskCreate(MessageReport, "MessageReport", 4096, NULL, 3, NULL);
   xTaskResumeAll();
 
   StartupStatus = 1;
@@ -411,4 +419,29 @@ uint64_t millis64(){
   //This simple function replaces the 32 bit default millis. Means that overflow now occurs in 290,000 years instead of 50 days
   //Timer runs in microseocnds, so divide by 1000 to get millis.
   return esp_timer_get_time() / 1000;
+}
+
+void ReadyMessage(String ToSend){
+  //This function can be used to pass a message to the "MessageReport" task.
+  while(WritingMessage){
+    vTaskDelay(1 / portTICK_PERIOD_MS);
+  }
+  WritingMessage = 1;
+  xSemaphoreTake(MessageMutex, portMAX_DELAY); 
+  //If we have the mutex, and we have WritingMessage, we can write our message and set the flag.
+  Message = ToSend;
+  ReadyToSend = 1;
+  xSemaphoreGive(MessageMutex);
+}
+
+void GamerMode(void *pvParameters){
+  //This task simply blinks the front LED red-green-blue, aka gamer mode, to indicate startup in progress.
+  while(1){
+    Internal.println("L 255,0,0");
+    delay(300);
+    Internal.println("L 0,255,0");
+    delay(300);
+    Internal.println("L 0,0,255");
+    delay(300);
+  }
 }

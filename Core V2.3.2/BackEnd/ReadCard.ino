@@ -20,6 +20,7 @@ CardUnread: Flag that indicates a card is present but not yet read for animation
 
 void ReadCard(void *pvParameters) {
   bool NewCard = 1;  //Used to track if this is the first time the card has been inserted.
+  bool StuckSwitch = 0;
   while(1){
     //Check for a card every 50mS
     vTaskDelay(50 / portTICK_PERIOD_MS);
@@ -42,7 +43,7 @@ void ReadCard(void *pvParameters) {
         //Attempt to read the card via NFC:
         success = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, &uid[0], &uidLength, 500);
         if(success){
-          NFCFault = 0;
+          Fault = 0;
           break;
         } else{
           if(DebugMode){
@@ -81,13 +82,11 @@ void ReadCard(void *pvParameters) {
           xSemaphoreTake(StateMutex, portMAX_DELAY); 
           Serial.println(F("CRITICAL ERROR: NFC READER MALFUNCTION."));
           xSemaphoreGive(DebugMutex);
-          NFCFault = 1;
-          while(SendMessage){
-            //Wait for the send message task to become available
-            vTaskDelay(1 / portTICK_PERIOD_MS);
-          }
-          Message = "NFCReaderFail";
-          SendMessage = 1;
+          Fault = 1;
+          ReadyMessage(F("NFC_READER_ERROR"));
+          Fault = 1;
+          ReadyToSend = 1;
+          vTaskSuspend(NULL);
         } else{
           //NFC reader is fine but we couldn't read the card. Definitely not an NFC card.
           ReadError = 1;
@@ -119,11 +118,19 @@ void ReadCard(void *pvParameters) {
         CardUnread = 0;
       }
     }
-    if(Switch1 && Switch2 && !NewCard){
+    if(Switch1 && Switch2 && !NewCard && !CardUnread && !CardPresent){
       //This is likely an indication of an internal switch issue.
       //We've noticed on many devices they get stuck down over time.
-      //Send a message to the server.
-      //TODO
+      //Set a flag and see if the state persists next time around;
+      if(!StuckSwitch){
+        StuckSwitch = 1;
+      } else{
+        //Still stuck after another round, may be an issue.
+        //Send a message to the server.
+        ReadyMessage(F("POSSIBLE_STUCK_CARD_SWITCH"));
+        Fault = 1;
+        vTaskSuspend(NULL);
+      }
     }
     if(!Switch1 || !Switch2){
       //Card not present. Reset card-related parameters.
@@ -138,6 +145,7 @@ void ReadCard(void *pvParameters) {
     if(!Switch1 && !Switch2){
       //While only one switch needs to be released for us to assume there's no card, both need to be released before we look for a new card.
       //This does mean that a fail-closed switch state will mean you cannot ever activate the machine.
+      StuckSwitch = 0;
       NewCard = 1;
     }
   }
