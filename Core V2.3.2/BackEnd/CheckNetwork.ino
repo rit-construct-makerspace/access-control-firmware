@@ -37,7 +37,7 @@ void NetworkCheck(void *pvParameters) {
         if(httpResponseCode != 200){
           //Unable to reach server. Not a network or hardware issue though.
           NoNetwork = 1;
-        }
+        } 
       }
       else {
         Serial.print("Error code: ");
