@@ -29,14 +29,14 @@ USBConfig: Allows programatic changing of settings over USB
 
 
 //Settings
-#define Version "1.2.4" //TEMP for testing 
+#define Version "1.2.5" //TEMP for testing 
 #define Hardware "2.3.2-LE"
 #define MAX_DEVICES 10 //How many possible temperature sensors to scan for
 #define OTA_URL "https://github.com/rit-construct-makerspace/access-control-firmware/releases/latest/download/otadirectory.json"
 #define TemperatureTime 5000 //How long to delay between temperature measurements, in milliseconds
 #define FEPollRate 10000 //How long, in milliseconds, to go between an all-values poll of the frontend (in addition to event-based)
 #define LEDFlashTime 150 //Time in milliseconds between aniimation steps of the LED when flashing or similar. 
-#define LEDBlinkTime 5000 //Time in milliseconds between animation stepf of an LED when doing a slower blink indication.
+#define LEDBlinkTime 3000 //Time in milliseconds between animation stepf of an LED when doing a slower blink indication.
 #define BuzzerNoteTime 250 //Time in milliseconds between different tones
 #define KEYSWITCH_DEBOUNCE 150 //time in milliseconds between checks of the key switch, to help prevent rapid state changes.
 #define InternalReadDebug 0 //Set to 0 to disable debug messages from the internal read, since it ends up spamming the terminal.
@@ -80,6 +80,7 @@ bool ChangeStatus;                       //Set to 1 to iindicate to send a repor
 String FEVer;                            //Stores the version number of the frontend.
 uint64_t LastServer;                     //Tracks the last time we had a good communication from the server
 bool CheckNetwork;                       //Flag to indicate repeat network communication failures. Needs investigating.
+uint64_t SessionStart;                   //Time in millis when a session started.
 uint64_t SessionTime;                    //How long a user has been using a machine for
 bool LogoffSent;                         //Flag to indicate that the system has sent the message to end a session, so data can be cleared.
 String State = "Lockout";                //Plaintext indication of the state of the system for status reports. Idle, Unlocked, AlwayOn, or Lockout.
@@ -222,7 +223,6 @@ void setup(){
       WiFi.begin(SSID);
     }
 
-    //Maybe will fix refuse to connect issue?
     WiFi.setSleep(false);
     WiFi.setAutoReconnect(true);
 
@@ -333,7 +333,7 @@ void setup(){
   xTaskCreate(RegularReport, "RegularReport", 1024, NULL, 6, NULL);
   xTaskCreate(Temperature, "Temperature", 2048, NULL, 5, NULL);
   xTaskCreate(USBConfig, "USBConfig", 2048, NULL, 5, NULL);
-  xTaskCreate(InternalRead, "InternalRead", 2048, NULL, 5, NULL);
+  xTaskCreate(InternalRead, "InternalRead", 1500, NULL, 5, NULL);
   xTaskCreate(ReadCard, "ReadCard", 2048, NULL, 5, NULL);
   xTaskCreate(StatusReport, "StatusReport", 5000, NULL, 2, NULL);
   xTaskCreate(VerifyID, "VerifyID", 4096, NULL, 1, NULL);
@@ -341,9 +341,9 @@ void setup(){
   xTaskCreate(InternalWrite, "InternalWrite", 2048, NULL, 5, &xHandle);
   xTaskCreate(LEDControl, "LEDControl", 1024, NULL, 5, NULL);
   xTaskCreate(BuzzerControl, "BuzzerControl", 1024, NULL, 5, NULL);
-  xTaskCreate(MachineState, "MachineState", 2048, NULL, 5, NULL);
+  xTaskCreate(MachineState, "MachineState", 1024, NULL, 5, NULL);
   xTaskCreate(NetworkCheck, "NetworkCheck", 4096, NULL, 3, NULL);
-  xTaskCreate(MessageReport, "MessageReport", 4096, NULL, 3, NULL);
+  xTaskCreate(MessageReport, "MessageReport", 2048, NULL, 3, NULL);
   xTaskResumeAll();
 
   StartupStatus = 1;

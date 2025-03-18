@@ -68,6 +68,7 @@ void MachineState(void *pvParameters) {
           if(InternalStatus || InternalVerified){
             //Card is verified, so set the state;
             State = "AlwaysOn";
+            SessionStart = millis64();
           } else{
             //Card was not verified, throw an error
             //TODO
@@ -122,6 +123,7 @@ void MachineState(void *pvParameters) {
       //The keycard is present and verified, but we are in the idle state.
       //We should be unlocked
       State = "Unlocked";
+      SessionStart = millis64();
     }
     if(State == "Unlocked" && !CardPresent){
       //The machine is unlocked, but the keycard was removed.

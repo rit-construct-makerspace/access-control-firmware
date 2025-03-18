@@ -11,11 +11,58 @@ Global Variables Used:
 void NetworkCheck(void *pvParameters) {
   while (1) {
     //Periodically check
-    vTaskDelay(200 / portTICK_PERIOD_MS);
+    vTaskDelay(10000 / portTICK_PERIOD_MS);
     if(CheckNetwork){
       //Network issue reported
       Serial.println(F("Checking network."));
       xSemaphoreTake(NetworkMutex, portMAX_DELAY);
+      //Step 1: Are we connected to WiFi? 
+      if(WiFi.status() != WL_CONNECTED){
+        NoNetwork = 1;
+        if(DebugMode){
+          Serial.println(F("No WiFi connection!"));
+        }
+        //Check if the network is available even;
+        int count = WiFi.scanNetworks();
+        if(count == 0){
+          if(DebugMode){
+            Serial.println(F("No WiFi networks available!"));
+          }
+          NoNetwork = 1;
+        } 
+        else{
+          for (int i = 0; i < count; i++){
+            if(WiFi.SSID(i) == SSID){
+              //The network is here, but we are not connected.
+              if(DebugMode){
+                Serial.println(F("Attempting to reconnect to WiFi"));
+              }
+              //Wireless Initialization:
+              if (Password != "null") {
+                WiFi.mode(WIFI_STA);
+                WiFi.begin(SSID, Password);
+              } else {
+                if (DebugMode) {
+                  Serial.println(F("Using no password."));
+                }
+                WiFi.begin(SSID);
+              }
+              WiFi.setSleep(false);
+              WiFi.setAutoReconnect(true);
+            }
+          }
+        }
+        if(WiFi.status() != WL_CONNECTED){
+          //If we make it here, we didn't find or reconnect to the network.
+          if(DebugMode){
+            Serial.println(F("Couldn't find network."));
+            NoNetwork = 1;
+            xSemaphoreGive(NetworkMutex);
+            continue;
+          }
+        }
+      }
+      //Step 2: Are we connected to the web?
       String ServerPath = "https://example.com";
       http.begin(client, ServerPath);
       int httpResponseCode = http.GET();
@@ -24,10 +71,9 @@ void NetworkCheck(void *pvParameters) {
       if (httpResponseCode>0) {
         Serial.print("HTTP Response code: ");
         Serial.println(httpResponseCode);
-        String payload = http.getString();
-        Serial.println(payload);
         CheckNetwork = 0;
-        //So the network works, but not the website maybe? 
+        //So the network works.
+        //Step 3: Is it our specific server maybe? 
         ServerPath = Server + "/api/check/" + MachineID;
         xSemaphoreTake(NetworkMutex, portMAX_DELAY);
         http.begin(client, ServerPath);
@@ -36,8 +82,12 @@ void NetworkCheck(void *pvParameters) {
         xSemaphoreGive(NetworkMutex);
         if(httpResponseCode != 200){
           //Unable to reach server. Not a network or hardware issue though.
+          //So we still act like there's no network, but don't bother trying to reconnect or restart or anything.
           NoNetwork = 1;
-        } 
+        } else{
+          //We were able to connect fine 
+          NoNetwork = 0;
+        }
       }
       else {
         Serial.print("Error code: ");
@@ -49,6 +99,7 @@ void NetworkCheck(void *pvParameters) {
           //We are not in a running state
           Serial.println(F("Since we are not doing anything right now, going to restart the machine."));
           settings.putString("LastState", State);
+          xSemaphoreTake(NetworkMutex, portMAX_DELAY);
           State = "Lockout";
           delay(5000);
           ESP.restart();
@@ -57,7 +108,6 @@ void NetworkCheck(void *pvParameters) {
           delay(20000);
         }
       }
-    vTaskDelay(10000 / portTICK_PERIOD_MS);
     }
   }
 }

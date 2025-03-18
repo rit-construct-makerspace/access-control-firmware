@@ -58,6 +58,17 @@ void VerifyID(void *pvParameters){
       //Now verify against the server;
       bool AuthRetry = 1;
       bool AuthFailed = 0;
+      if(NoNetwork){
+        //Since we can't reach the network, we are just going to go off of what the internal list says.
+        if(DebugMode){
+          xSemaphoreTake(DebugMutex, portMAX_DELAY);
+          Serial.println(F("No network, so verifying card against internal list."));
+          xSemaphoreGive(DebugMutex);
+        }
+        CardStatus = InternalStatus;
+        CardVerified = 1;
+        continue;
+      }
       while(AuthRetry){
         if(AuthFailed){
           //This is the second attempt

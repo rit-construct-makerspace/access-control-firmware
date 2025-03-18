@@ -39,9 +39,10 @@ void StatusReport(void *pvParameters){
       StartStatus = 0;
     }
     if(EndStatus){
-      SendReport("Session End");
+      SendReport("Card Removed");
       EndStatus = 0;
       LogoffSent = 1;
+      SessionStart = 0;
     }
     if(ChangeStatus){
       SendReport("State Change");
@@ -89,6 +90,12 @@ void SendReport(String Reason){
     } else {
       status["UID"] = "";
     }
+    if((Reason == "Card Removed") || (State == "Idle")){
+      //A session is in progress or just ended, so report session time
+      SessionTime = millis64() - SessionStart;
+    } else{
+      SessionTime = 0;
+    }
     status["Time"] = SessionTime / 1000;
     status["Source"] = Reason;
     status["Frequency"] = Frequency;
@@ -125,7 +132,9 @@ void SendReport(String Reason){
     http.end();
     xSemaphoreGive(NetworkMutex);
     if (httpCode == 200) {
+      //We got a good connection to the network.
       LastServer = millis64();
+      NoNetwork = 0;
       StatusSuccess = 1;
     } else {
       //Bad HTTP response? Try only once more.
