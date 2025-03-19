@@ -9,10 +9,12 @@ Global Variables Used:
 */
 
 void NetworkCheck(void *pvParameters) {
+  bool NetworkRetry = 1;
   while (1) {
     //Periodically check
     vTaskDelay(10000 / portTICK_PERIOD_MS);
     if(CheckNetwork){
+      CheckNetwork = 0;
       //Network issue reported
       Serial.println(F("Checking network."));
       xSemaphoreTake(NetworkMutex, portMAX_DELAY);
@@ -58,6 +60,7 @@ void NetworkCheck(void *pvParameters) {
             Serial.println(F("Couldn't find network."));
             NoNetwork = 1;
             xSemaphoreGive(NetworkMutex);
+            //No need to check the rest.
             continue;
           }
         }
@@ -71,7 +74,7 @@ void NetworkCheck(void *pvParameters) {
       if (httpResponseCode>0) {
         Serial.print("HTTP Response code: ");
         Serial.println(httpResponseCode);
-        CheckNetwork = 0;
+        NoNetwork = 0;
         //So the network works.
         //Step 3: Is it our specific server maybe? 
         ServerPath = Server + "/api/check/" + MachineID;
@@ -92,9 +95,13 @@ void NetworkCheck(void *pvParameters) {
       else {
         Serial.print("Error code: ");
         Serial.println(http.errorToString(httpResponseCode));
-        //We keep getting a -1 refuse to connect here. What's the deal?
-        Serial.println(F("Failed repeatedly to connect to network with an invalid response"));
+        //We'll run through everything else again just to be sure;
         NoNetwork = 1;
+        if(NetworkRetry = 1){
+          NetworkRetry = 0;
+          continue;
+        }
+        Serial.println(F("Failed repeatedly to connect to network with an invalid response"));
         if(State != "Unlocked" && State != "AlwaysOn"){
           //We are not in a running state
           Serial.println(F("Since we are not doing anything right now, going to restart the machine."));
@@ -105,7 +112,7 @@ void NetworkCheck(void *pvParameters) {
           ESP.restart();
         } else{
           Serial.println(F("Deferring restart since the machine is in use."));
-          delay(20000);
+          delay(10000);
         }
       }
     }

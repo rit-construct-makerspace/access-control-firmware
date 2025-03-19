@@ -210,7 +210,7 @@ void setup(){
   if(NetworkMode != 2){
     if (DebugMode) {
       Serial.print("Attempting to connect to SSID: ");
-      Serial.println(SSID);
+        Serial.println(SSID);
     }
     //Wireless Initialization:
     if (Password != "null") {
@@ -257,6 +257,7 @@ void setup(){
   }
   ota.SetCallback(callback_percent);
   ota.SetConfig(Hardware);
+  ota.OverrideDevice("ACS Core");
   if(DebugMode){
     ota.EnableSerialDebug();
   }
