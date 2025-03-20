@@ -185,6 +185,7 @@ void setup() {
   xTaskCreate(SignIn, "SignIn", 6000, NULL, 5, NULL);
   xTaskCreate(BuzzerControl, "BuzzerControl", 2048, NULL, 6, NULL);
   xTaskCreate(LEDControl, "LEDControl", 2048, NULL, 6, NULL);
+  //xTaskCreate(NetworkCheck, "NetworkCheck", 6000, NULL, 6, NULL);
   xTaskResumeAll();
 
   pinMode(Button, INPUT);

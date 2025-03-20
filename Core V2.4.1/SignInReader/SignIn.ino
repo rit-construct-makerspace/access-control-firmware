@@ -73,7 +73,6 @@ void SignIn(void *pvParameters){
         UID.concat(String(uid[i], HEX));
       }
       USBSerial.println();
-      USBSerial.println(UID);
 
       //Now let's send the UID to the server;
       doc.clear();

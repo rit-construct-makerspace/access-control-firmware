@@ -8,13 +8,15 @@ void NetworkCheck(void *pvParameters){
   while(1){
     delay(1000);
     NoNetwork = 0;
-    if((NetworkError >= 2) || ((NetworkTime + 30000 <= millis64()) && Ready)){
+    if(NetworkError >= 2 || (NetworkTime + 30000) <= millis64()){
       NoNetwork = 1;
       //We aren't doing anything and haven't sent a message to the server in over 30 seconds, let's make sure we're still connected.
       String ServerPath = Server + "/api/check";
       http.begin(client, ServerPath);
       int httpCode = http.GET();
-      if(httpCode == 200){
+      USBSerial.println(F("Checking server..."));
+      USBSerial.print(F("Got response: ")); USBSerial.println(httpCode);
+      if(httpCode == 404){
         //Good response
         USBSerial.println(F("Still connected to network."));
         NetworkError = 0;
