@@ -51,7 +51,7 @@
 #include "USB.h"
 USBCDC USBSerial;
 
-// Pin to select the hardware, the NSS pin.
+// Pin to select the hardware, the NSS pin. 
 #define CHIP_SELECT 6
 
 // Pins MOSI, MISO and SCK are connected to the default pins, and are manipulated through the SPI object.
@@ -109,6 +109,7 @@ void mfrc630_MF_example_dump_arduino() {
       print_block(uid, uid_len);
       USBSerial.print("\n");
 
+      
       // Use the manufacturer default key...
       uint8_t FFkey[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
