@@ -15,6 +15,7 @@ void SignIn(void *pvParameters){
 
     //Get the UID:
     if(atqa != 0){
+      IdleCount = 0;
       uid[10] = {0};
       uid_len = mfrc630_iso14443a_select(uid, &sak);
       //Check the UID Length:
@@ -23,19 +24,19 @@ void SignIn(void *pvParameters){
         USBSerial.print(F("Invalid UID Length. Expected: ")); USBSerial.println(ValidLength);
         InvalidCard = 1;
       }
+      //Once we have the UID, we attempt to access the card's encrypted contents.
+      //This is not actually used by the code, but its inevitable failure causes the card to break the connection, and respond to subsequent REQAs
+      //This essentially lets us detect the presence of a card.
+      //Without this, the card wouldn't respond to the next REQA, since we are already communicating.
+      // Use the manufacturer default key...
+      uint8_t FFkey[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+      mfrc630_cmd_load_key(FFkey);  // load into the key buffer
+      mfrc630_MF_auth(uid, MFRC630_MF_AUTH_KEY_A, 0);
     }
-
-    //Once we have the UID, we attempt to access the card's encrypted contents.
-    //This is not actually used by the code, but its inevitable failure causes the card to break the connection, and respond to subsequent REQAs
-    //This essentially lets us detect the presence of a card.
-    //Without this, the card wouldn't respond to the next REQA, since we are already communicating.
-    // Use the manufacturer default key...
-    uint8_t FFkey[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-    mfrc630_cmd_load_key(FFkey);  // load into the key buffer
-    mfrc630_MF_auth(uid, MFRC630_MF_AUTH_KEY_A, 0);
 
     if(atqa == 0){ 
       //No cards in range, reset states
+      IdleCount++;
       if(!Ready){
         USBSerial.println(F("Ready to read card."));
       }
@@ -45,9 +46,8 @@ void SignIn(void *pvParameters){
       InvalidCard = 0;
       BuzzerStart = 1;
       Fault = 0;
-      continue;
     } 
-    else if(Ready){
+    else if(Ready && !InvalidCard){
       //If there is a card in range and we are ready to receive it;
       Ready = 0;
       USBSerial.print(F("REQA Response: ")); USBSerial.println(atqa);
@@ -106,6 +106,22 @@ void SignIn(void *pvParameters){
           NetworkError++;
         }
       }
+    }
+
+    //If we've been idle too long, ping the server to keep connection alive
+    if(IdleCount >= IDLE_THRESHOLD){
+      http.end();
+      NetworkCheck = 1;
+      LEDColor(255, 255, 255);
+      IdleCount = 0;
+      String ServerPath = Server + "/api/state/" + STATE_TARGET;
+      http.begin(client, ServerPath);
+      int resp = http.GET();
+      USBSerial.println(F("Keeping server connection alive."));
+      USBSerial.print(F("Response to state check: ")); USBSerial.println(resp);
+      NetworkCheck = 0;
+      LEDColor(0,0,0);
+      http.end();
     }
   }
 }

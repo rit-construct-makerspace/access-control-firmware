@@ -21,6 +21,8 @@ March 2025
 #define HIGH_TONE 2000
 #define LOW_TONE 1500
 #define ToneTime 250
+#define IDLE_THRESHOLD 200
+#define STATE_TARGET "kmxmill1" //Ranom machine that's not, used to keep server connection alive.
 
 //Pin Definitions
 #define MOSI_PIN 8
@@ -65,6 +67,8 @@ byte NetworkError;                  //Increases by 1 every time there's a networ
 bool Fault;                         //1 to indicate system fault and set lights/buzzers properly.
 bool BuzzerStart;
 uint64_t NetworkTime;
+byte IdleCount;                     //How many times we've completed the loop without finding a card. If we hit a critical number, ping the server to keep the connection alive.
+bool NetworkCheck;
 
 //Objects:
 USBCDC USBSerial;
@@ -130,7 +134,7 @@ void setup() {
 
   //These are registers that are used in the MFRC630 example code, that seem to work for our application.
   //TODO: Figure out what these actually do, if we need them, if they should be different, etc. 
-    mfrc630_write_reg(0x28, 0x8E);
+  mfrc630_write_reg(0x28, 0x8E);
   mfrc630_write_reg(0x29, 0x15);
   mfrc630_write_reg(0x2A, 0x11);
   mfrc630_write_reg(0x2B, 0x06);
@@ -182,10 +186,9 @@ void setup() {
 
   vTaskSuspendAll();
   xTaskCreate(USBConfig, "USBConfig", 2048, NULL, 5, NULL);
-  xTaskCreate(SignIn, "SignIn", 6000, NULL, 5, NULL);
-  xTaskCreate(BuzzerControl, "BuzzerControl", 2048, NULL, 6, NULL);
-  xTaskCreate(LEDControl, "LEDControl", 2048, NULL, 6, NULL);
-  //xTaskCreate(NetworkCheck, "NetworkCheck", 6000, NULL, 6, NULL);
+  xTaskCreate(SignIn, "SignIn", 4096, NULL, 5, NULL);
+  xTaskCreate(BuzzerControl, "BuzzerControl", 1024, NULL, 6, NULL);
+  xTaskCreate(LEDControl, "LEDControl", 1024, NULL, 6, NULL);
   xTaskResumeAll();
 
   pinMode(Button, INPUT);

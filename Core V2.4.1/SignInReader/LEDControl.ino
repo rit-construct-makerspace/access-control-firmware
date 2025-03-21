@@ -20,7 +20,7 @@ void LEDControl(void *pvParameters){
       green = 0;
       blue = 0;
     }
-    if(NoNetwork){
+    if(NetworkCheck){
       red = 255;
       green = 255;
       blue = 255;
