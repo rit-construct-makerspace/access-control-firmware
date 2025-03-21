@@ -42,6 +42,8 @@ March 2025
 #include <WiFiClientSecure.h>       //Version 3.1.1 | Inherent to ESP32 Arduino
 #include <HTTPClient.h>             //Version 3.1.1 | Inherent to ESP32 Arduino
 #include <Preferences.h>            //Version 3.1.1 | Inherent to ESP32 Arduino
+#include "esp_timer.h"              //Version 3.1.1 | Inherent to ESP32 Arduino
+#include "esp32s2/rom/rtc.h"        //Version 3.1.1 | Inherent to ESP32 Arduino
 #include <Adafruit_NeoPixel.h>
 #include <SPI.h>
 
@@ -65,7 +67,7 @@ bool InvalidCard;
 bool NoNetwork;
 byte NetworkError;                  //Increases by 1 every time there's a network issue, resets to 0 on successful network.
 bool Fault;                         //1 to indicate system fault and set lights/buzzers properly.
-bool BuzzerStart;
+bool BuzzerStart = 1;
 uint64_t NetworkTime;
 byte IdleCount;                     //How many times we've completed the loop without finding a card. If we hit a critical number, ping the server to keep the connection alive.
 bool NetworkCheck;
@@ -87,8 +89,6 @@ void setup() {
   // Start USBSerial communication.
   USBSerial.begin();
   USB.begin();
-
-  delay(1000);
 
   USBSerial.println("STARTUP");
 
@@ -168,16 +168,24 @@ void setup() {
   client.setInsecure();
   http.setReuse(true);
   
-  USBSerial.println(F("Checking for an OTA Update."));
-  USBSerial.println(F("If any are found, will install immediately and restart."));
+  int reset = rtc_get_reset_reason(0);
+  USBSerial.print(F("Reset Reason: "));
+  print_reset_reason(reset);
 
-  ota.SetCallback(callback_percent);
-  ota.SetConfig(Hardware);
-  ota.OverrideDevice("Sign In");
-  int otaresp = ota.CheckForOTAUpdate(OTA_URL, Version);
-  USBSerial.print(F("OTA Response Code: ")); USBSerial.println(otaresp);
-  USBSerial.println(errtext(otaresp));
-  USBSerial.println(F("Looks like we're still here, must not have installed an OTA update."));
+  if(reset == 1){
+    USBSerial.println(F("Since this is a power-on reset, checking for OTA."));
+    USBSerial.println(F("If any updates are found, will install immediately and restart."));
+
+    ota.SetCallback(callback_percent);
+    ota.SetConfig(Hardware);
+    ota.OverrideDevice("Sign In");
+    int otaresp = ota.CheckForOTAUpdate(OTA_URL, Version);
+    USBSerial.print(F("OTA Response Code: ")); USBSerial.println(otaresp);
+    USBSerial.println(errtext(otaresp));
+    USBSerial.println(F("Looks like we're still here, must not have installed an OTA update."));
+  } else{
+    USBSerial.println(F("Skipping OTA check for faster startup."));
+  }
 
   //Disable the startup lights
   vTaskDelete(xHandle2);
@@ -219,7 +227,7 @@ void callback_percent(int offset, int totallength) {
   static int prev_percent = -1;
   int percent = 100 * offset / totallength;
   if (percent != prev_percent) {
-    Serial.printf("Updating %d of %d (%02d%%)...\n", offset, totallength, 100 * offset / totallength);
+    USBSerial.printf("Updating %d of %d (%02d%%)...\n", offset, totallength, 100 * offset / totallength);
     prev_percent = percent;
   }
 }
@@ -273,6 +281,27 @@ uint64_t millis64(){
   //This simple function replaces the 32 bit default millis. Means that overflow now occurs in 290,000 years instead of 50 days
   //Timer runs in microseocnds, so divide by 1000 to get millis.
   return esp_timer_get_time() / 1000;
+}
+
+void print_reset_reason(int reason) {
+  switch (reason) {
+    case 1:  USBSerial.println("POWERON_RESET"); break;          /**<1,  Vbat power on reset*/
+    case 3:  USBSerial.println("SW_RESET"); break;               /**<3,  Software reset digital core*/
+    case 4:  USBSerial.println("OWDT_RESET"); break;             /**<4,  Legacy watch dog reset digital core*/
+    case 5:  USBSerial.println("DEEPSLEEP_RESET"); break;        /**<5,  Deep Sleep reset digital core*/
+    case 6:  USBSerial.println("SDIO_RESET"); break;             /**<6,  Reset by SLC module, reset digital core*/
+    case 7:  USBSerial.println("TG0WDT_SYS_RESET"); break;       /**<7,  Timer Group0 Watch dog reset digital core*/
+    case 8:  USBSerial.println("TG1WDT_SYS_RESET"); break;       /**<8,  Timer Group1 Watch dog reset digital core*/
+    case 9:  USBSerial.println("RTCWDT_SYS_RESET"); break;       /**<9,  RTC Watch dog Reset digital core*/
+    case 10: USBSerial.println("INTRUSION_RESET"); break;        /**<10, Instrusion tested to reset CPU*/
+    case 11: USBSerial.println("TGWDT_CPU_RESET"); break;        /**<11, Time Group reset CPU*/
+    case 12: USBSerial.println("SW_CPU_RESET"); break;           /**<12, Software reset CPU*/
+    case 13: USBSerial.println("RTCWDT_CPU_RESET"); break;       /**<13, RTC Watch dog Reset CPU*/
+    case 14: USBSerial.println("EXT_CPU_RESET"); break;          /**<14, for APP CPU, reset by PRO CPU*/
+    case 15: USBSerial.println("RTCWDT_BROWN_OUT_RESET"); break; /**<15, Reset when the vdd voltage is not stable*/
+    case 16: USBSerial.println("RTCWDT_RTC_RESET"); break;       /**<16, RTC Watch dog reset digital core and rtc module*/
+    default: USBSerial.println("NO_MEAN");
+  }
 }
 
 //The following are from the MFRC630 library.

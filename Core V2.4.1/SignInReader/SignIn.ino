@@ -119,6 +119,11 @@ void SignIn(void *pvParameters){
       int resp = http.GET();
       USBSerial.println(F("Keeping server connection alive."));
       USBSerial.print(F("Response to state check: ")); USBSerial.println(resp);
+      if(resp < 0){
+        USBSerial.println(F("Invalid code. Restarting."));
+        delay(100);
+        ESP.restart();
+      }
       NetworkCheck = 0;
       LEDColor(0,0,0);
       http.end();
