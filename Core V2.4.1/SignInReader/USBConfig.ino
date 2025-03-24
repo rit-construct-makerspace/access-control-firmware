@@ -21,30 +21,39 @@ DebugPrinting used to determine if UART output is free and to use and reserves i
 */
 
 void USBConfig(void *pvParameters){
-    if(SecurityCode == NULL){
-      USBSerial.println(F("ERROR: NO CONFIG?"));
-    }
-  while(1){
+  if(SecurityCode == NULL){
+    USBSerial.println(F("ERROR: NO CONFIG?"));
+  }
+
+  while (1) {
     //Check once a second;
-    vTaskDelay(1000 / portTICK_PERIOD_MS);
     if(USBSerial.available() > 10){
       //There is a message of substance in the USBSerial buffer
-      USBSerial.setTimeout(3);
+      USBSerial.setTimeout(100); // TODO: Check with Jim. This was originally 3 ms which might be too short for UART
       String USBInput = USBSerial.readString();
       USBInput.trim();
-      deserializeJson(usbjson, USBInput);
-      //Check if the passwords match
+      
+      DeserializationError error = deserializeJson(usbjson, USBInput);
+      if (error) {
+        USBSerial.print(F("Deserialization Error: "));
+        USBSerial.println(error.c_str());
+        USBSerial.flush();
+        vTaskDelay(1000 / portTICK_PERIOD_Ms);
+        continue;
+      }
+      
       String OldPassword = usbjson["OldPassword"];
-      SecurityCode = settings.getString("SecurityCode"); //Make sure we have the most up-to-date code to be safe
-      if(OldPassword.equals(SecurityCode) || (SecurityCode == NULL)){
-        //Passwords match or there is no password. Load the JSON info;
-        if(usbjson["NewPassword"]){
-          //New password present, update that...
-          const char* Temp = usbjson["NewPassword"];
-          settings.putString("SecurityCode", Temp);
-          USBSerial.print(F("Updated Password to:"));
-          USBSerial.println(Temp);
+      SecurityCode = settings.getString("SecurityCode");  // Make sure we have the most up-to-date code to be safe
+
+      if(OldPassword.equals(SecurityCode) || (SecurityCode == NULL)) {
+        // Passwords match or there is no password. Load the JSON info
+        if (usbjson["NewPassword"]) {
+            const char* Temp = usbjson["NewPassword"];
+            settings.putString("SecurityCode", Temp);
+            USBSerial.print(F("Updated Password to:"));
+            USBSerial.println(Temp);
         }
+        
         UpdateSetting("SSID");
         UpdateSetting("Password");
         UpdateSetting("Server");
