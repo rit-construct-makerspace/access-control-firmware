@@ -315,7 +315,8 @@ void mfrc630_SPI_transfer(const uint8_t* tx, uint8_t* rx, uint16_t len) {
 
 //Select the chip and start an SPI transaction.
 void mfrc630_SPI_select() {
-  SPI.beginTransaction(SPISettings(10000000, MSBFIRST, SPI_MODE0));  // gain control of SPI bus
+  // TODO: Validate faster SPI clock rate. 10 MHz -> 14 MHz
+  SPI.beginTransaction(SPISettings(14000000, MSBFIRST, SPI_MODE0));  // gain control of SPI bus
   digitalWrite(CS_PIN, LOW);
 }
 
