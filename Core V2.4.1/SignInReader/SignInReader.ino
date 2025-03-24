@@ -56,21 +56,28 @@ String Key;                         //API server key
 String Zone;                        //Zone that user is makred as signed in to
 bool NoBuzzer;                      //When 1, buzzer will not sound
 int Brightness;                     //Brightness of the LEDs, from 0 (off) to 255 
-byte ValidLength;                   //Optional parameter to check UID length to reject invalid NFC cards and the like. Set 0 to disable.
-byte ValidSAK;                      //Optional parameter to check the NFC SAK to reject invalid NFC cards and the like. set to 0 to disable.
-int ValidREQA;                      //Optional parameter to check the REQA to reject invalid NFC cards and the like. Set to 0 to disable.
-uint64_t ResetTime;                 //Stores time when we should reset based on button.
-bool Ready;                         //Indicates system in idle state, waiting for card.
-bool InSystem;
-bool NotInSystem;
-bool InvalidCard;
-bool NoNetwork;
-byte NetworkError;                  //Increases by 1 every time there's a network issue, resets to 0 on successful network.
-bool Fault;                         //1 to indicate system fault and set lights/buzzers properly.
-bool BuzzerStart = 1;
-uint64_t NetworkTime;
-byte IdleCount;                     //How many times we've completed the loop without finding a card. If we hit a critical number, ping the server to keep the connection alive.
-bool NetworkCheck;
+
+// NFC validation parameters
+byte ValidLength;                   //Optional parameter to check UID length to reject invalid NFC cards. Set 0 to disable.
+byte ValidSAK;                      //Optional parameter to check the NFC SAK to reject invalid NFC cards. Set 0 to disable.
+int ValidREQA;                      //Optional parameter to check the REQA to reject invalid NFC cards. Set 0 to disable.
+
+// System state variables
+volatile uint64_t ResetTime;        //Stores time when we should reset based on button.
+volatile bool Ready;                //Indicates system in idle state, waiting for card.
+volatile bool InSystem;
+volatile bool NotInSystem;
+volatile bool InvalidCard;
+volatile bool NoNetwork;
+volatile byte NetworkError;         //Increases by 1 every time there's a network issue, resets to 0 on successful network.
+volatile bool Fault;                //1 to indicate system fault and set lights/buzzers properly.
+volatile bool BuzzerStart = 1;
+volatile uint64_t NetworkTime;
+volatile byte IdleCount;            //How many times we've completed the loop without finding a card. If we hit a critical number, ping the server to keep the connection alive.
+volatile bool NetworkCheck;
+
+// Mutex for shared variables
+SemaphoreHandle_t stateMutex; // TODO: Declare holy war against heretics (race conditions)
 
 //Objects:
 USBCDC USBSerial;
@@ -84,7 +91,11 @@ ESP32OTAPull ota;
 HTTPClient http;
 
 void setup() {
-  // put your setup code here, to run once:
+  stateMutex = xSemaphoreCreateMutex();
+  if (stateMutex == NULL) { // Should never really occur
+    USBSerial.println("Failed to create mutex");
+    while(1);
+  }
 
   // Start USBSerial communication.
   USBSerial.begin();
@@ -197,6 +208,8 @@ void setup() {
   xTaskCreate(SignIn, "SignIn", 4096, NULL, 5, NULL);
   xTaskCreate(BuzzerControl, "BuzzerControl", 1024, NULL, 6, NULL);
   xTaskCreate(LEDControl, "LEDControl", 1024, NULL, 6, NULL);
+  xTaskCreate(resetMonitor, "ResetMonitor", 1024, NULL, 1, NULL);
+
   xTaskResumeAll();
 
   pinMode(Button, INPUT);
@@ -206,20 +219,29 @@ void setup() {
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
-  // The loop just monitors for a reset
-  if(digitalRead(Button)){
-    ResetTime = millis64() + 3000;
-  }
-  if(ResetTime <= millis64()){
-    LEDColor(255,0,0);
-    USBSerial.println(F("Restarting Device..."));
-    USBSerial.flush();
-    delay(1000);
-    ESP.restart();
-    
-  }
+  vTaskDelete(NULL);
+}
 
+void resetMonitor(void *pvParameters) {
+  TickType_t xLastWakeTime = xTaskGetTickCount();
+  const TickType_t xFrequency = 50 / portTICK_PERIOD_MS;
+  
+  while(1) {
+    vTaskDelayUntil(&xLastWakeTime, xFrequency);
+    
+    if(digitalRead(Button)){
+      ResetTime = millis64() + 3000;
+    }
+    
+    if(ResetTime <= millis64()){
+      LEDColor(255,0,0);
+      USBSerial.println(F("Restarting Device..."));
+      USBSerial.flush();
+      
+      vTaskDelay(500 / portTICK_PERIOD_MS);
+      ESP.restart();
+    }
+  }
 }
 
 void callback_percent(int offset, int totallength) {

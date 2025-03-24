@@ -84,9 +84,21 @@ void SignIn(void *pvParameters){
       serializeJson(doc, Serialized);
       String ServerPath = Server + "/api/welcome";
       NetworkTime = millis64();
+      
+      // Set timeout and connection parameters for improved reliability
+      http.setTimeout(10000); // 10 second timeout
       http.begin(client, ServerPath);
       http.addHeader("Content-Type","application/json");
+      
+      // Track time for performance monitoring
+      uint64_t requestStartTime = millis64();
       int httpCode = http.PUT(Serialized);
+      uint64_t requestDuration = millis64() - requestStartTime;
+      
+      // Log performance metrics
+      USBSerial.print(F("Network request completed in: "));
+      USBSerial.print(requestDuration);
+      USBSerial.println(F(" ms"));
       USBSerial.print(F("HTTP Response Code: ")); USBSerial.println(httpCode);
       if(httpCode == 202){
         USBSerial.println(F("User found in system."));
