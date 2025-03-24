@@ -23,7 +23,6 @@ void MachineState(void *pvParameters) {
     vTaskDelay(2 / portTICK_PERIOD_MS);
     //Clear the data after a logoff message is sent, if it doesn't appear there is another card present.
     if(LogoffSent && !CardPresent && !CardUnread){
-      UID = "";
       SessionTime = 0;
       LogoffSent = 0;
     }

@@ -18,26 +18,28 @@ void BuzzerControl(void *pvParameters){
       tone(Buzzer, 0);
 
     }
+    /*
     if(NotInSystem || InvalidCard){
       BuzzerStart = 0;
-      tone(Buzzer, HIGH_TONE);
+      tone(Buzzer, LOW_TONE);
       delay(ToneTime);
       tone(Buzzer, LOW_TONE);
       delay(ToneTime);
       tone(Buzzer, 0);
     }
-    if(Fault){
+    */
+    if(Fault || NotInSystem || InvalidCard){
       BuzzerStart = 0;
-      tone(Buzzer, LOW_TONE);
-      delay(ToneTime);
+      tone(Buzzer, HIGH_TONE);
+      delay(ToneTime/2);
       tone(Buzzer, 0);
-      delay(ToneTime);
-      tone(Buzzer, LOW_TONE);
-      delay(ToneTime);
+      delay(ToneTime/2);
+      tone(Buzzer, HIGH_TONE);
+      delay(ToneTime/2);
       tone(Buzzer, 0);
-      delay(ToneTime);
-      tone(Buzzer, LOW_TONE);
-      delay(ToneTime);
+      delay(ToneTime/2);
+      tone(Buzzer, HIGH_TONE);
+      delay(ToneTime/2);
       tone(Buzzer, 0);
     }
   }

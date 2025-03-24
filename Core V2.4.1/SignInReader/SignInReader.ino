@@ -15,11 +15,11 @@ March 2025
 */
 
 //Settings:
-#define Version "1.2.0"
+#define Version "1.2.1"
 #define Hardware "2.4.1-LE"
 #define OTA_URL "https://github.com/rit-construct-makerspace/access-control-firmware/releases/latest/download/otadirectory.json"
-#define HIGH_TONE 2000
-#define LOW_TONE 1500
+#define HIGH_TONE 2500
+#define LOW_TONE 2000
 #define ToneTime 250
 #define IDLE_THRESHOLD 200
 #define STATE_TARGET "kmxmill1" //Ranom machine that's not, used to keep server connection alive.
@@ -71,6 +71,7 @@ bool BuzzerStart = 1;
 uint64_t NetworkTime;
 byte IdleCount;                     //How many times we've completed the loop without finding a card. If we hit a critical number, ping the server to keep the connection alive.
 bool NetworkCheck;
+bool DebugMode;
 
 //Objects:
 USBCDC USBSerial;
@@ -88,11 +89,15 @@ void setup() {
 
   // Start USBSerial communication.
   USBSerial.begin();
+  USB.productName("ACS Sign In");
+  USB.PID(0x82D0);
+  USB.serialNumber("2.4.1-LE");
   USB.begin();
-
   USBSerial.println("STARTUP");
 
-  USBSerial.println(F("Loading Settings."));
+  if(DebugMode){
+    USBSerial.println(F("Loading Settings."));
+  }
   settings.begin("settings", false);
   SecurityCode = settings.getString("SecurityCode");
   if(SecurityCode == NULL){
@@ -112,8 +117,19 @@ void setup() {
   ValidLength = settings.getString("ValidLength").toInt();
   ValidSAK = settings.getString("ValidSAK").toInt();
   ValidREQA = settings.getString("ValidREQA").toInt();
+  DebugMode = settings.getString("DebugMode").toInt();
 
-  USBSerial.println(F("Starting LED"));
+  if(DebugMode){
+    while(!USBSerial){
+      delay(1);
+    }
+  }
+
+  if(DebugMode){
+    USBSerial.setDebugOutput(1); //Enables verbose outputs
+    USBSerial.println(F("Verbose debug information enabled."));
+    USBSerial.println(F("Starting LED"));
+  }
 
   LED.begin();
   LED.setBrightness(Brightness);
@@ -121,7 +137,9 @@ void setup() {
 
   xTaskCreate(GamerMode, "GamerMode", 2048, NULL, 5, &xHandle2);
 
-  USBSerial.println(F("Starting NFC Reader."));
+  if(DebugMode){
+    USBSerial.println(F("Starting NFC Reader."));
+  }
 
   //Set Pin Modes.
   pinMode(CS_PIN, OUTPUT);
@@ -139,22 +157,27 @@ void setup() {
   mfrc630_write_reg(0x2A, 0x11);
   mfrc630_write_reg(0x2B, 0x06);
 
-  USBSerial.println(F("Starting WiFi."));
-
-  USBSerial.print(F("Connecting to: ")); USBSerial.println(SSID);
+  if(DebugMode){
+    USBSerial.println(F("Starting WiFi."));
+    USBSerial.print(F("Connecting to: ")); USBSerial.println(SSID);
+  }
 
   WiFi.mode(WIFI_STA);
   if(Password != "null"){
     WiFi.begin(SSID, Password);
   } else{
-    USBSerial.println(F("Using no password."));
+    if(DebugMode){
+      USBSerial.println(F("Using no password."));
+    }
     WiFi.begin(SSID);
   }
 
   WiFi.setSleep(false);
   WiFi.setAutoReconnect(true);
 
-  USBSerial.print(F("MAC Address: ")); USBSerial.println(WiFi.macAddress());
+  if(DebugMode){
+    USBSerial.print(F("MAC Address: ")); USBSerial.println(WiFi.macAddress());
+  }
 
   while(WiFi.status() != WL_CONNECTED){
     USBSerial.print(".");
@@ -162,8 +185,10 @@ void setup() {
   }
   USBSerial.println();
 
-  USBSerial.print(F("Connected to ")); USBSerial.println(SSID);
-  USBSerial.print(F("Local IP: ")); USBSerial.println(WiFi.localIP());
+  if(DebugMode){
+    USBSerial.print(F("Connected to ")); USBSerial.println(SSID);
+    USBSerial.print(F("Local IP: ")); USBSerial.println(WiFi.localIP());
+  }
 
   client.setInsecure();
   http.setReuse(true);
@@ -173,16 +198,19 @@ void setup() {
   print_reset_reason(reset);
 
   if(reset == 1){
-    USBSerial.println(F("Since this is a power-on reset, checking for OTA."));
-    USBSerial.println(F("If any updates are found, will install immediately and restart."));
-
+    if(DebugMode){
+      USBSerial.println(F("Since this is a power-on reset, checking for OTA."));
+      USBSerial.println(F("If any updates are found, will install immediately and restart."));
+    }
     ota.SetCallback(callback_percent);
     ota.SetConfig(Hardware);
     ota.OverrideDevice("Sign In");
     int otaresp = ota.CheckForOTAUpdate(OTA_URL, Version);
-    USBSerial.print(F("OTA Response Code: ")); USBSerial.println(otaresp);
-    USBSerial.println(errtext(otaresp));
-    USBSerial.println(F("Looks like we're still here, must not have installed an OTA update."));
+    if(DebugMode){
+      USBSerial.print(F("OTA Response Code: ")); USBSerial.println(otaresp);
+      USBSerial.println(errtext(otaresp));
+      USBSerial.println(F("Looks like we're still here, must not have installed an OTA update."));
+    }
   } else{
     USBSerial.println(F("Skipping OTA check for faster startup."));
   }
@@ -190,7 +218,9 @@ void setup() {
   //Disable the startup lights
   vTaskDelete(xHandle2);
 
-  USBSerial.println(F("Starting FreeRTOS."));
+  if(DebugMode){
+    USBSerial.println(F("Starting FreeRTOS."));
+  }
 
   vTaskSuspendAll();
   xTaskCreate(USBConfig, "USBConfig", 2048, NULL, 5, NULL);

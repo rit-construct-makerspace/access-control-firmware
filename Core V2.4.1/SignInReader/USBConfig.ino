@@ -42,8 +42,12 @@ void USBConfig(void *pvParameters){
           //New password present, update that...
           const char* Temp = usbjson["NewPassword"];
           settings.putString("SecurityCode", Temp);
-          USBSerial.print(F("Updated Password to:"));
+          USBSerial.print(F("Updated Password to: "));
           USBSerial.println(Temp);
+        }
+        if(usbjson["DumpJSON"]){
+          //Dump all settings as a JSON, for the system to have
+          //TODO
         }
         UpdateSetting("SSID");
         UpdateSetting("Password");
@@ -55,6 +59,7 @@ void USBConfig(void *pvParameters){
         UpdateSetting("ValidLength");
         UpdateSetting("ValidSAK");
         UpdateSetting("ValidREQA");
+        UpdateSetting("DebugMode");
 
         //Restart to apply settings.
         USBSerial.println(F("Settings Applied."));   
@@ -80,10 +85,12 @@ void UpdateSetting(String Key) {
   if (!Temp) {
     return;
   }
-  USBSerial.print(F("Updating key "));
-  USBSerial.print(KeyArray);
-  USBSerial.print(F(" with value "));
-  USBSerial.println(Temp);
+  if(DebugMode){
+    USBSerial.print(F("Updating key "));
+    USBSerial.print(KeyArray);
+    USBSerial.print(F(" with value "));
+    USBSerial.println(Temp);
+  }
   //Key is present
   settings.putString(Key.c_str(), Temp);
 }

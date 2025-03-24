@@ -85,16 +85,13 @@ void SendReport(String Reason){
     xSemaphoreTake(StateMutex, portMAX_DELAY); 
     status["State"] = State;
     xSemaphoreGive(StateMutex);
-    if (CardPresent) {
-      status["UID"] = UID;
-    } else {
-      status["UID"] = "";
-    }
-    if((Reason == "Card Removed") || (State == "Idle")){
+    status["UID"] = UID;
+    if((Reason == "Card Removed") || (State == "Unlocked")){
       //A session is in progress or just ended, so report session time
       SessionTime = millis64() - SessionStart;
+      LastSessionTime = millis64() - SessionStart;
     } else{
-      SessionTime = 0;
+      SessionTime = LastSessionTime;
     }
     status["Time"] = SessionTime / 1000;
     status["Source"] = Reason;

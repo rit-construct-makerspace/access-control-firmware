@@ -29,7 +29,7 @@ USBConfig: Allows programatic changing of settings over USB
 
 
 //Settings
-#define Version "1.2.6"
+#define Version "1.2.7"
 #define Hardware "2.3.2-LE"
 #define MAX_DEVICES 10 //How many possible temperature sensors to scan for
 #define OTA_URL "https://github.com/rit-construct-makerspace/access-control-firmware/releases/latest/download/otadirectory.json"
@@ -82,6 +82,7 @@ uint64_t LastServer;                     //Tracks the last time we had a good co
 bool CheckNetwork;                       //Flag to indicate repeat network communication failures. Needs investigating.
 uint64_t SessionStart;                   //Time in millis when a session started.
 uint64_t SessionTime;                    //How long a user has been using a machine for
+uint64_t LastSessionTime;                //Duration of the last session.
 bool LogoffSent;                         //Flag to indicate that the system has sent the message to end a session, so data can be cleared.
 String State = "Lockout";                //Plaintext indication of the state of the system for status reports. Idle, Unlocked, AlwayOn, or Lockout.
 bool CardVerified;                       //Flag set to 1 once the results of the ID check are complete and CardStatus is valid.
