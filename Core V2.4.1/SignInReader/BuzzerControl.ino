@@ -1,4 +1,4 @@
-void BuzzerControl(void *pvParameters){
+void BuzzerControl(void *pvParameters) {
   TickType_t xLastWakeTime;
   const TickType_t xFrequency = 100 / portTICK_PERIOD_MS; // 100ms period
   
@@ -7,44 +7,64 @@ void BuzzerControl(void *pvParameters){
   while(1){
     vTaskDelayUntil(&xLastWakeTime, xFrequency);
     
-    if(NoBuzzer){
+    if (NoBuzzer){
       vTaskDelay(10000 / portTICK_PERIOD_MS);
       continue;
     }
-    if(!BuzzerStart){
+
+    if (!BuzzerStart){ // TODO: BuzzerStart is only 0? Check rest of code to see if this is set
       //Already played buzzer for this state.
       continue;
     }
-    if(InSystem){
-      BuzzerStart = 0;
-      tone(Buzzer, LOW_TONE);
-      delay(ToneTime);
-      tone(Buzzer, HIGH_TONE);
-      delay(ToneTime);
-      tone(Buzzer, 0);
 
-    }
-    if(NotInSystem || InvalidCard){
+    if (InSystem){
       BuzzerStart = 0;
-      tone(Buzzer, HIGH_TONE);
-      delay(ToneTime);
-      tone(Buzzer, LOW_TONE);
-      delay(ToneTime);
-      tone(Buzzer, 0);
-    }
-    if(Fault){
+      playSuccessTone();
+    } else if (NotInSystem || InvalidCard){
       BuzzerStart = 0;
-      tone(Buzzer, LOW_TONE);
-      delay(ToneTime);
-      tone(Buzzer, 0);
-      delay(ToneTime);
-      tone(Buzzer, LOW_TONE);
-      delay(ToneTime);
-      tone(Buzzer, 0);
-      delay(ToneTime);
-      tone(Buzzer, LOW_TONE);
-      delay(ToneTime);
-      tone(Buzzer, 0);
+      playFailureTone();
+    } else if(Fault){
+      BuzzerStart = 0;
+      playFaultTone();
     }
   }
+}
+
+void playSuccessTone() {
+  tone(Buzzer, LOW_TONE);
+  vTaskDelay(ToneTime / portTICK_PERIOD_MS);
+
+  tone(Buzzer, HIGH_TONE);
+  vTaskDelay(ToneTime / portTICK_PERIOD_MS);
+
+  tone(Buzzer, 0);
+}
+
+void playFailureTone() {
+  tone(Buzzer, HIGH_TONE);
+  vTaskDelay(ToneTime / portTICK_PERIOD_MS);
+
+  tone(Buzzer, LOW_TONE);
+  vTaskDelay(ToneTime / portTICK_PERIOD_MS);
+
+  tone(Buzzer, 0);
+}
+
+void playFaultTone() {
+  tone(Buzzer, LOW_TONE);
+  vTaskDelay(ToneTime / portTICK_PERIOD_MS);
+
+  tone(Buzzer, 0);
+  vTaskDelay(ToneTime / portTICK_PERIOD_MS);
+
+  tone(Buzzer, LOW_TONE);
+  vTaskDelay(ToneTime / portTICK_PERIOD_MS);
+
+  tone(Buzzer, 0);
+  vTaskDelay(ToneTime / portTICK_PERIOD_MS);
+
+  tone(Buzzer, LOW_TONE);
+  vTaskDelay(ToneTime / portTICK_PERIOD_MS);
+
+  tone(Buzzer, 0);
 }
