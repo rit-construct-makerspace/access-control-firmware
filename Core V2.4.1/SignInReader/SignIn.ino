@@ -16,7 +16,7 @@ void SignIn(void *pvParameters){
     //Get the UID:
     if(atqa != 0){
       IdleCount = 0;
-      uid[10] = {0};
+      memset(uid, 0, sizeof(uid));
       uid_len = mfrc630_iso14443a_select(uid, &sak);
       //Check the UID Length:
       USBSerial.print(F("UID Length: ")); USBSerial.println(uid_len);
@@ -108,22 +108,36 @@ void SignIn(void *pvParameters){
       }
     }
 
-    //If we've been idle too long, ping the server to keep connection alive
+    // If we've been idle too long, ping the server to keep connection alive
     if(IdleCount >= IDLE_THRESHOLD){
       http.end();
       NetworkCheck = 1;
       LEDColor(255, 255, 255);
       IdleCount = 0;
       String ServerPath = Server + "/api/state/" + STATE_TARGET;
+      
+      // 10 second timeout
+      http.setTimeout(10000);
       http.begin(client, ServerPath);
+      
       int resp = http.GET();
       USBSerial.println(F("Keeping server connection alive."));
       USBSerial.print(F("Response to state check: ")); USBSerial.println(resp);
+      
       if(resp < 0){
-        USBSerial.println(F("Invalid code. Restarting."));
-        delay(100);
-        ESP.restart();
+        USBSerial.println(F("Network error detected."));
+        
+        NetworkError++;
+        
+        if(NetworkError > 3) {
+          USBSerial.println(F("Multiple network failures. Restarting."));
+          delay(500);
+          ESP.restart();
+        }
+      } else {
+        NetworkError = 0;
       }
+      
       NetworkCheck = 0;
       LEDColor(0,0,0);
       http.end();
