@@ -1,8 +1,14 @@
 void BuzzerControl(void *pvParameters){
+  TickType_t xLastWakeTime;
+  const TickType_t xFrequency = 100 / portTICK_PERIOD_MS; // 100ms period
+  
+  xLastWakeTime = xTaskGetTickCount();
+  
   while(1){
-    delay(100);
+    vTaskDelayUntil(&xLastWakeTime, xFrequency);
+    
     if(NoBuzzer){
-      delay(10000);
+      vTaskDelay(10000 / portTICK_PERIOD_MS);
       continue;
     }
     if(!BuzzerStart){
