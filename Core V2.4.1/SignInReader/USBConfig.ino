@@ -5,15 +5,15 @@ USB Config
 Eventually, this will have code for connection to a program on the computer to handle setup and configuration of the system.
 For now, it handles a basic JSON-based update system.
 
-If you paste a JSON document into the USBSerial monitor, containing the parameter "OldPassword" that matches the internal stored password, the settings you upload will be applied
+If you paste a JSON document into the USBSerial monitor, containing the parameter "Oldpassword" that matches the internal stored password, the settings you upload will be applied
 
 The following parameters are accepted:
-* OldPassword---Must match the internal SecurityCode for the JSON to be accepted.
-* SSID----------WiFi SSID to attempt to connect to.
-* Password------Wifi password to attempt to connect with.
-* Server--------URL to send API calls to.
-* Key-----------API key.
-* Zone----------Identifier code for the room the machine is located in, for sign-in reasons.
+* Oldpassword---Must match the internal securityCode for the JSON to be accepted.
+* ssid----------WiFi ssid to attempt to connect to.
+* password------Wifi password to attempt to connect with.
+* server--------URL to send API calls to.
+* key-----------API key.
+* zone----------Identifier code for the room the machine is located in, for sign-in reasons.
 
 
 Global Variables Used:
@@ -21,7 +21,7 @@ DebugPrinting used to determine if UART output is free and to use and reserves i
 */
 
 void USBConfig(void *pvParameters){
-  if(SecurityCode == NULL){
+  if(securityCode == NULL){
     USBSerial.println(F("ERROR: NO CONFIG?"));
   }
 
@@ -42,28 +42,28 @@ void USBConfig(void *pvParameters){
         continue;
       }
       
-      String OldPassword = usbjson["OldPassword"];
-      SecurityCode = settings.getString("SecurityCode");  // Make sure we have the most up-to-date code to be safe
+      String Oldpassword = usbjson["Oldpassword"];
+      securityCode = settings.getString("securityCode");  // Make sure we have the most up-to-date code to be safe
 
-      if(OldPassword.equals(SecurityCode) || (SecurityCode == NULL)) {
-        // Passwords match or there is no password. Load the JSON info
-        if (usbjson["NewPassword"]) {
-            const char* Temp = usbjson["NewPassword"];
-            settings.putString("SecurityCode", Temp);
-            USBSerial.print(F("Updated Password to:"));
+      if(Oldpassword.equals(securityCode) || (securityCode == NULL)) {
+        // passwords match or there is no password. Load the JSON info
+        if (usbjson["Newpassword"]) {
+            const char* Temp = usbjson["Newpassword"];
+            settings.putString("securityCode", Temp);
+            USBSerial.print(F("Updated password to:"));
             USBSerial.println(Temp);
         }
         
-        UpdateSetting("SSID");
-        UpdateSetting("Password");
-        UpdateSetting("Server");
-        UpdateSetting("Key");
-        UpdateSetting("Zone");
-        UpdateSetting("NoBuzzer");
-        UpdateSetting("Brightness");
-        UpdateSetting("ValidLength");
-        UpdateSetting("ValidSAK");
-        UpdateSetting("ValidREQA");
+        UpdateSetting("ssid");
+        UpdateSetting("password");
+        UpdateSetting("server");
+        UpdateSetting("key");
+        UpdateSetting("zone");
+        UpdateSetting("noBuzzer");
+        UpdateSetting("brightness");
+        UpdateSetting("nfcValidLength");
+        UpdateSetting("nfcValidSAK");
+        UpdateSetting("nfcValidREQA");
 
         //Restart to apply settings.
         USBSerial.println(F("Settings Applied."));   
@@ -82,17 +82,17 @@ void USBConfig(void *pvParameters){
   }
 }
 
-void UpdateSetting(String Key) { 
+void UpdateSetting(String key) { 
   //Updates a value in the preferences with a value from a JSON document.
-  const char* Temp = usbjson[Key];
-  const char* KeyArray = Key.c_str();
+  const char* Temp = usbjson[key];
+  const char* keyArray = key.c_str();
   if (!Temp) {
     return;
   }
   USBSerial.print(F("Updating key "));
-  USBSerial.print(KeyArray);
+  USBSerial.print(keyArray);
   USBSerial.print(F(" with value "));
   USBSerial.println(Temp);
-  //Key is present
-  settings.putString(Key.c_str(), Temp);
+  //key is present
+  settings.putString(key.c_str(), Temp);
 }

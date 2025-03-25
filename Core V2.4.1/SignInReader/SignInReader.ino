@@ -157,32 +157,32 @@ public:
 };
 
 //Variables:
-String SecurityCode;                //The password needed to access the settings
-String Password;                    //WiFi password
-String SSID;                        //WiFi SSID
-String Server;                      //Server to send API calls to
-String Key;                         //API server key
-String Zone;                        //Zone that user is makred as signed in to
-bool NoBuzzer;                      //When 1, buzzer will not sound
-int Brightness;                     //Brightness of the LEDs, from 0 (off) to 255 
+String securityCode;                //The password needed to access the settings
+String password;                    //WiFi password
+String ssid;                        //WiFi ssid
+String server;                      //server to send API calls to
+String key;                         //API server key
+String zone;                        //zone that user is makred as signed in to
+bool noBuzzer;                      //When 1, buzzer will not sound
+int brightness;                     //brightness of the LEDs, from 0 (off) to 255 
 
 // NFC validation parameters
-byte ValidLength;                   //Optional parameter to check UID length to reject invalid NFC cards. Set 0 to disable.
-byte ValidSAK;                      //Optional parameter to check the NFC SAK to reject invalid NFC cards. Set 0 to disable.
-int ValidREQA;                      //Optional parameter to check the REQA to reject invalid NFC cards. Set 0 to disable.
+byte nfcValidLength;                   //Optional parameter to check UID length to reject invalid NFC cards. Set 0 to disable.
+byte nfcValidSAK;                      //Optional parameter to check the NFC SAK to reject invalid NFC cards. Set 0 to disable.
+int nfcValidREQA;                      //Optional parameter to check the REQA to reject invalid NFC cards. Set 0 to disable.
 
 // System state variables
-Atomic<bool> Ready{false};          //Indicates system in idle state, waiting for card.
-Atomic<bool> InSystem{false};
-Atomic<bool> NotInSystem{false};
-Atomic<bool> InvalidCard{false};
-Atomic<bool> NoNetwork{false};
-Atomic<byte> NetworkError{0};       //Increases by 1 every time there's a network issue, resets to 0 on successful network.
-Atomic<bool> Fault{false};          //1 to indicate system fault and set lights/buzzers properly.
-Atomic<bool> BuzzerStart{true};
-Atomic<uint64_t> NetworkTime{0};
-Atomic<byte> IdleCount{0};          //How many times we've completed the loop without finding a card. If we hit a critical number, ping the server to keep the connection alive.
-Atomic<bool> NetworkCheck{false};
+Atomic<bool> ready{false};          //Indicates system in idle state, waiting for card.
+Atomic<bool> inSystem{false};
+Atomic<bool> notInSystem{false};
+Atomic<bool> invalidCard{false};
+Atomic<bool> noNetwork{false};
+Atomic<byte> networkError{0};       //Increases by 1 every time there's a network issue, resets to 0 on successful network.
+Atomic<bool> fault{false};          //1 to indicate system fault and set lights/buzzers properly.
+Atomic<bool> buzzerStart{true};
+Atomic<uint64_t> networkTime{0};
+Atomic<byte> idleCount{0};          //How many times we've completed the loop without finding a card. If we hit a critical number, ping the server to keep the connection alive.
+Atomic<bool> networkCheck{false};
 
 //Objects:
 USBCDC USBSerial;
@@ -204,29 +204,29 @@ void setup() {
 
   USBSerial.println(F("Loading Settings."));
   settings.begin("settings", false);
-  SecurityCode = settings.getString("SecurityCode");
-  if(SecurityCode == NULL){
+  securityCode = settings.getString("SecurityCode");
+  if(securityCode == NULL){
     USBSerial.println(F("CAN'T FIND SETTINGS - FRESH INSTALL?"));
     USBSerial.println(F("HOLDING FOR UPDATE FOREVER..."));
     xTaskCreate(USBConfig, "USBConfig", 4096, NULL, 2, NULL);
     //Nuke the rest of this process - we can't do anything without our config.
     vTaskSuspend(NULL);
   }
-  Password = settings.getString("Password");
-  SSID = settings.getString("SSID");
-  Server = settings.getString("Server");
-  Key = settings.getString("Key");
-  Zone = settings.getString("Zone");
-  NoBuzzer = settings.getString("NoBuzzer").toInt();
-  Brightness = settings.getString("Brightness").toInt();
-  ValidLength = settings.getString("ValidLength").toInt();
-  ValidSAK = settings.getString("ValidSAK").toInt();
-  ValidREQA = settings.getString("ValidREQA").toInt();
+  password = settings.getString("Password");
+  ssid = settings.getString("SSID");
+  server = settings.getString("Server");
+  key = settings.getString("Key");
+  zone = settings.getString("Zone");
+  noBuzzer = settings.getString("NoBuzzer").toInt();
+  brightness = settings.getString("Brightness").toInt();
+  nfcValidLength = settings.getString("ValidLength").toInt();
+  nfcValidSAK = settings.getString("ValidSAK").toInt();
+  nfcValidREQA = settings.getString("ValidREQA").toInt();
 
   USBSerial.println(F("Starting LED"));
 
   LED.begin();
-  LED.setBrightness(Brightness);
+  LED.setbrightness(brightness);
   LED.show();
 
   xTaskCreate(GamerMode, "GamerMode", 2048, NULL, 5, &xHandle2);
@@ -251,14 +251,14 @@ void setup() {
 
   USBSerial.println(F("Starting WiFi."));
 
-  USBSerial.print(F("Connecting to: ")); USBSerial.println(SSID);
+  USBSerial.print(F("Connecting to: ")); USBSerial.println(ssid);
 
   WiFi.mode(WIFI_STA);
-  if(Password != "null"){
-    WiFi.begin(SSID, Password);
+  if(password != "null"){
+    WiFi.begin(ssid, password);
   } else{
     USBSerial.println(F("Using no password."));
-    WiFi.begin(SSID);
+    WiFi.begin(ssid);
   }
 
   WiFi.setSleep(false);
@@ -272,7 +272,7 @@ void setup() {
   }
   USBSerial.println();
 
-  USBSerial.print(F("Connected to ")); USBSerial.println(SSID);
+  USBSerial.print(F("Connected to ")); USBSerial.println(ssid);
   USBSerial.print(F("Local IP: ")); USBSerial.println(WiFi.localIP());
 
   client.setInsecure();

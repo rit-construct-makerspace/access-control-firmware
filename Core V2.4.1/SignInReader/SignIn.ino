@@ -15,14 +15,14 @@ void SignIn(void *pvParameters){
 
     //Get the UID:
     if(atqa != 0){
-      IdleCount = 0;
+      idleCount = 0;
       memset(uid, 0, sizeof(uid));
       uid_len = mfrc630_iso14443a_select(uid, &sak);
       //Check the UID Length:
       USBSerial.print(F("UID Length: ")); USBSerial.println(uid_len);
-      if(uid_len != ValidLength && ValidLength != 0){
-        USBSerial.print(F("Invalid UID Length. Expected: ")); USBSerial.println(ValidLength);
-        InvalidCard = true;
+      if(uid_len != nfcValidLength && nfcValidLength != 0){
+        USBSerial.print(F("Invalid UID Length. Expected: ")); USBSerial.println(nfcValidLength);
+        invalidCard = true;
       }
       //Once we have the UID, we attempt to access the card's encrypted contents.
       //This is not actually used by the code, but its inevitable failure causes the card to break the connection, and respond to subsequent REQAs
@@ -36,33 +36,33 @@ void SignIn(void *pvParameters){
 
     if(atqa == 0){ 
       //No cards in range, reset states
-      IdleCount++;
-      if(!Ready){
-        USBSerial.println(F("Ready to read card."));
+      idleCount++;
+      if(!ready){
+        USBSerial.println(F("ready to read card."));
       }
-      Ready = true;
-      NotInSystem = false;
-      InSystem = false;
-      InvalidCard = false;
-      BuzzerStart = true;
-      Fault = false;
+      ready = true;
+      notInSystem = false;
+      inSystem = false;
+      invalidCard = false;
+      buzzerStart = true;
+      fault = false;
     } 
-    else if(Ready && !InvalidCard){
+    else if(ready && !invalidCard){
       //If there is a card in range and we are ready to receive it;
-      Ready = false;
+      ready = false;
       
       USBSerial.print(F("REQA Response: ")); USBSerial.println(atqa);
-      if(ValidREQA != atqa && ValidREQA != 0){
+      if(nfcValidREQA != atqa && nfcValidREQA != 0){
         //More than 1 card found, error out
-        InvalidCard = true;
-        USBSerial.print(F("Invalid REQA. Expected: ")); USBSerial.println(ValidREQA);
+        invalidCard = true;
+        USBSerial.print(F("Invalid REQA. Expected: ")); USBSerial.println(nfcValidREQA);
         continue;
       }
       //Check the SAK
       USBSerial.print(F("SAK Response: ")); USBSerial.println(sak);
-      if(sak != ValidSAK && ValidSAK != 0){
-        USBSerial.print(F("Invalid SAK Response. Expected: ")); USBSerial.println(ValidSAK);
-        InvalidCard = true;
+      if(sak != nfcValidSAK && nfcValidSAK != 0){
+        USBSerial.print(F("Invalid SAK Response. Expected: ")); USBSerial.println(nfcValidSAK);
+        invalidCard = true;
         continue;
       }
       USBSerial.println(F("ATQA, SAK, and UID Length are valid."));
@@ -78,17 +78,17 @@ void SignIn(void *pvParameters){
       //Now let's send the UID to the server;
       doc.clear();
       doc["Type"] = "Welcome";
-      doc["Zone"] = Zone;
+      doc["zone"] = zone;
       doc["ID"] = UID;
-      doc["Key"] = Key;
+      doc["key"] = key;
       String Serialized;
       serializeJson(doc, Serialized);
-      String ServerPath = Server + "/api/welcome";
-      NetworkTime = millis64();
+      String serverPath = server + "/api/welcome";
+      networkTime = millis64();
       
       // Set timeout and connection parameters for improved reliability
       http.setTimeout(10000); // 10 second timeout
-      http.begin(client, ServerPath);
+      http.begin(client, serverPath);
       http.addHeader("Content-Type","application/json");
       
       // Track time for performance monitoring
@@ -104,36 +104,36 @@ void SignIn(void *pvParameters){
       
       if(httpCode == 202){
         USBSerial.println(F("User found in system."));
-        NetworkError = 0;
-        InSystem = true;
+        networkError = 0;
+        inSystem = true;
       }
       else if(httpCode == 406){
         USBSerial.println(F("User not in system"));
-        NetworkError = 0;
-        NotInSystem = true;
+        networkError = 0;
+        notInSystem = true;
       }
       else{
         USBSerial.println(F("Unexpected HTTP Response."));
-        Fault = true;
+        fault = true;
         if(httpCode < 0){
           USBSerial.println(F("Indication of Network Failure?"));
-          NetworkError++;
+          networkError++;
         }
       }
     }
 
     // If we've been idle too long, ping the server to keep connection alive
-    if(IdleCount >= IDLE_THRESHOLD){
+    if(idleCount >= IDLE_THRESHOLD){
       http.end();
-      NetworkCheck = true;
-      IdleCount = 0;
+      networkCheck = true;
+      idleCount = 0;
       
       LEDColor(255, 255, 255);
-      String ServerPath = Server + "/api/state/" + STATE_TARGET;
+      String serverPath = server + "/api/state/" + STATE_TARGET;
       
       // 10 second timeout
       http.setTimeout(10000);
-      http.begin(client, ServerPath);
+      http.begin(client, serverPath);
       
       int resp = http.GET();
       USBSerial.println(F("Keeping server connection alive."));
@@ -142,18 +142,18 @@ void SignIn(void *pvParameters){
       if(resp < 0){
         USBSerial.println(F("Network error detected."));
         
-        NetworkError++;
+        networkError++;
         
-        if(NetworkError > 3) {
+        if(networkError > 3) {
           USBSerial.println(F("Multiple network failures. Restarting."));
           delay(500);
           ESP.restart();
         }
       } else {
-        NetworkError = 0;
+        networkError = 0;
       }
       
-      NetworkCheck = false;
+      networkCheck = false;
       LEDColor(0,0,0);
       http.end();
     }

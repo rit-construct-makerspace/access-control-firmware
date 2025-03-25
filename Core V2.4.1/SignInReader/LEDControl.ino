@@ -17,19 +17,19 @@ void LEDControl(void *pvParameters){
       red = 0;
       green = 0;
       blue = 255;
-    } else if (NetworkCheck) {
+    } else if (networkCheck) {
       red = 255;
       green = 255;
       blue = 255;
-    } else if (InSystem) {
+    } else if (inSystem) {
       green = 255;
       red = 0;
       blue = 0;
-    } else if (NotInSystem || InvalidCard) {
+    } else if (notInSystem || invalidCard) {
       red = 255;
       green = 0;
       blue = 0;
-    } else if (!Ready) {
+    } else if (!ready) {
       red = 255;
       green = 255;
       blue = 0;

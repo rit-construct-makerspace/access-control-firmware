@@ -7,28 +7,28 @@ void BuzzerControl(void *pvParameters) {
   while(1){
     vTaskDelayUntil(&xLastWakeTime, xFrequency);
     
-    if (NoBuzzer){
+    if (noBuzzer){
       vTaskDelay(10000 / portTICK_PERIOD_MS);
       continue;
     }
 
-    if (!BuzzerStart){ 
+    if (!buzzerStart){ 
       //Already played buzzer for this state.
       continue;
     }
 
-    if (InSystem){
-      BuzzerStart = false;
+    if (inSystem){
+      buzzerStart = false;
       shouldPlaySuccess = true;
       playSuccessTone();
 
-    } else if (NotInSystem || InvalidCard){
-      BuzzerStart = false;
+    } else if (notInSystem || invalidCard){
+      buzzerStart = false;
       playFailureTone();
 
-    } else if(Fault){
-      BuzzerStart = false;
-      playFaultTone();
+    } else if(fault){
+      buzzerStart = false;
+      playfaultTone();
     }
   }
 }
@@ -53,7 +53,7 @@ void playFailureTone() {
   tone(Buzzer, 0);
 }
 
-void playFaultTone() {
+void playfaultTone() {
   tone(Buzzer, LOW_TONE);
   vTaskDelay(ToneTime / portTICK_PERIOD_MS);
 
