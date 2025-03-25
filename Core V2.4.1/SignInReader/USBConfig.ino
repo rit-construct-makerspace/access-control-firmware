@@ -5,10 +5,10 @@ USB Config
 Eventually, this will have code for connection to a program on the computer to handle setup and configuration of the system.
 For now, it handles a basic JSON-based update system.
 
-If you paste a JSON document into the USBSerial monitor, containing the parameter "Oldpassword" that matches the internal stored password, the settings you upload will be applied
+If you paste a JSON document into the USBSerial monitor, containing the parameter "oldPassword" that matches the internal stored password, the settings you upload will be applied
 
 The following parameters are accepted:
-* Oldpassword---Must match the internal securityCode for the JSON to be accepted.
+* oldPassword---Must match the internal securityCode for the JSON to be accepted.
 * ssid----------WiFi ssid to attempt to connect to.
 * password------Wifi password to attempt to connect with.
 * server--------URL to send API calls to.
@@ -42,10 +42,10 @@ void USBConfig(void *pvParameters){
         continue;
       }
       
-      String Oldpassword = usbjson["Oldpassword"];
+      String oldPassword = usbjson["OldPassword"];
       securityCode = settings.getString("securityCode");  // Make sure we have the most up-to-date code to be safe
 
-      if(Oldpassword.equals(securityCode) || (securityCode == NULL)) {
+      if(oldPassword.equals(securityCode) || (securityCode == NULL)) {
         // passwords match or there is no password. Load the JSON info
         if (usbjson["Newpassword"]) {
             const char* Temp = usbjson["Newpassword"];
