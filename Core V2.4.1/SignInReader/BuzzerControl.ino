@@ -12,19 +12,22 @@ void BuzzerControl(void *pvParameters) {
       continue;
     }
 
-    if (!BuzzerStart){ // TODO: BuzzerStart is only 0? Check rest of code to see if this is set
+    if (!BuzzerStart){ 
       //Already played buzzer for this state.
       continue;
     }
 
     if (InSystem){
-      BuzzerStart = 0;
+      BuzzerStart = false;
+      shouldPlaySuccess = true;
       playSuccessTone();
+
     } else if (NotInSystem || InvalidCard){
-      BuzzerStart = 0;
+      BuzzerStart = false;
       playFailureTone();
+
     } else if(Fault){
-      BuzzerStart = 0;
+      BuzzerStart = false;
       playFaultTone();
     }
   }

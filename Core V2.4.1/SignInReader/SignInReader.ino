@@ -47,6 +47,115 @@ March 2025
 #include <Adafruit_NeoPixel.h>
 #include <SPI.h>
 
+// Atomic template class to simplify thread-safe operations
+template <typename T>
+class Atomic {
+private:
+  SemaphoreHandle_t mutex;
+  volatile T value;
+
+public:
+  Atomic(T initialValue = T()) : value(initialValue) {
+    mutex = xSemaphoreCreateMutex();
+    if (mutex == NULL) {
+      // Should never occur in practice
+      USBSerial.println("Failed to create mutex for Atomic. Halting");
+      while(1);
+    }
+  }
+
+  ~Atomic() {
+    vSemaphoreDelete(mutex);
+  }
+
+  void set(T newValue) {
+    if (xSemaphoreTake(mutex, portMAX_DELAY) == pdTRUE) {
+      value = newValue;
+      xSemaphoreGive(mutex);
+    }
+  }
+
+  T get() {
+    T result;
+    if (xSemaphoreTake(mutex, portMAX_DELAY) == pdTRUE) {
+      result = value;
+      xSemaphoreGive(mutex);
+    }
+    return result;
+  }
+
+  operator T() {
+    return get();
+  }
+
+  Atomic& operator=(T newValue) {
+    set(newValue);
+    return *this;
+  }
+
+  template <typename U = T>
+  typename std::enable_if<std::is_arithmetic<U>::value, Atomic&>::type
+  operator+=(U rhs) {
+    if (xSemaphoreTake(mutex, portMAX_DELAY) == pdTRUE) {
+      value += rhs;
+      xSemaphoreGive(mutex);
+    }
+    return *this;
+  }
+
+  template <typename U = T>
+  typename std::enable_if<std::is_arithmetic<U>::value, Atomic&>::type
+  operator-=(U rhs) {
+    if (xSemaphoreTake(mutex, portMAX_DELAY) == pdTRUE) {
+      value -= rhs;
+      xSemaphoreGive(mutex);
+    }
+    return *this;
+  }
+
+  template <typename U = T>
+  typename std::enable_if<std::is_arithmetic<U>::value, T>::type
+  operator++(int) {
+    T oldValue;
+    if (xSemaphoreTake(mutex, portMAX_DELAY) == pdTRUE) {
+      oldValue = value++;
+      xSemaphoreGive(mutex);
+    }
+    return oldValue;
+  }
+
+  template <typename U = T>
+  typename std::enable_if<std::is_arithmetic<U>::value, T>::type
+  operator--(int) {
+    T oldValue;
+    if (xSemaphoreTake(mutex, portMAX_DELAY) == pdTRUE) {
+      oldValue = value--;
+      xSemaphoreGive(mutex);
+    }
+    return oldValue;
+  }
+
+  template <typename U = T>
+  typename std::enable_if<std::is_arithmetic<U>::value, Atomic&>::type
+  operator++() {
+    if (xSemaphoreTake(mutex, portMAX_DELAY) == pdTRUE) {
+      ++value;
+      xSemaphoreGive(mutex);
+    }
+    return *this;
+  }
+
+  template <typename U = T>
+  typename std::enable_if<std::is_arithmetic<U>::value, Atomic&>::type
+  operator--() {
+    if (xSemaphoreTake(mutex, portMAX_DELAY) == pdTRUE) {
+      --value;
+      xSemaphoreGive(mutex);
+    }
+    return *this;
+  }
+};
+
 //Variables:
 String SecurityCode;                //The password needed to access the settings
 String Password;                    //WiFi password
@@ -63,21 +172,17 @@ byte ValidSAK;                      //Optional parameter to check the NFC SAK to
 int ValidREQA;                      //Optional parameter to check the REQA to reject invalid NFC cards. Set 0 to disable.
 
 // System state variables
-volatile uint64_t ResetTime;        //Stores time when we should reset based on button.
-volatile bool Ready;                //Indicates system in idle state, waiting for card.
-volatile bool InSystem;
-volatile bool NotInSystem;
-volatile bool InvalidCard;
-volatile bool NoNetwork;
-volatile byte NetworkError;         //Increases by 1 every time there's a network issue, resets to 0 on successful network.
-volatile bool Fault;                //1 to indicate system fault and set lights/buzzers properly.
-volatile bool BuzzerStart = 1;
-volatile uint64_t NetworkTime;
-volatile byte IdleCount;            //How many times we've completed the loop without finding a card. If we hit a critical number, ping the server to keep the connection alive.
-volatile bool NetworkCheck;
-
-// Mutex for shared variables
-SemaphoreHandle_t stateMutex; // TODO: Declare holy war against heretics (race conditions)
+Atomic<bool> Ready{false};          //Indicates system in idle state, waiting for card.
+Atomic<bool> InSystem{false};
+Atomic<bool> NotInSystem{false};
+Atomic<bool> InvalidCard{false};
+Atomic<bool> NoNetwork{false};
+Atomic<byte> NetworkError{0};       //Increases by 1 every time there's a network issue, resets to 0 on successful network.
+Atomic<bool> Fault{false};          //1 to indicate system fault and set lights/buzzers properly.
+Atomic<bool> BuzzerStart{true};
+Atomic<uint64_t> NetworkTime{0};
+Atomic<byte> IdleCount{0};          //How many times we've completed the loop without finding a card. If we hit a critical number, ping the server to keep the connection alive.
+Atomic<bool> NetworkCheck{false};
 
 //Objects:
 USBCDC USBSerial;
@@ -91,12 +196,6 @@ ESP32OTAPull ota;
 HTTPClient http;
 
 void setup() {
-  stateMutex = xSemaphoreCreateMutex();
-  if (stateMutex == NULL) { // Should never really occur
-    USBSerial.println("Failed to create mutex");
-    while(1);
-  }
-
   // Start USBSerial communication.
   USBSerial.begin();
   USB.begin();
@@ -225,21 +324,24 @@ void loop() {
 void resetMonitor(void *pvParameters) {
   TickType_t xLastWakeTime = xTaskGetTickCount();
   const TickType_t xFrequency = 50 / portTICK_PERIOD_MS;
+  uint64_t resetTime = 0;
   
   while(1) {
     vTaskDelayUntil(&xLastWakeTime, xFrequency);
     
     if(digitalRead(Button)){
-      ResetTime = millis64() + 3000;
+      resetTime = ResetTime;
+    } else {
+        resetTime = ResetTime;
     }
-    
-    if(ResetTime <= millis64()){
-      LEDColor(255,0,0);
-      USBSerial.println(F("Restarting Device..."));
-      USBSerial.flush();
-      
-      vTaskDelay(500 / portTICK_PERIOD_MS);
-      ESP.restart();
+
+    if (resetTime <= millis64()) {
+        LEDColor(255, 0, 0);
+        USBSerial.println(F("Restarting Device..."));
+        USBSerial.flush();
+
+        vTaskDelay(500 / portTICK_PERIOD_MS);
+        ESP.restart();
     }
   }
 }

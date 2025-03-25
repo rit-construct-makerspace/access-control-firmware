@@ -22,7 +22,7 @@ void SignIn(void *pvParameters){
       USBSerial.print(F("UID Length: ")); USBSerial.println(uid_len);
       if(uid_len != ValidLength && ValidLength != 0){
         USBSerial.print(F("Invalid UID Length. Expected: ")); USBSerial.println(ValidLength);
-        InvalidCard = 1;
+        InvalidCard = true;
       }
       //Once we have the UID, we attempt to access the card's encrypted contents.
       //This is not actually used by the code, but its inevitable failure causes the card to break the connection, and respond to subsequent REQAs
@@ -40,20 +40,21 @@ void SignIn(void *pvParameters){
       if(!Ready){
         USBSerial.println(F("Ready to read card."));
       }
-      Ready = 1;
-      NotInSystem = 0;
-      InSystem = 0;
-      InvalidCard = 0;
-      BuzzerStart = 1;
-      Fault = 0;
+      Ready = true;
+      NotInSystem = false;
+      InSystem = false;
+      InvalidCard = false;
+      BuzzerStart = true;
+      Fault = false;
     } 
     else if(Ready && !InvalidCard){
       //If there is a card in range and we are ready to receive it;
-      Ready = 0;
+      Ready = false;
+      
       USBSerial.print(F("REQA Response: ")); USBSerial.println(atqa);
       if(ValidREQA != atqa && ValidREQA != 0){
         //More than 1 card found, error out
-        InvalidCard = 1;
+        InvalidCard = true;
         USBSerial.print(F("Invalid REQA. Expected: ")); USBSerial.println(ValidREQA);
         continue;
       }
@@ -61,7 +62,7 @@ void SignIn(void *pvParameters){
       USBSerial.print(F("SAK Response: ")); USBSerial.println(sak);
       if(sak != ValidSAK && ValidSAK != 0){
         USBSerial.print(F("Invalid SAK Response. Expected: ")); USBSerial.println(ValidSAK);
-        InvalidCard = 1;
+        InvalidCard = true;
         continue;
       }
       USBSerial.println(F("ATQA, SAK, and UID Length are valid."));
@@ -100,19 +101,20 @@ void SignIn(void *pvParameters){
       USBSerial.print(requestDuration);
       USBSerial.println(F(" ms"));
       USBSerial.print(F("HTTP Response Code: ")); USBSerial.println(httpCode);
+      
       if(httpCode == 202){
         USBSerial.println(F("User found in system."));
         NetworkError = 0;
-        InSystem = 1;
+        InSystem = true;
       }
       else if(httpCode == 406){
         USBSerial.println(F("User not in system"));
         NetworkError = 0;
-        NotInSystem = 1;
+        NotInSystem = true;
       }
       else{
         USBSerial.println(F("Unexpected HTTP Response."));
-        Fault = 1;
+        Fault = true;
         if(httpCode < 0){
           USBSerial.println(F("Indication of Network Failure?"));
           NetworkError++;
@@ -123,9 +125,10 @@ void SignIn(void *pvParameters){
     // If we've been idle too long, ping the server to keep connection alive
     if(IdleCount >= IDLE_THRESHOLD){
       http.end();
-      NetworkCheck = 1;
-      LEDColor(255, 255, 255);
+      NetworkCheck = true;
       IdleCount = 0;
+      
+      LEDColor(255, 255, 255);
       String ServerPath = Server + "/api/state/" + STATE_TARGET;
       
       // 10 second timeout
@@ -150,7 +153,7 @@ void SignIn(void *pvParameters){
         NetworkError = 0;
       }
       
-      NetworkCheck = 0;
+      NetworkCheck = false;
       LEDColor(0,0,0);
       http.end();
     }

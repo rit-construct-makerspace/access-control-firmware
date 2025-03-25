@@ -11,9 +11,8 @@ void LEDControl(void *pvParameters){
     byte red = 0;
     byte green = 0;
     byte blue = 0;
-
-    // TODO: Validate this new ordering. Following logic based on previous conditions
-    // Prob a micro op tho
+    
+    // TODO: Validate this new ordering. 
     if (!digitalRead(Button)) {
       red = 0;
       green = 0;
