@@ -29,7 +29,7 @@ USBConfig: Allows programatic changing of settings over USB
 
 
 //Settings
-#define Version "1.2.7"
+#define Version "1.2.8"
 #define Hardware "2.3.2-LE"
 #define MAX_DEVICES 10 //How many possible temperature sensors to scan for
 #define OTA_URL "https://github.com/rit-construct-makerspace/access-control-firmware/releases/latest/download/otadirectory.json"
@@ -105,6 +105,7 @@ bool CardUnread;                         //A card is preesnt in the machine but 
 bool VerifiedBeep;                       //Flag, set to 1 to sound a beep when a card is verified. Lets staff knw it is valid to use their key when the machine is in a non-idle state.
 bool ReadError;                          //Flag, set 1 when we fail to read a card to flash lights/buzzers.
 bool NoBuzzer;                           //Flag, set to 1 to mute the buzzer.
+bool ResetLED;                           //Flag, set to 1 to show a purple light on the front indicating a reset
 
 //Libraries:
 #include <OneWireESP32.h>         //Version 2.0.2 | Source: https://github.com/junkfix/esp32-ds18b20
@@ -229,7 +230,6 @@ void setup(){
 
     if(DebugMode){
       Serial.print(F("Wireless MAC: ")); Serial.println(WiFi.macAddress());
-      Serial.print(F("Ethernet MAC: ")); Serial.println(F("No ethernet on this board."));
     }
 
 
@@ -322,9 +322,16 @@ void setup(){
   if(rtc_get_reset_reason(0) != POWERON_RESET){
     //Reset for a reason other than power on reset.
     State = settings.getString("LastState");
+    if(State == NULL){
+      //There wasn't a state to retrieve?
+      State = "Startup";
+    }
+  } else{
+    State = "Startup";
   }
-  if(State == NULL){
-    State = "Lockout";
+  if(DebugMode){
+    Serial.print(F("Set State: "));
+    Serial.println(State);
   }
 
   //Disable the startup lights
@@ -343,7 +350,7 @@ void setup(){
   xTaskCreate(InternalWrite, "InternalWrite", 2048, NULL, 5, &xHandle);
   xTaskCreate(LEDControl, "LEDControl", 1024, NULL, 5, NULL);
   xTaskCreate(BuzzerControl, "BuzzerControl", 1024, NULL, 5, NULL);
-  xTaskCreate(MachineState, "MachineState", 1024, NULL, 5, NULL);
+  xTaskCreate(MachineState, "MachineState", 2048, NULL, 5, NULL);
   xTaskCreate(NetworkCheck, "NetworkCheck", 4096, NULL, 3, NULL);
   xTaskCreate(MessageReport, "MessageReport", 2048, NULL, 3, NULL);
   xTaskResumeAll();

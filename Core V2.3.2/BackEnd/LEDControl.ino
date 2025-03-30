@@ -74,6 +74,14 @@ void LEDControl(void *pvParameters) {
       //Animation 1: Solid Red
       LEDAnimation = 1;
     }
+    if(State.equals("Startup")){
+      //Animation 7: Solid Blue
+      LEDAnimation = 7;
+    }
+    if(ResetLED){
+      //Animation 8: Solid Purple
+      LEDAnimation = 8;
+    }
     //Done checking the State, release mutex;
     xSemaphoreGive(StateMutex);
     if(TemperatureFault || Fault){
@@ -155,6 +163,18 @@ void LEDControl(void *pvParameters) {
         //Solid White
         Red = 255;
         Green = 255;
+        Blue = 255;
+      break;
+      case 7:
+        //Solid Blue
+        Red = 0;
+        Green = 0;
+        Blue = 255;
+      break;
+      case 8:
+        //Solid Purple
+        Red = 255;
+        Green = 0;
         Blue = 255;
       break;
       }

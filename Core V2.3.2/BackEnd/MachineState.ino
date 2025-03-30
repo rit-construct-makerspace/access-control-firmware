@@ -82,7 +82,7 @@ void MachineState(void *pvParameters) {
               KeyDebounce++;
             }
             if(KeyDebounce >= 150 && !Key1 && !Key2){
-              //WE made it the full debounce time
+              //We made it the full debounce time
               State = "Lockout";
             }
         } else if(Key2){
@@ -148,16 +148,21 @@ void MachineState(void *pvParameters) {
     //Constantly set the reset time 5 seconds in the future when the button isn't pressed.
     if(Button){
       ButtonTime = millis64() + 3000;
+      ResetLED = 0;
+    } else{
+      ResetLED = 1;
     }
     if(millis64() >= ButtonTime){
-      //It has been 5 seconds, restart.
+      //It has been 3 seconds, restart.
+      xSemaphoreTake(StateMutex, portMAX_DELAY);
       settings.putString("LastState", State);
+      delay(10);
       State = "Restart";
       //Turn off the internal write task so that it doesn't overwrite the restart led color.
       vTaskSuspend(xHandle);
       delay(100);
       Serial.println(F("RESTARTING. Source: Button."));
-      Internal.println("L 0,0,255");
+      Internal.println("L 255,0,0");
       Internal.println("S 0");
       Internal.flush();
       ESP.restart();

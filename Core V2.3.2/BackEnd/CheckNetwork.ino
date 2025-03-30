@@ -59,9 +59,6 @@ void NetworkCheck(void *pvParameters) {
           if(DebugMode){
             Serial.println(F("Couldn't find network."));
             NoNetwork = 1;
-            xSemaphoreGive(NetworkMutex);
-            //No need to check the rest.
-            continue;
           }
         }
       }
