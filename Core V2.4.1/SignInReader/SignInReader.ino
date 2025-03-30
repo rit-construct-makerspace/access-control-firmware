@@ -22,7 +22,7 @@ March 2025
 #define LOW_TONE 2000
 #define ToneTime 250
 #define IDLE_THRESHOLD 200
-#define STATE_TARGET "kmxmill1" //Ranom machine that's not, used to keep server connection alive.
+#define STATE_TARGET "kmxmill1" //Ranom machine that's real, used to keep server connection alive.
 
 //Pin Definitions
 #define MOSI_PIN 8

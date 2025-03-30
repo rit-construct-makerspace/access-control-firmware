@@ -1,24 +1,35 @@
-#include <Arduino.h>
-#include "XT_I2S_Audio.h"
-#include "WavData.h"
-#include "MusicDefinitions.h"
+// PlayWAV - Earle F. Philhower, III <earlephilhower@yahoo.com>
+// Released to the public domain December 2024.
+//
+// When BOOTSEL preseed, plays a small WAV file from ROM
+// asynchronously with a single call.
+// Hook up an earphone to pins 0, 1, and GND to hear the PWM output.
+//
+// Generate the ROM file by using "xxd -i file.wav file.h" and then
+// editing the output header to make the array "const" so it stays
+// only in flash.
+//
+// Intended as a simple demonstration of BackgroundAudio usage.
 
-//    I2S
-#define I2S_DOUT 14 // i2S Data out oin
-#define I2S_BCLK 9 // Bit clock
-#define I2S_LRC 16  // Left/Right clock, also known as Frame clock or word select
+#include <BackgroundAudioWAV.h>
+#include <WavData.h>
 
+#include <ESP32I2SAudio.h>
+ESP32I2SAudio audio(9, 12, 14); // BCLK, LRCLK, DOUT (,MCLK)
 
-XT_I2S_Class I2SAudio(I2S_LRC, I2S_BCLK, I2S_DOUT, I2S_NUM_0);
+ROMBackgroundAudioWAV BMP(audio);
 
-void setup()
-{
-  Serial.begin(115200); // Used for info/debug
+void setup() {
+  // Start the background player
+  BMP.begin();
 }
 
-void loop()
-{
-  I2SAudio.Beep(1500, 250, 5);
-  I2SAudio.Beep(1000, 250, 5);
-  delay(1000);
+uint32_t last = 0;
+void loop() {
+  if (millis() - last > 40000) {
+    Serial.printf("Runtime: %lu, %d\r\n", millis(), audio.frames());
+    last = millis();
+    BMP.flush(); // Stop any existing output, reset for new file
+    BMP.write(file, sizeof(file));
+  }
 }
