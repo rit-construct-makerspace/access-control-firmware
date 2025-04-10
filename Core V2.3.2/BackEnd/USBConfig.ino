@@ -31,14 +31,22 @@ DebugMode used to turn on verbose outputs
 */
 
 void USBConfig(void *pvParameters){
-    if(SecurityCode == NULL){
-      Serial.println(F("ERROR: NO CONFIG?"));
-    }
+  byte BadInputCount = 0; //Tracks how many times an incorrect password/JSON was input.
+
+  if(SecurityCode == NULL){
+    Serial.println(F("ERROR: NO CONFIG?"));
+  }
+
   while(1){
     //Check once a second;
     vTaskDelay(1000 / portTICK_PERIOD_MS);
     if(Serial.available() > 10){
       //There is a message of substance in the serial buffer
+      if(TXINTERRUPT){
+        //TX is being rerouted to the interrupt pin, need to route back to USB.
+        Serial.end();
+        Serial.begin(115200);
+      }
       Serial.setTimeout(3);
       String USBInput = Serial.readString();
       USBInput.trim();
@@ -48,6 +56,7 @@ void USBConfig(void *pvParameters){
       SecurityCode = settings.getString("SecurityCode"); //Make sure we have the most up-to-date code to be safe
       if(OldPassword.equals(SecurityCode) || (SecurityCode == NULL)){
         //Passwords match or there is no password. Load the JSON info;
+        BadInputCount = 0;
         if(usbjson["NewPassword"]){
           //New password present, update that...
           const char* Temp = usbjson["NewPassword"];
@@ -55,6 +64,34 @@ void USBConfig(void *pvParameters){
           xSemaphoreTake(DebugMutex, portMAX_DELAY);
           Serial.print(F("Updated Password to:"));
           Serial.println(Temp);
+          xSemaphoreGive(DebugMutex);
+        }
+        if(usbjson["DumpAll"]){
+          //Dump all settings
+          usbjson.clear(); //Wipe whatever's in the json
+          WriteSetting("SSID");
+          WriteSetting("Password");
+          WriteSetting("Server");
+          if(DumpKey){
+            WriteSetting("Key");
+          } else{
+            usbjson["Key"] = "super-secret";
+          }
+          WriteSetting("MachineID");
+          WriteSetting("MachineType");
+          WriteSetting("SwitchType");
+          WriteSetting("Zone");
+          WriteSetting("NeedsWelcome");
+          WriteSetting("TempLimit");
+          WriteSetting("NetworkMode");
+          WriteSetting("Frequency");
+          WriteSetting("DebugMode");
+          WriteSetting("NoBuzzer");
+          String ToSend;
+          serializeJson(usbjson, ToSend);
+          xSemaphoreTake(DebugMutex, portMAX_DELAY);
+          Serial.println(ToSend);
+          Serial.flush();
           xSemaphoreGive(DebugMutex);
         }
         UpdateSetting("SSID");
@@ -82,10 +119,39 @@ void USBConfig(void *pvParameters){
         ESP.restart();
       } else{
         //Bad input, disregard.
+        if(usbjson["Wipe"]){
+          //Ordered to wipe data
+          Serial.println(F("Forcing wipe of memory with bad inputs."));
+          BadInputCount = BAD_INPUT_THRESHOLD;
+        }
+        BadInputCount++;
         xSemaphoreTake(DebugMutex, portMAX_DELAY);
         Serial.println(F("Bad Input"));
+        Serial.print(BadInputCount);
+        Serial.print(" / ");
+        Serial.println(BAD_INPUT_THRESHOLD);
         Serial.flush();
+        if(BadInputCount >= BAD_INPUT_THRESHOLD){
+          Serial.println(F("TOO MANY BAD INPUTS. WIPING DATA."));
+          nvs_flash_deinit();     // disable NVS flash.
+          nvs_flash_erase();      // erase the NVS partition and...
+          nvs_flash_init();       // initialize the NVS partition.
+          Serial.println(F("Wipe Complete."));
+          Serial.println(F("Restarting..."));
+          Serial.flush();
+          delay(100);
+          ESP.restart();
+        }
         xSemaphoreGive(DebugMutex);
+      }
+      if(TXINTERRUPT){
+        //Need to set the TX back to the debug output.
+        Serial.println(F("Rerouting UART to Interrupt."));
+        Serial.flush();
+        Serial.end();
+        Serial.begin(115200, SERIAL_8N1, -1, DB9INT);
+        Serial.println(F("Serial rerouted back to Interrupt pin for logging (was rerouted for USBN Config)."));
+        Serial.flush();
       }
     }
     //Wait another 10 seconds before checking again.
@@ -111,4 +177,9 @@ void UpdateSetting(String Key) {
   }
   //Key is present
   settings.putString(Key.c_str(), Temp);
+}
+
+void WriteSetting(String Parameter){
+  //Writes the specified parameter to the JSON "usbjson", for eventual printing.
+  usbjson[Parameter] = settings.getString(Parameter.c_str());
 }

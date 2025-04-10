@@ -29,9 +29,9 @@ USBConfig: Allows programatic changing of settings over USB
 
 
 //Settings
-#define Version "1.2.8"
+#define Version "1.2.9"
 #define Hardware "2.3.2-LE"
-#define MAX_DEVICES 10 //How many possible temperature sensors to scan for
+#define MAX_DEVICES 2 //How many possible temperature sensors to scan for
 #define OTA_URL "https://github.com/rit-construct-makerspace/access-control-firmware/releases/latest/download/otadirectory.json"
 #define TemperatureTime 5000 //How long to delay between temperature measurements, in milliseconds
 #define FEPollRate 10000 //How long, in milliseconds, to go between an all-values poll of the frontend (in addition to event-based)
@@ -40,6 +40,9 @@ USBConfig: Allows programatic changing of settings over USB
 #define BuzzerNoteTime 250 //Time in milliseconds between different tones
 #define KEYSWITCH_DEBOUNCE 150 //time in milliseconds between checks of the key switch, to help prevent rapid state changes.
 #define InternalReadDebug 0 //Set to 0 to disable debug messages from the internal read, since it ends up spamming the terminal.
+#define DumpKey 1 //Set to 1 to allow the API key to be dumped over USB when requested. If set to 0, will just return "super-secret"
+#define BAD_INPUT_THRESHOLD 5 //If the wrong password or a bad JSON is loaded more than this many times, delete all information as a safety.
+#define TXINTERRUPT 1 //Set to 1 to route UART0 TX to the DB9 interrupt pin, to allow external loggers to capture crash data.
 
 //Global Variables:
 bool TemperatureUpdate;                  //1 when writing new information, to indicate other devices shouldn't read temperature-related info
@@ -124,6 +127,7 @@ bool ResetLED;                           //Flag, set to 1 to show a purple light
 #include <WiFi.h>                 //Version 3.1.1 | Inherent to ESP32 Arduino
 #include "esp_timer.h"            //Version 3.1.1 | Inherent to ESP32 Arduino
 #include "esp32s2/rom/rtc.h"      //Version 3.1.1 | Inherent to ESP32 Arduino
+#include <nvs_flash.h>            //Version 3.1.1 | Inherent to ESP32 Arduino
 
 //Pin Definitions:
 const int ETHINT = 13;
@@ -181,7 +185,11 @@ void setup(){
 
   delay(5000); 
 
-	Serial.begin(115200);
+  if(TXINTERRUPT){
+    Serial.begin(115200, SERIAL_8N1, -1, DB9INT);
+  } else{
+    Serial.begin(115200);
+  }
   Serial.println(F("STARTUP"));
 
   //First, load all settings from memory
