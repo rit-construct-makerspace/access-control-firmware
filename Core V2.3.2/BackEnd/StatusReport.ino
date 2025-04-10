@@ -104,7 +104,13 @@ void SendReport(String Reason){
     if(DebugMode){
       if(xSemaphoreTake(DebugMutex,(5/portTICK_PERIOD_MS)) == pdTRUE){
         Serial.println(F("Sending Status Message: "));
-        Serial.println(statuspayload);
+        if(SanitizeDebug){
+          String sanitized = statuspayload;
+          sanitized.replace(Key, "(sanitized)");
+          Serial.println(sanitized);
+        } else{
+          Serial.println(statuspayload);
+        }
         xSemaphoreGive(DebugMutex);
       }
     }

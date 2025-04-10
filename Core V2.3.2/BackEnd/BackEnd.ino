@@ -41,6 +41,7 @@ USBConfig: Allows programatic changing of settings over USB
 #define KEYSWITCH_DEBOUNCE 150 //time in milliseconds between checks of the key switch, to help prevent rapid state changes.
 #define InternalReadDebug 0 //Set to 0 to disable debug messages from the internal read, since it ends up spamming the terminal.
 #define DumpKey 1 //Set to 1 to allow the API key to be dumped over USB when requested. If set to 0, will just return "super-secret"
+#define SanitizeDebug 1 //Set to 1 to remove the key when printing debug information. If this and DumpKey are both 1, there is no way to pull the API key without uploading malicious code.
 #define BAD_INPUT_THRESHOLD 5 //If the wrong password or a bad JSON is loaded more than this many times, delete all information as a safety.
 #define TXINTERRUPT 1 //Set to 1 to route UART0 TX to the DB9 interrupt pin, to allow external loggers to capture crash data.
 
@@ -323,10 +324,8 @@ void setup(){
 
   //Set the inital state
   //If the ESP32 performed a controlled restart, such as to install an OTA update or try to fix a wireless issue, 
-  if(DebugMode){
-    Serial.print(F("Reset Reason: "));
-    print_reset_reason(rtc_get_reset_reason(0));
-  }
+  Serial.print(F("Reset Reason: "));
+  print_reset_reason(rtc_get_reset_reason(0));
   if(rtc_get_reset_reason(0) != POWERON_RESET){
     //Reset for a reason other than power on reset.
     State = settings.getString("LastState");
@@ -354,7 +353,7 @@ void setup(){
   xTaskCreate(ReadCard, "ReadCard", 2048, NULL, 5, NULL);
   xTaskCreate(StatusReport, "StatusReport", 5000, NULL, 2, NULL);
   xTaskCreate(VerifyID, "VerifyID", 4096, NULL, 1, NULL);
-  //InternalWrite has a handle to allow it to be suspended before a restart.
+  //InternalWrite has a handle to allow it to be suspended before a restart (disables lighting changes)
   xTaskCreate(InternalWrite, "InternalWrite", 2048, NULL, 5, &xHandle);
   xTaskCreate(LEDControl, "LEDControl", 1024, NULL, 5, NULL);
   xTaskCreate(BuzzerControl, "BuzzerControl", 1024, NULL, 5, NULL);
