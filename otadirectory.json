@@ -1,15 +1,15 @@
 {
   "Configurations": [
     {
+      "Device": "ACS Core",
       "Config": "2.3.2-LE",
       "Version": "1.2.8",
-      "Device": "ACS Core",
       "URL": "https://github.com/rit-construct-makerspace/access-control-firmware/releases/latest/download/core232le.bin"
     },
     {
+      "Device": "Sign In",
       "Config": "2.4.1-LE",
       "Version": "1.2.1",
-      "Device": "Sign In",
       "URL": "https://github.com/rit-construct-makerspace/access-control-firmware/releases/download/V1.2.1-SignIn/signin241le.bin"
     }
   ]
