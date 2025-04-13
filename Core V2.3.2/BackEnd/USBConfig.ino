@@ -42,13 +42,14 @@ void USBConfig(void *pvParameters){
     vTaskDelay(1000 / portTICK_PERIOD_MS);
     if(Serial.available() > 10){
       //There is a message of substance in the serial buffer
+      Serial.setTimeout(3);
+      String USBInput = Serial.readString();
+      delay(50);
       if(TXINTERRUPT){
         //TX is being rerouted to the interrupt pin, need to route back to USB.
         Serial.end();
         Serial.begin(115200);
       }
-      Serial.setTimeout(3);
-      String USBInput = Serial.readString();
       USBInput.trim();
       deserializeJson(usbjson, USBInput);
       //Check if the passwords match
@@ -93,6 +94,7 @@ void USBConfig(void *pvParameters){
           Serial.println(ToSend);
           Serial.flush();
           xSemaphoreGive(DebugMutex);
+          continue;
         }
         UpdateSetting("SSID");
         UpdateSetting("Password");
@@ -110,6 +112,10 @@ void USBConfig(void *pvParameters){
         UpdateSetting("NoBuzzer");
 
         //Restart to apply settings.
+        if(usbjson["DumpAll"]){
+          //Since we just dumped info and didn't update, can skip restart
+          continue;
+        }
         xSemaphoreTake(DebugMutex, portMAX_DELAY);
         Serial.println(F("Settings Applied."));   
         Serial.println(F("Rebooting in 5 seconds..."));
@@ -149,7 +155,7 @@ void USBConfig(void *pvParameters){
         Serial.println(F("Rerouting UART to Interrupt."));
         Serial.flush();
         Serial.end();
-        Serial.begin(115200, SERIAL_8N1, -1, DB9INT);
+        Serial.begin(115200, SERIAL_8N1, 44 , DB9INT);
         Serial.println(F("Serial rerouted back to Interrupt pin for logging (was rerouted for USBN Config)."));
         Serial.flush();
       }

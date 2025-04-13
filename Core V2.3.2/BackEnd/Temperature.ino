@@ -64,6 +64,9 @@ void Temperature(void *pvParameters){
         xSemaphoreGive(DebugMutex);
       }
     }
+    if(TempLimit == 0){
+      continue;
+    }
     if(SysMaxTemp > TempLimit){
       TemperatureFault = 1;
       TemperatureStatus = 1;

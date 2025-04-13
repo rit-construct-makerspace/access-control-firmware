@@ -43,7 +43,7 @@ USBConfig: Allows programatic changing of settings over USB
 #define DumpKey 1 //Set to 1 to allow the API key to be dumped over USB when requested. If set to 0, will just return "super-secret"
 #define SanitizeDebug 1 //Set to 1 to remove the key when printing debug information. If this and DumpKey are both 1, there is no way to pull the API key without uploading malicious code.
 #define BAD_INPUT_THRESHOLD 5 //If the wrong password or a bad JSON is loaded more than this many times, delete all information as a safety.
-#define TXINTERRUPT 1 //Set to 1 to route UART0 TX to the DB9 interrupt pin, to allow external loggers to capture crash data.
+#define TXINTERRUPT 0 //Set to 1 to route UART0 TX to the DB9 interrupt pin, to allow external loggers to capture crash data.
 
 //Global Variables:
 bool TemperatureUpdate;                  //1 when writing new information, to indicate other devices shouldn't read temperature-related info
@@ -186,8 +186,11 @@ void setup(){
 
   delay(5000); 
 
+  //We want to start the USBConfig early, so we can send new credentials for WiFi and the like before startup.
+  xTaskCreate(USBConfig, "USBConfig", 4096, NULL, 2, NULL);
+
   if(TXINTERRUPT){
-    Serial.begin(115200, SERIAL_8N1, -1, DB9INT);
+    Serial.begin(115200, SERIAL_8N1, 44, DB9INT);
   } else{
     Serial.begin(115200);
   }
@@ -199,7 +202,6 @@ void setup(){
   if(SecurityCode == NULL){
     Serial.println(F("CAN'T FIND SETTINGS - FRESH INSTALL?"));
     Serial.println(F("HOLDING FOR UPDATE FOREVER..."));
-    xTaskCreate(USBConfig, "USBConfig", 4096, NULL, 2, NULL);
     //Nuke the rest of this process - we can't do anything without our config.
     vTaskSuspend(NULL);
   }
