@@ -70,6 +70,7 @@ void USBConfig(void *pvParameters){
         if(usbjson["DumpAll"]){
           //Dump all settings
           usbjson.clear(); //Wipe whatever's in the json
+          usbjson["MAC"] = WiFi.macAddress();
           WriteSetting("SSID");
           WriteSetting("Password");
           WriteSetting("Server");

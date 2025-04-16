@@ -40,8 +40,8 @@ USBConfig: Allows programatic changing of settings over USB
 #define BuzzerNoteTime 250 //Time in milliseconds between different tones
 #define KEYSWITCH_DEBOUNCE 150 //time in milliseconds between checks of the key switch, to help prevent rapid state changes.
 #define InternalReadDebug 0 //Set to 0 to disable debug messages from the internal read, since it ends up spamming the terminal.
-#define DumpKey 1 //Set to 1 to allow the API key to be dumped over USB when requested. If set to 0, will just return "super-secret"
-#define SanitizeDebug 1 //Set to 1 to remove the key when printing debug information. If this and DumpKey are both 1, there is no way to pull the API key without uploading malicious code.
+#define DumpKey 0 //Set to 1 to allow the API key to be dumped over USB when requested. If set to 0, will just return "super-secret"
+#define SanitizeDebug 1 //Set to 1 to remove the key when printing debug information. With this and DumpKey, there is no way to pull the API key without uploading malicious code.
 #define BAD_INPUT_THRESHOLD 5 //If the wrong password or a bad JSON is loaded more than this many times, delete all information as a safety.
 #define TXINTERRUPT 0 //Set to 1 to route UART0 TX to the DB9 interrupt pin, to allow external loggers to capture crash data.
 
