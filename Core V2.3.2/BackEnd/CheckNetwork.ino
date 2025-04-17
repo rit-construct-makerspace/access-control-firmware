@@ -9,109 +9,91 @@ Global Variables Used:
 */
 
 void NetworkCheck(void *pvParameters) {
-  bool NetworkRetry = 1;
   while (1) {
     //Periodically check
     vTaskDelay(10000 / portTICK_PERIOD_MS);
-    if(CheckNetwork){
+    if(CheckNetwork || NoNetwork){
       CheckNetwork = 0;
       //Network issue reported
-      Serial.println(F("Checking network."));
+      Serial.println(F("Checking local network connection."));
       xSemaphoreTake(NetworkMutex, portMAX_DELAY);
+      if(WiFi.status() != WL_CONNECTED){
+        Serial.println(F("Already see no connection, I'll try to reconnect."));
+        WiFi.disconnect();
+        WiFi.mode(WIFI_OFF);
+        WiFiConnect();
+        delay(2000);
+      }
+      xSemaphoreGive(NetworkMutex);
       //Step 1: Are we connected to WiFi? 
       if(WiFi.status() != WL_CONNECTED){
+        Serial.println(F("No WiFi connection."));
         NoNetwork = 1;
-        if(DebugMode){
-          Serial.println(F("No WiFi connection!"));
-        }
-        //Check if the network is available even;
-        int count = WiFi.scanNetworks();
-        if(count == 0){
-          if(DebugMode){
-            Serial.println(F("No WiFi networks available!"));
-          }
-          NoNetwork = 1;
-        } 
-        else{
-          for (int i = 0; i < count; i++){
-            if(WiFi.SSID(i) == SSID){
-              //The network is here, but we are not connected.
-              if(DebugMode){
-                Serial.println(F("Attempting to reconnect to WiFi"));
-              }
-              //Wireless Initialization:
-              if (Password != "null") {
-                WiFi.mode(WIFI_STA);
-                WiFi.begin(SSID, Password);
-              } else {
-                if (DebugMode) {
-                  Serial.println(F("Using no password."));
-                }
-                WiFi.begin(SSID);
-              }
-              WiFi.setSleep(false);
-              WiFi.setAutoReconnect(true);
-            }
-          }
-        }
-        if(WiFi.status() != WL_CONNECTED){
-          //If we make it here, we didn't find or reconnect to the network.
-          if(DebugMode){
-            Serial.println(F("Couldn't find network."));
-            NoNetwork = 1;
-          }
-        }
+        //We know the issue, no need to continue check.
+        continue;
+      } else{
+        Serial.println(F("Found WiFi network."));
       }
       //Step 2: Are we connected to the web?
-      String ServerPath = "https://example.com";
+      Serial.println(F("Checking internet connection."));
+      String ServerPath = "https://www.rit.edu";
       http.begin(client, ServerPath);
       int httpResponseCode = http.GET();
       http.end();
       xSemaphoreGive(NetworkMutex);
-      if (httpResponseCode>0) {
-        Serial.print("HTTP Response code: ");
-        Serial.println(httpResponseCode);
-        NoNetwork = 0;
-        //So the network works.
-        //Step 3: Is it our specific server maybe? 
-        ServerPath = Server + "/api/check/" + MachineID;
-        xSemaphoreTake(NetworkMutex, portMAX_DELAY);
-        http.begin(client, ServerPath);
-        httpResponseCode = http.GET();
-        http.end();
-        xSemaphoreGive(NetworkMutex);
-        if(httpResponseCode != 200){
-          //Unable to reach server. Not a network or hardware issue though.
-          //So we still act like there's no network, but don't bother trying to reconnect or restart or anything.
-          NoNetwork = 1;
-        } else{
-          //We were able to connect fine 
-          NoNetwork = 0;
-        }
+      if(httpResponseCode == 200){
+        Serial.println(F("Got expected 200 response from rit.edu."));
+        Serial.println(F("No issue with internet connection."));
       }
-      else {
-        Serial.print("Error code: ");
+      else if (httpResponseCode>0){
+      Serial.print("Got unexpected HTTP Response code: ");
+      Serial.println(httpResponseCode);
+      Serial.println(F("Probably an internet connectivity issue?"));
+      continue;
+      } 
+      else{        
+        Serial.print(F("Got concerning HTTP response code: "));
+        Serial.println(httpResponseCode);
+        Serial.print(F("Which means: "));
         Serial.println(http.errorToString(httpResponseCode));
-        //We'll run through everything else again just to be sure;
+        NetworkReboot();
+      }
+      //Step 3: Is it our specific server maybe? 
+      Serial.println(F("Checking our server."));
+      ServerPath = Server + "/api/check/" + MachineID;
+      xSemaphoreTake(NetworkMutex, portMAX_DELAY);
+      http.begin(client, ServerPath);
+      httpResponseCode = http.GET();
+      http.end();
+      xSemaphoreGive(NetworkMutex);
+      if(httpResponseCode != 200){
+        //Unable to reach server. Not a network or hardware issue though.
+        //So we still act like there's no network, but don't bother trying to reconnect or restart or anything.
+        Serial.println(F("Did not get expected response code."));
+        Serial.println(F("Probably an issue with our server."));
         NoNetwork = 1;
-        if(NetworkRetry = 1){
-          NetworkRetry = 0;
-          continue;
-        }
-        Serial.println(F("Failed repeatedly to connect to network with an invalid response"));
-        if(State != "Unlocked" && State != "AlwaysOn"){
-          //We are not in a running state
-          Serial.println(F("Since we are not doing anything right now, going to restart the machine."));
-          settings.putString("LastState", State);
-          xSemaphoreTake(NetworkMutex, portMAX_DELAY);
-          State = "Lockout";
-          delay(5000);
-          ESP.restart();
-        } else{
-          Serial.println(F("Deferring restart since the machine is in use."));
-          delay(10000);
-        }
+      } else{
+        //We were able to connect fine 
+        NoNetwork = 0;
+        Serial.println(F("Seemed to connect fine. No network problems found."));
       }
     }
+  }
+}
+
+void NetworkReboot(){
+  //Reboots the device due to a network issue.
+  Serial.println(F("Found a network issue that likely means there's a hardware fault."));
+  if(State != "Unlocked" && State != "AlwaysOn"){
+  //We are not in a running state
+  Serial.println(F("Since we are not doing anything right now, going to restart the machine."));
+  settings.putString("LastState", State);
+  State = "Lockout";
+  delay(5000);
+  ESP.restart();
+  } else{
+    Serial.println(F("Deferring restart since the machine is in use."));
+    Serial.println(F("Will check everything again in 10 seconds."));
+    delay(10000);
   }
 }

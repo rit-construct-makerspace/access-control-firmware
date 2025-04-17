@@ -220,43 +220,24 @@ void setup(){
   DebugMode = settings.getString("DebugMode").toInt();
   NoBuzzer = settings.getString("NoBuzzer").toInt();
 
-  if(NetworkMode != 2){
-    if (DebugMode) {
-      Serial.print("Attempting to connect to SSID: ");
-        Serial.println(SSID);
-    }
-    //Wireless Initialization:
-    if (Password != "null") {
-      WiFi.mode(WIFI_STA);
-      WiFi.begin(SSID, Password);
-    } else {
-      if (DebugMode) {
-        Serial.println(F("Using no password."));
-      }
-      WiFi.begin(SSID);
-    }
+  WiFiConnect();
 
-    WiFi.setSleep(false);
-    WiFi.setAutoReconnect(true);
+  if(DebugMode){
+    Serial.print(F("Wireless MAC: ")); Serial.println(WiFi.macAddress());
+  }
 
-    if(DebugMode){
-      Serial.print(F("Wireless MAC: ")); Serial.println(WiFi.macAddress());
-    }
-
-
-    //Attempt to connect to Wifi network:
-    while (WiFi.status() != WL_CONNECTED) {
-      Serial.print(".");
-      //Add another dot every second...
-      delay(1000);
-    }
-    if (DebugMode) {
-      Serial.println("");
-      Serial.print("Connected to ");
-      Serial.println(SSID);
-      Serial.print(F("Local IP: "));
-      Serial.println(WiFi.localIP());
-    }
+  //Attempt to connect to Wifi network:
+  while (WiFi.status() != WL_CONNECTED) {
+    Serial.print(".");
+    //Add another dot every second...
+    delay(1000);
+  }
+  if (DebugMode) {
+    Serial.println("");
+    Serial.print("Connected to ");
+    Serial.println(SSID);
+    Serial.print(F("Local IP: "));
+    Serial.println(WiFi.localIP());
   }
 
   client.setInsecure();
@@ -461,5 +442,26 @@ void GamerMode(void *pvParameters){
     delay(300);
     Internal.println("L 0,0,255");
     delay(300);
+  }
+}
+
+void WiFiConnect(){
+  if(NetworkMode != 2){
+  if (DebugMode) {
+    Serial.print("Attempting to connect to SSID: ");
+      Serial.println(SSID);
+  }
+  //Wireless Initialization:
+  if (Password != "null") {
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(SSID, Password);
+  } else {
+    if (DebugMode) {
+      Serial.println(F("Using no password."));
+    }
+    WiFi.begin(SSID);
+  }
+  WiFi.setSleep(false);
+  WiFi.setAutoReconnect(true);
   }
 }
