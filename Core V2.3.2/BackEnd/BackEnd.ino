@@ -280,6 +280,7 @@ void setup(){
   if (!versiondata) {
     Serial.println("Didn't find PN532 board. Trying again...");
     delay(250);
+    vTaskDelete(xHandle2); //Delete the Gamer mode lights
     if(StartupFault){
       Internal.println(F("L 255,0,0"));
     } else{
@@ -319,7 +320,7 @@ void setup(){
   if(rtc_get_reset_reason(0) != POWERON_RESET){
     //Reset for a reason other than power on reset.
     State = settings.getString("LastState");
-    if(State == NULL){
+    if(State == NULL || State == "Restart"){
       //There wasn't a state to retrieve?
       State = "Startup";
     }
@@ -332,7 +333,7 @@ void setup(){
     Serial.println(State);
   }
 
-  //Check for a core panic reset, report it
+  //Check for a possible panic crash, report it.
   if(ResetReason == "Unknown" && rtc_get_reset_reason(0) == RTC_SW_CPU_RESET){
     ResetReason = "Panic-Crash";
   }
