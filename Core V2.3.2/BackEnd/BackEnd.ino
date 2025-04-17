@@ -27,9 +27,8 @@ USBConfig: Allows programatic changing of settings over USB
 
 */
 
-
 //Settings
-#define Version "1.2.9"
+#define Version "1.3.0"
 #define Hardware "2.3.2-LE"
 #define MAX_DEVICES 2 //How many possible temperature sensors to scan for
 #define OTA_URL "https://raw.githubusercontent.com/rit-construct-makerspace/access-control-firmware/refs/heads/main/otadirectory.json"
@@ -110,6 +109,7 @@ bool VerifiedBeep;                       //Flag, set to 1 to sound a beep when a
 bool ReadError;                          //Flag, set 1 when we fail to read a card to flash lights/buzzers.
 bool NoBuzzer;                           //Flag, set to 1 to mute the buzzer.
 bool ResetLED;                           //Flag, set to 1 to show a purple light on the front indicating a reset
+String ResetReason = "Unknown";          //Plaintext message of the reason for the reset, to be reported to the server.
 
 //Libraries:
 #include <OneWireESP32.h>         //Version 2.0.2 | Source: https://github.com/junkfix/esp32-ds18b20
@@ -243,6 +243,10 @@ void setup(){
   client.setInsecure();
   http.setReuse(true);
 
+  //Set the ResetReason to OTA in case we restart now
+  ResetReason = settings.getString("ResetReason");
+  settings.putString("ResetReason","OTA-Update");
+
   //Then, check for an OTA update.
   if(DebugMode){
     Serial.println(F("Checking for OTA Updates..."));
@@ -260,6 +264,9 @@ void setup(){
     Serial.println(errtext(otaresp));
     Serial.println(F("We're still here, so there must not have been an update."));
   }
+
+  settings.putString("ResetReason","Unknown");
+
   //Check to make sure we can connect to the NFC reader and it isn't damaged.
   pinMode(NFCPWR, OUTPUT);
   pinMode(NFCRST, OUTPUT);
@@ -318,18 +325,36 @@ void setup(){
     }
   } else{
     State = "Startup";
+    ResetReason = "Power-On";
   }
   if(DebugMode){
     Serial.print(F("Set State: "));
     Serial.println(State);
   }
 
+  //Check for a core panic reset, report it
+  if(ResetReason == "Unknown" && rtc_get_reset_reason(0) == RTC_SW_CPU_RESET){
+    ResetReason = "Panic-Crash";
+  }
+  if(rtc_get_reset_reason(0) == TG1WDT_SYS_RESET){
+    //Definitely a panic crash
+    ResetReason = "Panic-Crash";
+  }
+  if(ResetReason == "Unknown"){
+    //Append the reset reason for debug
+    ResetReason = "Unknown-Type-" + rtc_get_reset_reason(0);
+  }
+
+  //Report the reset reason;
+  Message = "Restart-Reason-" + ResetReason;
+  ReadyToSend = 1;
+
   //Disable the startup lights
   vTaskDelete(xHandle2);
 
   //Lastly, create all tasks and begin operating normally.
   vTaskSuspendAll();
-  xTaskCreate(RegularReport, "RegularReport", 1024, NULL, 6, NULL);
+  xTaskCreate(RegularReport, "RegularReport", 1024, NULL, 6, NULL); 
   xTaskCreate(Temperature, "Temperature", 2048, NULL, 5, NULL);
   xTaskCreate(USBConfig, "USBConfig", 2048, NULL, 5, NULL);
   xTaskCreate(InternalRead, "InternalRead", 1500, NULL, 5, NULL);
@@ -342,7 +367,7 @@ void setup(){
   xTaskCreate(BuzzerControl, "BuzzerControl", 1024, NULL, 5, NULL);
   xTaskCreate(MachineState, "MachineState", 2048, NULL, 5, NULL);
   xTaskCreate(NetworkCheck, "NetworkCheck", 4096, NULL, 3, NULL);
-  xTaskCreate(MessageReport, "MessageReport", 2048, NULL, 3, NULL);
+  xTaskCreate(MessageReport, "MessageReport", 4096, NULL, 3, NULL);
   xTaskResumeAll();
 
   StartupStatus = 1;

@@ -162,6 +162,7 @@ void MachineState(void *pvParameters) {
       vTaskSuspend(xHandle);
       delay(100);
       Serial.println(F("RESTARTING. Source: Button."));
+      settings.putString("ResetReason","Restart-Button");
       Internal.println("L 255,0,0");
       Internal.println("S 0");
       Internal.flush();
