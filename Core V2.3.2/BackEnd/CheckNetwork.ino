@@ -88,8 +88,8 @@ void NetworkReboot(){
   //We are not in a running state
   Serial.println(F("Since we are not doing anything right now, going to restart the machine."));
   settings.putString("LastState", State);
+  settings.putString("ResetReason","Network-Fixing");
   State = "Lockout";
-  delay(5000);
   ESP.restart();
   } else{
     Serial.println(F("Deferring restart since the machine is in use."));
