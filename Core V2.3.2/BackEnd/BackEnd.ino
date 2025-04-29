@@ -343,7 +343,7 @@ void setup(){
   }
   if(ResetReason == "Unknown"){
     //Append the reset reason for debug
-    ResetReason = "Unknown-Type-" + rtc_get_reset_reason(0);
+    ResetReason = "Unknown-Type-" + String(rtc_get_reset_reason(0));
   }
 
   //Report the reset reason;
