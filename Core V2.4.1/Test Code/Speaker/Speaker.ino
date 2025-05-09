@@ -22,7 +22,7 @@ ROMBackgroundAudioWAV BMP(audio);
 void setup() {
   // Start the background player
   BMP.begin();
-  BMP.setGain(0.50);
+  BMP.setGain(0.5);
 
   //Write the file in the setup, so when the loop hits there's no delay.
   BMP.write(file, sizeof(file));
