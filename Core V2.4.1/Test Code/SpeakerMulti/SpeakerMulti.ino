@@ -1,16 +1,3 @@
-// PlayWAV - Earle F. Philhower, III <earlephilhower@yahoo.com>
-// Released to the public domain December 2024.
-//
-// When BOOTSEL preseed, plays a small WAV file from ROM
-// asynchronously with a single call.
-// Hook up an earphone to pins 0, 1, and GND to hear the PWM output.
-//
-// Generate the ROM file by using "xxd -i file.wav file.h" and then
-// editing the output header to make the array "const" so it stays
-// only in flash.
-//
-// Intended as a simple demonstration of BackgroundAudio usage.
-
 #include <BackgroundAudioWAV.h>
 #include <WavData.h>
 
@@ -25,6 +12,8 @@ ROMBackgroundAudioWAV BMP(audio);
 
 unsigned int track;
 
+bool CardPresent;
+
 QueueHandle_t queue;
 
 void setup() {
@@ -38,13 +27,33 @@ void setup() {
 
   xTaskCreate(Speaker, "Speaker", 2048, NULL, 5, NULL);
 
+  USBSerial.setTimeout(3);
+
+  pinMode(15, INPUT);
+
 }
 
 void loop() {
-  USBSerial.setTimeout(3);
+  unsigned int tosend;
   if(USBSerial.available() > 0){
     String temp = USBSerial.readStringUntil(',');
-    unsigned int tosend = temp.toInt();
+    tosend = temp.toInt();
+    xQueueSend(queue, (void *)&tosend, 0);
+  }
+  if(digitalRead(15) == 1 && CardPresent){
+    USBSerial.println(F("Card Removed"));
+    CardPresent = 0;
+  }
+  if((digitalRead(15) == 0) && (CardPresent == 0)){
+    CardPresent = 1;
+    USBSerial.println(F("Card Inserted"));
+    tosend = 1;
+    xQueueSend(queue, (void *)&tosend, 0);
+    tosend = 30;
+    xQueueSend(queue, (void *)&tosend, 0);
+    tosend = 7;
+    xQueueSend(queue, (void *)&tosend, 0);
+    tosend = 0;
     xQueueSend(queue, (void *)&tosend, 0);
   }
 }
@@ -59,7 +68,7 @@ void Speaker(void *pvParameters){
       delay(1);
     }
     //There is no audio playing, check for new audio.
-    xQueueReceive(queue, &track, (TickType_t)5);
+    xQueueReceive(queue, &track, 0);
     if(track != 0){
       USBSerial.print(F("Playing Track: "));
       USBSerial.println(track); 
@@ -67,6 +76,8 @@ void Speaker(void *pvParameters){
     }
     switch (track){
       case 0:
+        //Nothing to play.
+        delay(100);
         break;
       case 1:
         BMP.write(AccessDenied, sizeof(AccessDenied));
