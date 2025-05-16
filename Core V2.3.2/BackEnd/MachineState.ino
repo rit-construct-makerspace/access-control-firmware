@@ -17,7 +17,7 @@ void MachineState(void *pvParameters) {
   uint64_t ButtonTime = millis64() + 5000;
   bool OldKey1 = 0;
   bool OldKey2 = 0;
-  String OldState; //Stores the last state of the system.
+  String OldState = State; //Stores the last state of the system.
   while(1){
     //Only needs to run every 2 milliseconds
     vTaskDelay(2 / portTICK_PERIOD_MS);
@@ -28,15 +28,11 @@ void MachineState(void *pvParameters) {
     }
     //The rest of this loop requires the State string, so let's reserve it;
     xSemaphoreTake(StateMutex, portMAX_DELAY);
-    if(TemperatureFault && State != "Temperature"){
-      State = "Temperature";
+    if(TemperatureFault && State != "Fault"){
+      State = "Fault";
     }
     if(Fault && State != "Fault"){
       State = "Fault";
-    }
-    //Temperature faults are recoverable. If we are no longer in a temperature fault, return to lockout.
-    if(State == "Temperature" && !TemperatureFault){
-      State = "Lockout";
     }
     //Read the key switches and set the state, with a debounce time
     //Also no point in reading if we are in a fault state
@@ -141,6 +137,7 @@ void MachineState(void *pvParameters) {
       OldState = State;
       ChangeStatus = 1; //Send a message to the server that the state changed.
     }
+
     //Release the semaphore;
     xSemaphoreGive(StateMutex);
 

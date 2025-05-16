@@ -11,6 +11,7 @@ ReadyToSend: bool, indicates the other task has finished writing its message and
 
 */
 
+/* RETIRED
 void MessageReport(void *pvParameters) {
   while(1){
     vTaskDelay(1000 / portTICK_PERIOD_MS);
@@ -45,3 +46,5 @@ void MessageReport(void *pvParameters) {
     }
   }
 }
+
+*/

@@ -116,6 +116,35 @@ void ReadCard(void *pvParameters) {
         CardPresent = 1;
         CardVerified = 0; //Card can't be verified yet
         CardUnread = 0;
+
+        //NEW V1.3.1: Moved internal verification here 
+        //First, try to verify the card against the internal list;
+        File file = SPIFFS.open("/validids.txt", "r");
+        while(file.available()){
+          String temp = file.readStringUntil('\r');
+          temp.trim();
+          if(UID.equalsIgnoreCase(temp)){
+            //ID was found in list.
+            if(DebugMode){
+              if(xSemaphoreTake(DebugMutex,(portMAX_DELAY)) == pdTRUE){
+                Serial.println(F("ID Found on internal list."));
+                xSemaphoreGive(DebugMutex);
+              }
+            }
+            InternalStatus = 1;
+            InternalVerified = 1;
+            VerifiedBeep = 1;
+            break;
+          }
+        }
+        file.close();
+        //Next, check against the server if 1) we are in Idle state, or 2) the user could not be found on the internal list.
+        if((State == "Idle") || !InternalVerified){
+          if(DebugMode){
+            Serial.println(F("Verifying UID against server."));
+          }
+          VerifyID = 1;
+        }
       }
     }
     if(Switch1 && Switch2 && !NewCard && !CardUnread && !CardPresent){
@@ -141,6 +170,7 @@ void ReadCard(void *pvParameters) {
       CardVerified = 0;
       InternalVerified = 0;
       InternalStatus = 0;
+      UID = "";
     }
     if(!Switch1 && !Switch2){
       //While only one switch needs to be released for us to assume there's no card, both need to be released before we look for a new card.

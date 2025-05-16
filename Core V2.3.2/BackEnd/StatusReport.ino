@@ -1,3 +1,5 @@
+//Deprecated I think?
+
 /*
 
 Status Report
@@ -22,6 +24,7 @@ State: Plaintext representation of the system, for use in status updates.
 
 */
 
+/* RETIRED
 void StatusReport(void *pvParameters){
   while(1){
     //Check for a status reason every 500mS
@@ -158,3 +161,4 @@ void SendReport(String Reason){
     }
   }
 }
+*/

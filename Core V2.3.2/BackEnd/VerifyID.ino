@@ -15,7 +15,7 @@ InternalStatus: Set to 1 if the card is authorized to use the machine based on t
 CheckNetwork: Set to 1 if we have repeated failed network attempts.
 LastServer: Tracks the last time we had a good connection to the server.
 */
-
+/* RETIRED IN PROGRESS
 void VerifyID(void *pvParameters){
   while(1){
     //Check every 50mS
@@ -182,3 +182,4 @@ void VerifyID(void *pvParameters){
     }
   }
 }
+*/

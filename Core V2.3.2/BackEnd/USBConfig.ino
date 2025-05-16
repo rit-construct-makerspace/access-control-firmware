@@ -102,7 +102,7 @@ void USBConfig(void *pvParameters){
         UpdateSetting("Server");
         UpdateSetting("Key");
         UpdateSetting("MachineID");
-        UpdateSetting("MachineType");
+        UpdateSetting("MachineName");
         UpdateSetting("SwitchType");
         UpdateSetting("Zone");
         UpdateSetting("NeedsWelcome");
