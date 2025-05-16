@@ -46,6 +46,14 @@ void SocketManager(void *pvParameters) {
             authUser(wsin);
           }
         }
+        if(kv.key() == "Key"){
+          //There's a new key to set
+          settings.putString("Key", wsin["Key"].as<String>());
+          Key = settings.getString("Key");
+          if(DebugMode){
+            Serial.println(F("New key saved and updated."));
+          }
+        }
         if(kv.key() == "State"){
           //Immediately set the state of the machine to this
           String WSState = wsin["State"].as<String>();
