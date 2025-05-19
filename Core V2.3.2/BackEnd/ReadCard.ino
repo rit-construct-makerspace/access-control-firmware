@@ -26,6 +26,7 @@ void ReadCard(void *pvParameters) {
     vTaskDelay(50 / portTICK_PERIOD_MS);
     if(Switch1 && Switch2 && NewCard){
       //A new card has been inserted
+      PreState = State; //Used to stop animation glitches
       NewCard = 0;
       CardUnread = 1;
       //Loop to retry NFC a few times;
@@ -138,12 +139,31 @@ void ReadCard(void *pvParameters) {
           }
         }
         file.close();
-        //Next, check against the server if 1) we are in Idle state, or 2) the user could not be found on the internal list.
-        if((State == "Idle") || !InternalVerified){
+        //Next, check against the server if the card could not be verified. 
+        if(!InternalVerified){
           if(DebugMode){
+            Serial.println(F("Could not find card on internal list."));
             Serial.println(F("Verifying UID against server."));
           }
           VerifyID = 1;
+        }
+        else if((State == "Idle")){
+          if(DebugMode){
+            Serial.println(F("State is Idle, so verifying user."));
+          }
+          if(NoNetwork){
+            if(DebugMode){
+              Serial.println(F("No network connection, falling back on internal list to verify."));
+            }
+            CardStatus = 1;
+            CardVerified = 1;
+          }
+          else{
+            if(DebugMode){
+              Serial.println(F("Since we have network connection, verify the user via the server."));
+            }
+            VerifyID = 1;
+          }
         }
       }
     }

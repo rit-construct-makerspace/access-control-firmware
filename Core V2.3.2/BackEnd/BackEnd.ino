@@ -119,6 +119,7 @@ bool WSSend = 0;                         //1 if there is already a websocket mes
 bool UseEthernet = 0;                    //1 if we should be using ethernet
 bool UseWiFi = 0;                        //1 if we should be using wifi
 char InterfaceUsed;                      //0 if using WiFi, 1 if using Ethernet.
+String PreState;                         //What state the system was in right before a keycard is inserted, to prevent glitches to the state.
 
 //Libraries:
 #include <OneWireESP32.h>         //Version 2.0.2 | Source: https://github.com/junkfix/esp32-ds18b20
