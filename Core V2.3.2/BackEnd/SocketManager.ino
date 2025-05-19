@@ -9,15 +9,12 @@ This task is responsible for sending and receiving all network traffic via webso
 
 void SocketManager(void *pvParameters) {    
   JsonDocument wsresp;
-  String WSServer = "wss://" + Server + "/api/ws";
-  //TODO get from the actual WSServer
-  socket.begin("calcarea.student.rit.edu", 3000, "/api/ws");
-  //socket.beginSslWithBundle("10.42.0.1", 3000, "/", NULL, 0, "");
+  socket.beginSslWithBundle(Server.c_str(), 443, "/api/ws", NULL, 0, "");
   socket.onEvent(webSocketEvent);
   socket.setReconnectInterval(1000); //Attempt to reconnect every second if we lose connection
   //Wait to connect before continuing
   while(!socket.isConnected()){
-    delay(1);
+    delay(10);
   }
   Serial.println("Websocket Initial Connection.");
   while (1) {

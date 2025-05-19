@@ -42,6 +42,7 @@ USBConfig: Allows programatic changing of settings over USB
 #define SanitizeDebug 1 //Set to 1 to remove the key when printing debug information. With this and DumpKey, there is no way to pull the API key without uploading malicious code.
 #define BAD_INPUT_THRESHOLD 5 //If the wrong password or a bad JSON is loaded more than this many times, delete all information as a safety.
 #define TXINTERRUPT 0 //Set to 1 to route UART0 TX to the DB9 interrupt pin, to allow external loggers to capture crash data.
+#define NoOTA 0 //Set to 1 to disable OTA check on startup, makes startup faster.
 
 //Global Variables:
 bool TemperatureUpdate;                  //1 when writing new information, to indicate other devices shouldn't read temperature-related info
@@ -115,6 +116,9 @@ bool NewFromWS;                          //1 indicates there's a message to proc
 bool VerifyID;                           //1 indicates we should verify the card present against the server
 bool SendWSReconnect;                    //1 indicates we've (re)connected to the server, so send the preamble message again
 bool WSSend = 0;                         //1 if there is already a websocket message primed to send out
+bool UseEthernet = 0;                    //1 if we should be using ethernet
+bool UseWiFi = 0;                        //1 if we should be using wifi
+char InterfaceUsed;                      //0 if using WiFi, 1 if using Ethernet.
 
 //Libraries:
 #include <OneWireESP32.h>         //Version 2.0.2 | Source: https://github.com/junkfix/esp32-ds18b20
@@ -136,6 +140,9 @@ bool WSSend = 0;                         //1 if there is already a websocket mes
 #include <nvs_flash.h>            //Version 3.1.1 | Inherent to ESP32 Arduino
 #include <ESP32Time.h>            //Version 2.0.6 | Source: https://github.com/fbiego/ESP32Time
 #include <WebSocketsClient.h>     //Version 2.6.1 | Source: https://github.com/Links2004/arduinoWebSockets
+#include <ESP32Ping.h>            //Version 1.6   | Source: https://github.com/marian-craciunescu/ESP32Ping
+#include <ping.h>                 //Version 1.6   | Source: https://github.com/marian-craciunescu/ESP32Ping
+
 
 //Pin Definitions:
 const int ETHINT = 13;
@@ -192,6 +199,7 @@ void setup(){
 
   Internal.begin(115200, SERIAL_8N1, TOESP, TOTINY);
 
+  //Flash the lights on the front to indicate we are in startup
   xTaskCreate(GamerMode, "GamerMode", 2048, NULL, 5, &xHandle2);
 
   delay(5000); 
@@ -216,6 +224,10 @@ void setup(){
     vTaskSuspend(NULL);
   }
   Password = settings.getString("Password");
+  if(Password.equalsIgnoreCase("null")){
+    //Use a real NULL password.
+    Password = "";
+  }
   SSID = settings.getString("SSID");
   Server = settings.getString("Server");
   Key = settings.getString("Key");
@@ -231,7 +243,6 @@ void setup(){
     Serial.println(F("NOTICE: Updated Naming Scheme of Preferences in Compliance with V1.3.1 Changes."));
   }
   MachineType = settings.getString("MachineType").toInt();
-  MachineType = 33; //TODO temp broke the machine type somehow
   MachineName = settings.getString("MachineName");
   ExpectedSwitchType = settings.getString("SwitchType").toInt();
   Zone = settings.getString("Zone").toInt();
@@ -242,53 +253,40 @@ void setup(){
   DebugMode = settings.getString("DebugMode").toInt();
   NoBuzzer = settings.getString("NoBuzzer").toInt();
 
-  WiFiConnect();
+  //Start the network connection;
+  xTaskCreate(NetworkManager, "NetworkManager", 2048, NULL, 2, NULL);
 
-  if(DebugMode){
-    Serial.print(F("Wireless MAC: ")); Serial.println(WiFi.macAddress());
+  //We should wait for the network before continuing.
+  while(NoNetwork){
+    delay(50);
   }
-
-  //Attempt to connect to Wifi network:
-  while (WiFi.status() != WL_CONNECTED) {
-    Serial.print(".");
-    //Add another dot every second...
-    delay(1000);
-  }
-  if (DebugMode) {
-    Serial.println("");
-    Serial.print("Connected to ");
-    Serial.println(SSID);
-    Serial.print(F("Local IP: "));
-    Serial.println(WiFi.localIP());
-  }
-
-  client.setInsecure();
-  http.setReuse(true);
+  //Reset NoNetwork to its default value of 1
+  NoNetwork = 1;
 
   //Set the ResetReason to OTA in case we restart now
   ResetReason = settings.getString("ResetReason");
   settings.putString("ResetReason","OTA-Update");
 
-  //OTA Disabled during dev. TODO re-enable
-  /*
-  //Then, check for an OTA update.
-  if(DebugMode){
-    Serial.println(F("Checking for OTA Updates..."));
-    Serial.println(F("If any are found, will install immediately."));
+  if(!NoOTA){
+    //Then, check for an OTA update.
+    if(DebugMode){
+      Serial.println(F("Checking for OTA Updates..."));
+      Serial.println(F("If any are found, will install immediately."));
+    }
+    ota.SetCallback(callback_percent);
+    ota.SetConfig(Hardware);
+    ota.OverrideDevice("ACS Core");
+    if(DebugMode){
+      ota.EnableSerialDebug();
+    }
+    int otaresp = ota.CheckForOTAUpdate(OTA_URL, Version);
+    if(DebugMode){
+      Serial.print(F("OTA Response Code: ")); Serial.println(otaresp);
+      Serial.println(errtext(otaresp));
+      Serial.println(F("We're still here, so there must not have been an update."));
+    }
   }
-  ota.SetCallback(callback_percent);
-  ota.SetConfig(Hardware);
-  ota.OverrideDevice("ACS Core");
-  if(DebugMode){
-    ota.EnableSerialDebug();
-  }
-  int otaresp = ota.CheckForOTAUpdate(OTA_URL, Version);
-  if(DebugMode){
-    Serial.print(F("OTA Response Code: ")); Serial.println(otaresp);
-    Serial.println(errtext(otaresp));
-    Serial.println(F("We're still here, so there must not have been an update."));
-  }
-  */
+  
   settings.putString("ResetReason","Unknown");
 
   //Check to make sure we can connect to the NFC reader and it isn't damaged.
@@ -388,14 +386,12 @@ void setup(){
   xTaskCreate(USBConfig, "USBConfig", 2048, NULL, 5, NULL);
   xTaskCreate(InternalRead, "InternalRead", 1500, NULL, 5, NULL);
   xTaskCreate(ReadCard, "ReadCard", 2048, NULL, 5, NULL);
-  //xTaskCreate(VerifyID, "VerifyID", 4096, NULL, 1, NULL);
   //InternalWrite has a handle to allow it to be suspended before a restart (disables lighting changes)
   xTaskCreate(InternalWrite, "InternalWrite", 2048, NULL, 5, &xHandle);
   xTaskCreate(LEDControl, "LEDControl", 1024, NULL, 5, NULL);
   xTaskCreate(BuzzerControl, "BuzzerControl", 1024, NULL, 5, NULL);
   xTaskCreate(MachineState, "MachineState", 2048, NULL, 5, NULL);
   xTaskCreate(SocketManager, "SocketManager", 4096, NULL, 3, NULL);
-  //xTaskCreate(MessageReport, "MessageReport", 4096, NULL, 3, NULL);
   xTaskResumeAll();
 
   Serial.println(F("Setup done."));
@@ -495,27 +491,6 @@ void GamerMode(void *pvParameters){
     delay(300);
     Internal.println("L 0,0,255");
     delay(300);
-  }
-}
-
-void WiFiConnect(){
-  if(NetworkMode != 2){
-  if (DebugMode) {
-    Serial.print("Attempting to connect to SSID: ");
-      Serial.println(SSID);
-  }
-  //Wireless Initialization:
-  if (Password != "null") {
-    WiFi.mode(WIFI_STA);
-    WiFi.begin(SSID, Password);
-  } else {
-    if (DebugMode) {
-      Serial.println(F("Using no password."));
-    }
-    WiFi.begin(SSID);
-  }
-  WiFi.setSleep(false);
-  WiFi.setAutoReconnect(true);
   }
 }
 

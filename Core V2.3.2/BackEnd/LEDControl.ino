@@ -54,8 +54,10 @@ void LEDControl(void *pvParameters) {
       //Animation 3: Solid Yellow
       LEDAnimation = 3;
     }
-    if((CardUnread || CardPresent) && !CardVerified){
+    if((CardUnread || CardPresent) && !CardVerified && (State == "Idle")){
       //Animation 4: Flashing Yellow
+      //Weird catch we have to do:
+      //If the state changes underneath us to idle, we do not detect that
       LEDAnimation = 4;
     }
     if(NoNetwork){
