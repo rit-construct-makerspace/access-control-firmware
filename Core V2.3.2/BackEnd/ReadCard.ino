@@ -26,6 +26,7 @@ void ReadCard(void *pvParameters) {
     vTaskDelay(50 / portTICK_PERIOD_MS);
     if(Switch1 && Switch2 && NewCard){
       //A new card has been inserted
+      PreState = State; //Used to stop animation glitches
       NewCard = 0;
       CardUnread = 1;
       //Loop to retry NFC a few times;
@@ -116,6 +117,54 @@ void ReadCard(void *pvParameters) {
         CardPresent = 1;
         CardVerified = 0; //Card can't be verified yet
         CardUnread = 0;
+
+        //NEW V1.3.1: Moved internal verification here 
+        //First, try to verify the card against the internal list;
+        File file = SPIFFS.open("/validids.txt", "r");
+        while(file.available()){
+          String temp = file.readStringUntil('\r');
+          temp.trim();
+          if(UID.equalsIgnoreCase(temp)){
+            //ID was found in list.
+            if(DebugMode){
+              if(xSemaphoreTake(DebugMutex,(portMAX_DELAY)) == pdTRUE){
+                Serial.println(F("ID Found on internal list."));
+                xSemaphoreGive(DebugMutex);
+              }
+            }
+            InternalStatus = 1;
+            InternalVerified = 1;
+            VerifiedBeep = 1;
+            break;
+          }
+        }
+        file.close();
+        //Next, check against the server if the card could not be verified. 
+        if(!InternalVerified){
+          if(DebugMode){
+            Serial.println(F("Could not find card on internal list."));
+            Serial.println(F("Verifying UID against server."));
+          }
+          VerifyID = 1;
+        }
+        else if((State == "Idle")){
+          if(DebugMode){
+            Serial.println(F("State is Idle, so verifying user."));
+          }
+          if(NoNetwork){
+            if(DebugMode){
+              Serial.println(F("No network connection, falling back on internal list to verify."));
+            }
+            CardStatus = 1;
+            CardVerified = 1;
+          }
+          else{
+            if(DebugMode){
+              Serial.println(F("Since we have network connection, verify the user via the server."));
+            }
+            VerifyID = 1;
+          }
+        }
       }
     }
     if(Switch1 && Switch2 && !NewCard && !CardUnread && !CardPresent){
@@ -141,6 +190,7 @@ void ReadCard(void *pvParameters) {
       CardVerified = 0;
       InternalVerified = 0;
       InternalStatus = 0;
+      UID = "";
     }
     if(!Switch1 && !Switch2){
       //While only one switch needs to be released for us to assume there's no card, both need to be released before we look for a new card.

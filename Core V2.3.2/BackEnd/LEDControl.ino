@@ -54,8 +54,9 @@ void LEDControl(void *pvParameters) {
       //Animation 3: Solid Yellow
       LEDAnimation = 3;
     }
-    if((CardUnread || CardPresent) && !CardVerified){
+    if((CardUnread || CardPresent) && !CardVerified && (PreState == "Idle")){
       //Animation 4: Flashing Yellow
+      //We check the card pre-insert state so that if the state changes under us we don't start flashing
       LEDAnimation = 4;
     }
     if(NoNetwork){

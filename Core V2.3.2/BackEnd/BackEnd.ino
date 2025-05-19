@@ -18,7 +18,6 @@ InternalWrite: Handles writing updated information to the frontend MCU
 InternalRead: Handles reading incoming messages from the frontend MCU
 ReadCard: Manages the NFC readers
 VerifyID: Checks if an installed ID is permitted to use this equipment
-StatusReport: Sends status messages regularly as well as for specific events
 Temperature: Monitors all temperature sensors for both temperature as well as unique device IDs
 LEDControl: Sets the LED color based on system state, handles animations
 BuzzerControl: Sets the buzzer based on system state, handles tone sequences
@@ -28,7 +27,7 @@ USBConfig: Allows programatic changing of settings over USB
 */
 
 //Settings
-#define Version "1.3.0"
+#define Version "1.3.1"
 #define Hardware "2.3.2-LE"
 #define MAX_DEVICES 2 //How many possible temperature sensors to scan for
 #define OTA_URL "https://raw.githubusercontent.com/rit-construct-makerspace/access-control-firmware/refs/heads/main/otadirectory.json"
@@ -42,7 +41,8 @@ USBConfig: Allows programatic changing of settings over USB
 #define DumpKey 0 //Set to 1 to allow the API key to be dumped over USB when requested. If set to 0, will just return "super-secret"
 #define SanitizeDebug 1 //Set to 1 to remove the key when printing debug information. With this and DumpKey, there is no way to pull the API key without uploading malicious code.
 #define BAD_INPUT_THRESHOLD 5 //If the wrong password or a bad JSON is loaded more than this many times, delete all information as a safety.
-#define TXINTERRUPT 1 //Set to 1 to route UART0 TX to the DB9 interrupt pin, to allow external loggers to capture crash data.
+#define TXINTERRUPT 0 //Set to 1 to route UART0 TX to the DB9 interrupt pin, to allow external loggers to capture crash data.
+#define NoOTA 0 //Set to 1 to disable OTA check on startup, makes startup faster.
 
 //Global Variables:
 bool TemperatureUpdate;                  //1 when writing new information, to indicate other devices shouldn't read temperature-related info
@@ -54,13 +54,13 @@ byte NetworkMode = 1;                    //0 means WiFi only, 1 means WiFi or Et
 String SecurityCode = "Shlug";           //Stores the password that needs to be verified before a JSON of new settings is loaded
 String SSID = "";                        //The SSID that the wireless network will connect to.
 String Password = "";                    //Stores the WiFi password
-String Server = "https://make.rit.edu";  //The server address that API calls are made against
+String Server = "make.rit.edu";          //The server address that API calls are made against
 String Key;                              //Stores the API access key
-String Zone;                             //Stores the area that a machine is deployed in.
+int Zone;                                //Stores the area that a machine is deployed in.
 int TempLimit;                           //The temperature above which the system shuts down and sends a warning.
 int Frequency;                           //How often an update should be sent
-String MachineID;                        //Unique identifier of the machine
-String MachineType;                      //The kind of machine it is
+int MachineType;                         //Non-unique identifier of the machine type
+String MachineName;                      //The unique name of the machine
 byte ExpectedSwitchType;                 //The kind of swtich that should be attached on the analog detector.
 bool NeedsWelcome;                       //1 if the system requires a sign-in before use. 
 bool Button;                             //state of the frontend button.
@@ -101,7 +101,7 @@ bool NewBuzzer;                          //Flag that there is new buzzer to send
 int Tone;                                //Frequency of buzzer to play
 bool Switch;                             //Value of the switch to sent to frontend
 bool DebugLED;                           //Turns on/off the debugLED on the frontend
-bool NoNetwork;                          //Indicates inability to connect to the server
+bool NoNetwork = 1;                      //Indicates inability to connect to the server
 bool TemperatureFault;                   //1 Indicates an overtemperature condition
 bool Fault;                              //Flag indicates a failure of some sort with the system other than temperature. 
 bool CardUnread;                         //A card is preesnt in the machine but hasn't been read yet. 
@@ -110,6 +110,16 @@ bool ReadError;                          //Flag, set 1 when we fail to read a ca
 bool NoBuzzer;                           //Flag, set to 1 to mute the buzzer.
 bool ResetLED;                           //Flag, set to 1 to show a purple light on the front indicating a reset
 String ResetReason = "Unknown";          //Plaintext message of the reason for the reset, to be reported to the server.
+unsigned long MessageNumber = 0;         //Tracks the number of messages sent via websockets
+String WSIncoming;                       //The new message received from the websocket
+bool NewFromWS;                          //1 indicates there's a message to process
+bool VerifyID;                           //1 indicates we should verify the card present against the server
+bool SendWSReconnect;                    //1 indicates we've (re)connected to the server, so send the preamble message again
+bool WSSend = 0;                         //1 if there is already a websocket message primed to send out
+bool UseEthernet = 0;                    //1 if we should be using ethernet
+bool UseWiFi = 0;                        //1 if we should be using wifi
+char InterfaceUsed;                      //0 if using WiFi, 1 if using Ethernet.
+String PreState;                         //What state the system was in right before a keycard is inserted, to prevent glitches to the state.
 
 //Libraries:
 #include <OneWireESP32.h>         //Version 2.0.2 | Source: https://github.com/junkfix/esp32-ds18b20
@@ -129,6 +139,11 @@ String ResetReason = "Unknown";          //Plaintext message of the reason for t
 #include "esp_timer.h"            //Version 3.1.1 | Inherent to ESP32 Arduino
 #include "esp32s2/rom/rtc.h"      //Version 3.1.1 | Inherent to ESP32 Arduino
 #include <nvs_flash.h>            //Version 3.1.1 | Inherent to ESP32 Arduino
+#include <ESP32Time.h>            //Version 2.0.6 | Source: https://github.com/fbiego/ESP32Time
+#include <WebSocketsClient.h>     //Version 2.6.1 | Source: https://github.com/Links2004/arduinoWebSockets
+#include <ESP32Ping.h>            //Version 1.6   | Source: https://github.com/marian-craciunescu/ESP32Ping
+#include <ping.h>                 //Version 1.6   | Source: https://github.com/marian-craciunescu/ESP32Ping
+
 
 //Pin Definitions:
 const int ETHINT = 13;
@@ -162,6 +177,9 @@ HTTPClient http;
 ESP32OTAPull ota;
 TaskHandle_t xHandle;
 TaskHandle_t xHandle2;
+ESP32Time rtc;
+
+WebSocketsClient socket;
 
 //Mutexes:
 SemaphoreHandle_t DebugMutex; //Reserves the USB serial output, priamrily for debugging purposes.
@@ -182,6 +200,7 @@ void setup(){
 
   Internal.begin(115200, SERIAL_8N1, TOESP, TOTINY);
 
+  //Flash the lights on the front to indicate we are in startup
   xTaskCreate(GamerMode, "GamerMode", 2048, NULL, 5, &xHandle2);
 
   delay(5000); 
@@ -206,13 +225,28 @@ void setup(){
     vTaskSuspend(NULL);
   }
   Password = settings.getString("Password");
+  if(Password.equalsIgnoreCase("null")){
+    //Use a real NULL password.
+    Password = "";
+  }
   SSID = settings.getString("SSID");
   Server = settings.getString("Server");
   Key = settings.getString("Key");
-  MachineID = settings.getString("MachineID");
-  MachineType = settings.getString("MachineType");
+  //Special for V1.3.1 and beyond - "MachineID" replaced with "MachineType", should be same value though
+  //What was "MachineType" now becomes "MachineName"
+  //Check if MachineName exists, if not we haven't done the updates yet.
+  if(!settings.isKey("MachineName")){
+    String TransferSetting1 = settings.getString("MachineID");
+    String TransferSetting2 = settings.getString("MachineType");
+    settings.remove("MachineID");
+    settings.putString("MachineType",TransferSetting1);
+    settings.putString("MachineName",TransferSetting2);
+    Serial.println(F("NOTICE: Updated Naming Scheme of Preferences in Compliance with V1.3.1 Changes."));
+  }
+  MachineType = settings.getString("MachineType").toInt();
+  MachineName = settings.getString("MachineName");
   ExpectedSwitchType = settings.getString("SwitchType").toInt();
-  Zone = settings.getString("Zone");
+  Zone = settings.getString("Zone").toInt();
   TempLimit = settings.getString("TempLimit").toInt();
   Frequency = settings.getString("Frequency").toInt();
   NetworkMode = settings.getString("NetworkMode").toInt();
@@ -220,51 +254,40 @@ void setup(){
   DebugMode = settings.getString("DebugMode").toInt();
   NoBuzzer = settings.getString("NoBuzzer").toInt();
 
-  WiFiConnect();
+  //Start the network connection;
+  xTaskCreate(NetworkManager, "NetworkManager", 2048, NULL, 2, NULL);
 
-  if(DebugMode){
-    Serial.print(F("Wireless MAC: ")); Serial.println(WiFi.macAddress());
+  //We should wait for the network before continuing.
+  while(NoNetwork){
+    delay(50);
   }
-
-  //Attempt to connect to Wifi network:
-  while (WiFi.status() != WL_CONNECTED) {
-    Serial.print(".");
-    //Add another dot every second...
-    delay(1000);
-  }
-  if (DebugMode) {
-    Serial.println("");
-    Serial.print("Connected to ");
-    Serial.println(SSID);
-    Serial.print(F("Local IP: "));
-    Serial.println(WiFi.localIP());
-  }
-
-  client.setInsecure();
-  http.setReuse(true);
+  //Reset NoNetwork to its default value of 1
+  NoNetwork = 1;
 
   //Set the ResetReason to OTA in case we restart now
   ResetReason = settings.getString("ResetReason");
   settings.putString("ResetReason","OTA-Update");
 
-  //Then, check for an OTA update.
-  if(DebugMode){
-    Serial.println(F("Checking for OTA Updates..."));
-    Serial.println(F("If any are found, will install immediately."));
+  if(!NoOTA){
+    //Then, check for an OTA update.
+    if(DebugMode){
+      Serial.println(F("Checking for OTA Updates..."));
+      Serial.println(F("If any are found, will install immediately."));
+    }
+    ota.SetCallback(callback_percent);
+    ota.SetConfig(Hardware);
+    ota.OverrideDevice("ACS Core");
+    if(DebugMode){
+      ota.EnableSerialDebug();
+    }
+    int otaresp = ota.CheckForOTAUpdate(OTA_URL, Version);
+    if(DebugMode){
+      Serial.print(F("OTA Response Code: ")); Serial.println(otaresp);
+      Serial.println(errtext(otaresp));
+      Serial.println(F("We're still here, so there must not have been an update."));
+    }
   }
-  ota.SetCallback(callback_percent);
-  ota.SetConfig(Hardware);
-  ota.OverrideDevice("ACS Core");
-  if(DebugMode){
-    ota.EnableSerialDebug();
-  }
-  int otaresp = ota.CheckForOTAUpdate(OTA_URL, Version);
-  if(DebugMode){
-    Serial.print(F("OTA Response Code: ")); Serial.println(otaresp);
-    Serial.println(errtext(otaresp));
-    Serial.println(F("We're still here, so there must not have been an update."));
-  }
-
+  
   settings.putString("ResetReason","Unknown");
 
   //Check to make sure we can connect to the NFC reader and it isn't damaged.
@@ -328,6 +351,10 @@ void setup(){
     State = "Startup";
     ResetReason = "Power-On";
   }
+  if(State == "Fault"){
+    //Shouldn't return to a fault state
+    State = "Startup";
+  }
   if(DebugMode){
     Serial.print(F("Set State: "));
     Serial.println(State);
@@ -360,24 +387,21 @@ void setup(){
   xTaskCreate(USBConfig, "USBConfig", 2048, NULL, 5, NULL);
   xTaskCreate(InternalRead, "InternalRead", 1500, NULL, 5, NULL);
   xTaskCreate(ReadCard, "ReadCard", 2048, NULL, 5, NULL);
-  xTaskCreate(StatusReport, "StatusReport", 5000, NULL, 2, NULL);
-  xTaskCreate(VerifyID, "VerifyID", 4096, NULL, 1, NULL);
   //InternalWrite has a handle to allow it to be suspended before a restart (disables lighting changes)
   xTaskCreate(InternalWrite, "InternalWrite", 2048, NULL, 5, &xHandle);
   xTaskCreate(LEDControl, "LEDControl", 1024, NULL, 5, NULL);
   xTaskCreate(BuzzerControl, "BuzzerControl", 1024, NULL, 5, NULL);
   xTaskCreate(MachineState, "MachineState", 2048, NULL, 5, NULL);
-  xTaskCreate(NetworkCheck, "NetworkCheck", 4096, NULL, 3, NULL);
-  xTaskCreate(MessageReport, "MessageReport", 4096, NULL, 3, NULL);
+  xTaskCreate(SocketManager, "SocketManager", 4096, NULL, 3, NULL);
   xTaskResumeAll();
 
-  StartupStatus = 1;
   Serial.println(F("Setup done."));
 }
 
 void loop(){
-  //No longer need the Arduino loop, get rid of it.
-  vTaskDelete(NULL);
+  //Check for new websocket messages constantly
+  socket.loop();
+  delay(1);
 }
 
 
@@ -471,23 +495,10 @@ void GamerMode(void *pvParameters){
   }
 }
 
-void WiFiConnect(){
-  if(NetworkMode != 2){
-  if (DebugMode) {
-    Serial.print("Attempting to connect to SSID: ");
-      Serial.println(SSID);
-  }
-  //Wireless Initialization:
-  if (Password != "null") {
-    WiFi.mode(WIFI_STA);
-    WiFi.begin(SSID, Password);
-  } else {
-    if (DebugMode) {
-      Serial.println(F("Using no password."));
-    }
-    WiFi.begin(SSID);
-  }
-  WiFi.setSleep(false);
-  WiFi.setAutoReconnect(true);
+void RegularReport(void *pvParameters){
+  //This sub-task is just to set the regular report flag periodically
+  while(1){
+    RegularStatus = 1;
+    vTaskDelay(Frequency*1000 / portTICK_PERIOD_MS);
   }
 }

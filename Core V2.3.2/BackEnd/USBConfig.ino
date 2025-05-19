@@ -70,7 +70,7 @@ void USBConfig(void *pvParameters){
         if(usbjson["DumpAll"]){
           //Dump all settings
           usbjson.clear(); //Wipe whatever's in the json
-          usbjson["MAC"] = WiFi.macAddress();
+          usbjson["WiFi MAC"] = ESP.getEfuseMac();
           WriteSetting("SSID");
           WriteSetting("Password");
           WriteSetting("Server");
@@ -79,7 +79,7 @@ void USBConfig(void *pvParameters){
           } else{
             usbjson["Key"] = "super-secret";
           }
-          WriteSetting("MachineID");
+          WriteSetting("MachineName");
           WriteSetting("MachineType");
           WriteSetting("SwitchType");
           WriteSetting("Zone");
@@ -101,8 +101,8 @@ void USBConfig(void *pvParameters){
         UpdateSetting("Password");
         UpdateSetting("Server");
         UpdateSetting("Key");
-        UpdateSetting("MachineID");
         UpdateSetting("MachineType");
+        UpdateSetting("MachineName");
         UpdateSetting("SwitchType");
         UpdateSetting("Zone");
         UpdateSetting("NeedsWelcome");
