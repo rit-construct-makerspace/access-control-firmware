@@ -188,6 +188,7 @@ void SocketManager(void *pvParameters) {
       wsresp["FWVersion"] = Version;
       wsresp["HWVersion"] = Hardware;
       wsresp["HWType"] = "ACS Core";
+      wsresp["SerialNumber"] = SerialNumber;
       //Determine if this is the first time we are sending this since startup. 
       if(MessageNumber > 0){
         //We've sent messages in the past, reset the message count but no need to ask for anything special
@@ -303,11 +304,17 @@ void authUser(JsonDocument input){
 void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
   switch(type) {
     case WStype_DISCONNECTED:
-      Serial.printf("[WSc] Disconnected!\n");
+      if(JustDisconnected){
+        //Stops spam if we have no connection
+        Serial.printf("[WSc] Disconnected!\n");
+        JustDisconnected = 0;
+      }
+
       NoNetwork = 1;
       WSSend = 0; //Clear out anything that needs to be sent
       break;
     case WStype_CONNECTED:
+      JustDisconnected = 1;
       Serial.println(F("Connected."));
       Serial.printf("[WSc] Connected to url: %s\n", payload);
       SendWSReconnect = 1;

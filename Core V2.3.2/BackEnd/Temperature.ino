@@ -19,7 +19,7 @@ void Temperature(void *pvParameters){
 	//First time running, find the addresses
   if(DebugMode){
     xSemaphoreTake(DebugMutex, portMAX_DELAY);
-    Serial.println(F("First time running temperature..."));
+    Serial.println(F("First time running OneWire..."));
     xSemaphoreGive(DebugMutex);
   }
   xSemaphoreTake(OneWireMutex, portMAX_DELAY); 
@@ -36,6 +36,19 @@ void Temperature(void *pvParameters){
     //Something has gone wrong, there should be at least 1 temperature sensor. Restart?
     Serial.println(F("ERROR: Found no OneWire devices?"));
     ESP.restart();
+  }
+  if(devices == 1){
+    //We found the internal onewire, this is what the Shlug should use to identify itself.
+    if(SerialNumber == NULL){
+      //The serial number has not been saved yet, save what we found
+      SerialNumber = String(SerialNumbers[0], HEX);
+      SerialNumber.toUpperCase();
+      if(DebugMode){
+        Serial.print(F("Saving Serial Number: "));
+        Serial.println(SerialNumber);
+      }
+      settings.putString("SerialNumber", SerialNumber);
+    }
   }
   xSemaphoreGive(OneWireMutex);
 
