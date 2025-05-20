@@ -29,7 +29,7 @@ USBConfig: Allows programatic changing of settings over USB
 //Settings
 #define Version "1.3.1"
 #define Hardware "2.3.2-LE"
-#define MAX_DEVICES 2 //How many possible temperature sensors to scan for
+#define MAX_DEVICES 5 //How many possible temperature sensors to scan for
 #define OTA_URL "https://raw.githubusercontent.com/rit-construct-makerspace/access-control-firmware/refs/heads/main/otadirectory.json"
 #define TemperatureTime 5000 //How long to delay between temperature measurements, in milliseconds
 #define FEPollRate 10000 //How long, in milliseconds, to go between an all-values poll of the frontend (in addition to event-based)
@@ -47,6 +47,7 @@ USBConfig: Allows programatic changing of settings over USB
 //Global Variables:
 bool TemperatureUpdate;                  //1 when writing new information, to indicate other devices shouldn't read temperature-related info
 uint64_t SerialNumbers[MAX_DEVICES];     //an array of uint64_t serial numbers of the devices. Size of the array is based on MAX_DEVICES 
+char devices;                            //How many onewire devices were detected, and therefore how many hardware components make up the ACS deployment
 float SysMaxTemp;                        //a float of the maximum temperature of the system
 bool DebugPrinting;                      //1 when a thread is writing on debug serial
 bool DebugMode = 1;                      //1 when debug data should be printed, always starts at 1. WARNING: Will plain-text print sensitive information!

@@ -23,7 +23,7 @@ void Temperature(void *pvParameters){
     xSemaphoreGive(DebugMutex);
   }
   xSemaphoreTake(OneWireMutex, portMAX_DELAY); 
-	uint8_t devices = ds.search(SerialNumbers, MAX_DEVICES);
+	devices = ds.search(SerialNumbers, MAX_DEVICES);
 	for (uint8_t i = 0; i < devices; i += 1) {
     if(DebugMode){
       if(xSemaphoreTake(DebugMutex,(5/portTICK_PERIOD_MS)) == pdTRUE){
