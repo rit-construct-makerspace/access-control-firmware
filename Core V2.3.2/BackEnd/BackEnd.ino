@@ -120,6 +120,8 @@ bool UseEthernet = 0;                    //1 if we should be using ethernet
 bool UseWiFi = 0;                        //1 if we should be using wifi
 char InterfaceUsed;                      //0 if using WiFi, 1 if using Ethernet.
 String PreState;                         //What state the system was in right before a keycard is inserted, to prevent glitches to the state.
+String SerialNumber;                     //Plaintext store of the shlug identifier from OneWire
+bool JustDisconnected;                   //Lets us detect if a websocket was just dropped or has been for a bit.
 
 //Libraries:
 #include <OneWireESP32.h>         //Version 2.0.2 | Source: https://github.com/junkfix/esp32-ds18b20
@@ -224,6 +226,7 @@ void setup(){
     //Nuke the rest of this process - we can't do anything without our config.
     vTaskSuspend(NULL);
   }
+  SerialNumber = settings.getString("SerialNumber");
   Password = settings.getString("Password");
   if(Password.equalsIgnoreCase("null")){
     //Use a real NULL password.
