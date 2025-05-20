@@ -189,6 +189,15 @@ void SocketManager(void *pvParameters) {
       wsresp["HWVersion"] = Hardware;
       wsresp["HWType"] = "ACS Core";
       wsresp["SerialNumber"] = SerialNumber;
+      if(devices == 0){
+        //The Onewire manager hasn't finished finding IDs yet
+        delay(50);
+      }
+      for (uint8_t i = 0; i < devices; i += 1) {
+        String TempID = String(SerialNumbers[i],HEX);
+        TempID.toUpperCase();
+        wsresp["HardwareIDs"][i] = TempID;
+      }
       //Determine if this is the first time we are sending this since startup. 
       if(MessageNumber > 0){
         //We've sent messages in the past, reset the message count but no need to ask for anything special
