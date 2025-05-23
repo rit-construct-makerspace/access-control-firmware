@@ -43,6 +43,25 @@ void SocketManager(void *pvParameters) {
             authUser(wsin);
           }
         }
+        if((kv.key() == "Get") || kv.key() == "Type"){
+          //The server wants us to get a file
+          if(!GetFile){
+            //If GetFile is 1, we already are getting a file, or already got the other key from this JSON
+            //Test if either key is NULL
+            if(wsin["Type"] == NULL || wsin["Get"] == NULL){
+              if(DebugMode){
+                Serial.println(F("GET Request was missing a key!"));
+              }
+              Got = "BadOrders";
+              DoneGetting = 1;
+              GetFile = 1;
+            } else{
+              FileType = wsin["Type"].as<String>();
+              FilePath = wsin["Get"].as<String>();
+              GetFile = 1;
+            }
+          }
+        }
         if(kv.key() == "Key"){
           //There's a new key to set
           settings.putString("Key", wsin["Key"].as<String>());
@@ -176,66 +195,81 @@ void SocketManager(void *pvParameters) {
       }
     }
     //There are very few reasons we need to send a message. 
-    //Check if each is the case:
-    //0: We just (re)connected
-    if(SendWSReconnect && !WSSend){
-      wsresp["Zone"] = Zone;
-      wsresp["NeedsWelcome"] = NeedsWelcome;
-      wsresp["MachineType"] = MachineType;
-      wsresp["MachineName"] = MachineName;
-      wsresp["Key"] = Key;
-      wsresp["State"] = State;
-      wsresp["FWVersion"] = Version;
-      wsresp["HWVersion"] = Hardware;
-      wsresp["HWType"] = "ACS Core";
-      wsresp["SerialNumber"] = SerialNumber;
-      if(devices == 0){
-        //The Onewire manager hasn't finished finding IDs yet
-        delay(50);
+    //It is not worth checking if we should be sending a response if we don't have a socket connection
+    //That way we don't drop more messages than needed
+    if(socket.isConnected()){
+      //0: We just (re)connected
+      if(SendWSReconnect && !WSSend){
+        wsresp["Zone"] = Zone;
+        wsresp["NeedsWelcome"] = NeedsWelcome;
+        wsresp["MachineType"] = MachineType;
+        wsresp["MachineName"] = MachineName;
+        wsresp["Key"] = Key;
+        wsresp["State"] = State;
+        wsresp["FWVersion"] = Version;
+        wsresp["HWVersion"] = Hardware;
+        wsresp["HWType"] = "ACS Core";
+        wsresp["SerialNumber"] = SerialNumber;
+        if(devices == 0){
+          //The Onewire manager hasn't finished finding IDs yet
+          delay(50);
+        }
+        for (uint8_t i = 0; i < devices; i += 1) {
+          String TempID = String(SerialNumbers[i],HEX);
+          TempID.toUpperCase();
+          wsresp["HardwareIDs"][i] = TempID;
+        }
+        //Determine if this is the first time we are sending this since startup. 
+        if(MessageNumber > 0){
+          //We've sent messages in the past, reset the message count but no need to ask for anything special
+          MessageNumber = 0;
+        } else{
+          //This is the first message, so ask what state we should be in and what time it is
+          wsresp["Request"][0] = "State";
+          wsresp["Request"][1] = "Time";
+        }
+        WSSend = 1;
+        SendWSReconnect = 0;
       }
-      for (uint8_t i = 0; i < devices; i += 1) {
-        String TempID = String(SerialNumbers[i],HEX);
-        TempID.toUpperCase();
-        wsresp["HardwareIDs"][i] = TempID;
+      //1: Authenticating an ID
+      if(VerifyID && !WSSend){
+        wsresp["Auth"] = UID;
+        WSSend = 1;
+        VerifyID = 0;
       }
-      //Determine if this is the first time we are sending this since startup. 
-      if(MessageNumber > 0){
-        //We've sent messages in the past, reset the message count but no need to ask for anything special
-        MessageNumber = 0;
-      } else{
-        //This is the first message, so ask what state we should be in and what time it is
-        wsresp["Request"][0] = "State";
-        wsresp["Request"][1] = "Time";
+      //2: There's an error message to send
+      if(ReadyToSend && !WSSend){
+        wsresp["Message"] = Message;
+        WSSend = 1;
+        ReadyToSend = 0;
+        WritingMessage = 0;
       }
-      WSSend = 1;
-      SendWSReconnect = 0;
-    }
-    //1: Authenticating an ID
-    if(VerifyID && !WSSend){
-      wsresp["Auth"] = UID;
-      WSSend = 1;
-      VerifyID = 0;
-    }
-    //2: There's an error message to send
-    if(ReadyToSend && !WSSend){
-      wsresp["Message"] = Message;
-      WSSend = 1;
-      ReadyToSend = 0;
-      WritingMessage = 0;
-    }
-    //3: The state changed
-    if(ChangeStatus && !WSSend){
-      wsresp["State"] = State;
-      wsresp["UID"] = UID;
-      WSSend = 1;
-      ChangeStatus = 0;
-    }
-    //4: It is time for a regular report
-    if(RegularStatus && !WSSend){
-      wsresp["State"] = State;
-      wsresp["UID"] = UID;
-      WSSend = 1;
-      RegularStatus = 0;
+      //3: The state changed
+      if(ChangeStatus && !WSSend){
+        wsresp["State"] = State;
+        wsresp["UID"] = UID;
+        WSSend = 1;
+        ChangeStatus = 0;
+      }
+      //4: The FileGetter is done
+      if(DoneGetting && !WSSend){
+        wsresp["Got"] = Got;
+        WSSend = 1;
+        DoneGetting = 0;
+        //Once we send this message we are ready to get the next file we need;
+        GetFile = 0;
+      }
+      //5: It is time for a regular report
+      if(RegularStatus && !WSSend){
+        wsresp["State"] = State;
+        wsresp["UID"] = UID;
+        WSSend = 1;
+        RegularStatus = 0;
+      }
+    } else{
+        if(DebugMode){
+          Serial.println(F("Not checking if we should be sending a websocket message, since we are not connected anyway."));
+        }
     }
     delay(1);
     if(WSSend){

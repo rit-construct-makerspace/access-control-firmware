@@ -123,6 +123,12 @@ char InterfaceUsed;                      //0 if using WiFi, 1 if using Ethernet.
 String PreState;                         //What state the system was in right before a keycard is inserted, to prevent glitches to the state.
 String SerialNumber;                     //Plaintext store of the shlug identifier from OneWire
 bool JustDisconnected;                   //Lets us detect if a websocket was just dropped or has been for a bit.
+bool GetFile;                            //Flag indicates there is a file we are ordered to get by the websocket
+String FileType;                         //The type of file we are getting, to determine how to process it
+String FilePath;                         //The path to get to a file, appended to the end of the Server
+bool DoneGetting;                        //1 when the FileGetter is done doing its thing, and the websocket should return an response
+String CACert;                           //Stores the CA cert loaded at startup
+String Got;                              //The FileGetter response to the server
 
 //Libraries:
 #include <OneWireESP32.h>         //Version 2.0.2 | Source: https://github.com/junkfix/esp32-ds18b20
@@ -173,7 +179,7 @@ const int NFCRST = 4;
 //Objects:
 Adafruit_PN532 nfc(SCKPin, MISOPin, MOSIPin, NFCCS);
 Preferences settings;
-WiFiClientSecure client;
+NetworkClientSecure client;
 HardwareSerial Internal(1);
 JsonDocument usbjson;
 HTTPClient http;
