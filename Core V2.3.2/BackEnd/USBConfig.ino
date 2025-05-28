@@ -52,19 +52,25 @@ void USBConfig(void *pvParameters){
       Serial.println(Input);
     }
     if(Input.charAt(0) == '{'){
+      if(DebugMode){
+        Serial.println(F("This appears to be a configuration JSON."));
+      }
       //This is the start of a JSON with settings
-      Input.trim();
       deserializeJson(usbjson, Input);
       //Apply all of the settings
       //We always overwrite the server and key on any change
       Key = usbjson["Key"].as<String>();
+      settings.putString("Key",Key);
       Server = usbjson["Server"].as<String>();
+      settings.putString("Server",Server);
       //Update the rest if found
       if(usbjson["SSID"]){
         SSID = usbjson["SSID"].as<String>();
+        settings.putString("SSID",SSID);
       }
       if(usbjson["Password"]){
         Password = usbjson["Password"].as<String>();
+        settings.putString("Password",Password);
       }
     }
     if(Input.equalsIgnoreCase("Restart")){
