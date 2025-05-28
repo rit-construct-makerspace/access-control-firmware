@@ -179,20 +179,18 @@ void SocketManager(void *pvParameters) {
     //Check if each is the case:
     //0: We just (re)connected
     if(SendWSReconnect && !WSSend){
-      wsresp["Zone"] = Zone;
-      wsresp["NeedsWelcome"] = NeedsWelcome;
-      wsresp["MachineType"] = MachineType;
-      wsresp["MachineName"] = MachineName;
       wsresp["Key"] = Key;
       wsresp["State"] = State;
       wsresp["FWVersion"] = Version;
       wsresp["HWVersion"] = Hardware;
       wsresp["HWType"] = "ACS Core";
-      wsresp["SerialNumber"] = SerialNumber;
       if(devices == 0){
         //The Onewire manager hasn't finished finding IDs yet
         delay(50);
       }
+      //Now that we have found the onewire devices, we should know our serial number;
+      wsresp["SerialNumber"] = SerialNumber;
+      //And we also know the hardware IDs of the entire system;
       for (uint8_t i = 0; i < devices; i += 1) {
         String TempID = String(SerialNumbers[i],HEX);
         TempID.toUpperCase();
