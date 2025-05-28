@@ -32,7 +32,7 @@ void FileGetter(void *pvParameters){
     if(!http.begin(client, GetServer.c_str())){
       //Client failed to connect to server
       if(DebugMode){
-        Serial.println(F("FileGetter failed to begin client."))
+        Serial.println(F("FileGetter failed to begin client."));
       }
       abortGet("Client Begin Fail");
       continue;
@@ -74,7 +74,7 @@ void FileGetter(void *pvParameters){
       while(http.connected() && offset < OTASize){
         size_t SizeAvailable = stream->available();
         if(SizeAvailable > 0){
-          size_t bytes_to_read = min(sizeAvail, sizeof(buff));
+          size_t bytes_to_read = min(SizeAvailable, sizeof(buff));
           size_t bytes_read = stream->readBytes(buff, bytes_to_read);
           size_t bytes_written = Update.write(buff, bytes_read);
           if (bytes_read != bytes_written){
@@ -118,6 +118,6 @@ void abortGet(String Reason){
   DoneGetting = 1;
   while(DoneGetting){
     //Delay until the websocket reports the abort.
-    delay(1);
+    delay(10);
   }
 }
