@@ -61,6 +61,9 @@ void BuzzerControl(void *pvParameters) {
     } else{
       VerifiedBeep = 0;
     }
+    if(ChangeBeep){
+      Melody = 4;
+    }
     if(Melody == 0){
       //No tone to play
       Tone = 0;
@@ -140,6 +143,7 @@ void BuzzerControl(void *pvParameters) {
           case 1:
             Tone = 0;
             VerifiedBeep = 0;
+            ChangeBeep = 0;
             DonePlaying = 1;
           break;
         }

@@ -9,16 +9,30 @@ This task is responsible for sending and receiving all network traffic via webso
 
 void SocketManager(void *pvParameters) {    
   JsonDocument wsresp;
-  socket.beginSslWithBundle(Server.c_str(), 443, "/api/ws", NULL, 0, "");
-  socket.onEvent(webSocketEvent);
-  socket.setReconnectInterval(1000); //Attempt to reconnect every second if we lose connection
-  //Wait to connect before continuing
-  while(!socket.isConnected()){
-    delay(10);
-  }
+  #ifndef WebsocketUART
+    socket.beginSslWithBundle(Server.c_str(), 443, "/api/ws", NULL, 0, "");
+    socket.onEvent(webSocketEvent);
+    socket.setReconnectInterval(1000); //Attempt to reconnect every second if we lose connection
+    //Wait to connect before continuing
+    while(!socket.isConnected()){
+      delay(10);
+    }
+  #endif
+
   Serial.println("Websocket Initial Connection.");
+  
   while (1) {
     delay(50);
+
+    #ifdef WebsocketUART
+      NoNetwork = 0;
+      if(Serial.available() > 0){
+        WSIncoming = Serial.readString();
+        WSIncoming.trim();
+        NewFromWS = 1;
+      }
+    #endif
+
     //First, check if there is a new message:
     if(NewFromWS){
       NewFromWS = 0;
@@ -96,6 +110,7 @@ void SocketManager(void *pvParameters) {
                   CardVerified = 0;
                 }
                 State = WSState;
+                ChangeBeep = 1;
                 if(DebugMode){
                   Serial.print(F("State remotely set to: "));
                   Serial.println(State);
