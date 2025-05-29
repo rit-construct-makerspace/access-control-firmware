@@ -37,6 +37,12 @@ void USBConfig(void *pvParameters){
   while(1){
     delay(50);
     String Input = "";
+    
+    #ifdef WebsocketUART
+      //We shouldn't be in this task if we are using UART for websocket testing
+      continue;
+    #endif
+
     if(Serial.available()){
       //There's something in the serial terminal.
       Serial.setTimeout(5);

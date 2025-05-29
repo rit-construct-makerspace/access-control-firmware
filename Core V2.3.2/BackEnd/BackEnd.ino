@@ -43,6 +43,7 @@ USBConfig: Allows programatic changing of settings over USB
 #define BAD_INPUT_THRESHOLD 5 //If the wrong password or a bad JSON is loaded more than this many times, delete all information as a safety.
 #define TXINTERRUPT 0 //Set to 1 to route UART0 TX to the DB9 interrupt pin, to allow external loggers to capture crash data.
 #define NoOTA 0 //Set to 1 to disable OTA check on startup, makes startup faster.
+#define WebsocketUART //Uncomment to get messages from uart as if it is a websocket for testing. Also disables USB config to prevent issues there.
 
 //Global Variables:
 bool TemperatureUpdate;                  //1 when writing new information, to indicate other devices shouldn't read temperature-related info
@@ -123,6 +124,7 @@ char InterfaceUsed;                      //0 if using WiFi, 1 if using Ethernet.
 String PreState;                         //What state the system was in right before a keycard is inserted, to prevent glitches to the state.
 String SerialNumber;                     //Plaintext store of the shlug identifier from OneWire
 bool JustDisconnected;                   //Lets us detect if a websocket was just dropped or has been for a bit.
+bool ChangeBeep;                         //Flag to beep if the state has been remotely changed.
 
 //Libraries:
 #include <OneWireESP32.h>         //Version 2.0.2 | Source: https://github.com/junkfix/esp32-ds18b20
@@ -209,7 +211,10 @@ void setup(){
   delay(5000); 
 
   //We want to start the USBConfig early, so we can send new credentials for WiFi and the like before startup.
-  xTaskCreate(USBConfig, "USBConfig", 4096, NULL, 2, NULL);
+  #ifndef WebsocketUART
+    Serial.println(F("USB Settings Input Started."));
+    xTaskCreate(USBConfig, "USBConfig", 4096, NULL, 2, NULL);
+  #endif
 
   if(TXINTERRUPT){
     Serial.begin(115200, SERIAL_8N1, 44, DB9INT);
