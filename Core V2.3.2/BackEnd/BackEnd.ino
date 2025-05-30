@@ -44,7 +44,7 @@ USBConfig: Allows programatic changing of settings over USB
 #define TXINTERRUPT 0 //Set to 1 to route UART0 TX to the DB9 interrupt pin, to allow external loggers to capture crash data.
 #define NoOTA 0 //Set to 1 to disable OTA check on startup, makes startup faster.
 //#define WebsocketUART //Uncomment to get messages from uart as if it is a websocket for testing. Also disables USB config to prevent issues there.
-#define DebugMode 1 //Set to 1 for verbose output via UART, /!\ WARNING /!\ can dump sensitive information
+#define DebugMode 0 //Set to 1 for verbose output via UART, /!\ WARNING /!\ can dump sensitive information
 
 //Global Variables:
 bool TemperatureUpdate;                  //1 when writing new information, to indicate other devices shouldn't read temperature-related info
