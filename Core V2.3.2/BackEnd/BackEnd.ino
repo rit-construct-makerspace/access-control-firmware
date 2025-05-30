@@ -43,7 +43,8 @@ USBConfig: Allows programatic changing of settings over USB
 #define BAD_INPUT_THRESHOLD 5 //If the wrong password or a bad JSON is loaded more than this many times, delete all information as a safety.
 #define TXINTERRUPT 0 //Set to 1 to route UART0 TX to the DB9 interrupt pin, to allow external loggers to capture crash data.
 #define NoOTA 0 //Set to 1 to disable OTA check on startup, makes startup faster.
-#define WebsocketUART //Uncomment to get messages from uart as if it is a websocket for testing. Also disables USB config to prevent issues there.
+//#define WebsocketUART //Uncomment to get messages from uart as if it is a websocket for testing. Also disables USB config to prevent issues there.
+#define DebugMode 1 //Set to 1 for verbose output via UART, /!\ WARNING /!\ can dump sensitive information
 
 //Global Variables:
 bool TemperatureUpdate;                  //1 when writing new information, to indicate other devices shouldn't read temperature-related info
@@ -51,7 +52,6 @@ uint64_t SerialNumbers[MAX_DEVICES];     //an array of uint64_t serial numbers o
 char devices;                            //How many onewire devices were detected, and therefore how many hardware components make up the ACS deployment
 float SysMaxTemp;                        //a float of the maximum temperature of the system
 bool DebugPrinting;                      //1 when a thread is writing on debug serial
-bool DebugMode = 1;                      //1 when debug data should be printed, always starts at 1. WARNING: Will plain-text print sensitive information!
 byte NetworkMode = 1;                    //0 means WiFi only, 1 means WiFi or Ethernet, 2 means Ethernet only. TODO ethernet not implemented
 String SecurityCode = "Shlug";           //Stores the password that needs to be verified before a JSON of new settings is loaded
 String SSID = "";                        //The SSID that the wireless network will connect to.
@@ -260,7 +260,6 @@ void setup(){
   Frequency = settings.getString("Frequency").toInt();
   NetworkMode = settings.getString("NetworkMode").toInt();
   NeedsWelcome = settings.getString("NeedsWelcome").toInt();
-  DebugMode = settings.getString("DebugMode").toInt();
   NoBuzzer = settings.getString("NoBuzzer").toInt();
 
   //Start the network connection;

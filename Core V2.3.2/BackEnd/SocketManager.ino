@@ -10,7 +10,8 @@ This task is responsible for sending and receiving all network traffic via webso
 void SocketManager(void *pvParameters) {    
   JsonDocument wsresp;
   #ifndef WebsocketUART
-    socket.beginSslWithBundle(Server.c_str(), 443, "/api/ws", NULL, 0, "");
+    //socket.beginSslWithBundle(Server.c_str(), 443, "/api/ws", NULL, 0, "");
+    socket.begin(Server.c_str(), 80, "/api/ws");
     socket.onEvent(webSocketEvent);
     socket.setReconnectInterval(1000); //Attempt to reconnect every second if we lose connection
     //Wait to connect before continuing
@@ -300,7 +301,7 @@ void authUser(JsonDocument input){
     InternalStatus = 0;
     InternalVerified = 1;
     if(DebugMode){
-      Serial.print(F("Acces Denied. Reason: "));
+      Serial.print(F("Access Denied. Reason: "));
       Serial.println(input["Reason"].as<String>());
     }
     return;
