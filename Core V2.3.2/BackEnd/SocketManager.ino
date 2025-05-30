@@ -69,12 +69,12 @@ void SocketManager(void *pvParameters) {
         if(kv.key() == "State"){
           //Immediately set the state of the machine to this
           String WSState = wsin["State"].as<String>();
-          if(WSState == State){
+          if(State.equalsIgnoreCase(WSState)){
             if(DebugMode){
               Serial.println(F("State change to same state. Ignoring."));
             }
           } else{
-              if(WSState == "Restart"){
+              if(WSState.equalsIgnoreCase("Restart")){
                 //The system has ordered an immediate restart of the device.
                 if(DebugMode){
                   Serial.println(F("Restart Ordered."));
@@ -98,7 +98,7 @@ void SocketManager(void *pvParameters) {
                   Serial.println(F("Unable to change state from Fault. Must restart."));
                 }
               } else{
-                if(WSState == "Fault"){
+                if(WSState.equalsIgnoreCase("Fault")){
                   //Ordered to an irreversible fault state
                   Fault = 1;
                   State = "Fault";
@@ -108,9 +108,31 @@ void SocketManager(void *pvParameters) {
                 //If the state is "Unlocked" the machine gets confused when we change state with a card still present.
                 //So, act like the card was removed
                 if(State == "Unlocked"){
+                  CardPresent = 0;
                   CardVerified = 0;
                 }
-                State = WSState;
+                if(WSState.equalsIgnoreCase("Unlocked")){
+                  if(CardPresent){
+                    PreUnlockState = State;
+                    State = "Unlocked";
+                  } else{
+                    if(DebugMode){
+                      Serial.println(F("Cannot set Unlocked, no card present!"));
+                    }
+                  }
+                }
+                if(WSState.equalsIgnoreCase("Idle")){
+                  State = "Idle";
+                }
+                if(WSState.equalsIgnoreCase("Lockout")){
+                  State = "Lockout";
+                }
+                if(WSState.equalsIgnoreCase("AlwaysOn")){
+                  State = "AlwaysOn";
+                }
+                if(WSState.equalsIgnoreCase("Startup")){
+                  State = "Startup";
+                }
                 ChangeBeep = 1;
                 if(DebugMode){
                   Serial.print(F("State remotely set to: "));

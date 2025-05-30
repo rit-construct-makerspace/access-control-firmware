@@ -76,13 +76,14 @@ void MachineState(void *pvParameters) {
     if(State == "Idle" && CardVerified && CardStatus){
       //The keycard is present and verified, but we are in the idle state.
       //We should be unlocked
+      PreUnlockState = State;
       State = "Unlocked";
       SessionStart = millis64();
     }
     if(State == "Unlocked" && !CardPresent){
       //The machine is unlocked, but the keycard was removed.
-      //We should be in idle mode
-      State = "Idle";
+      //We should return to our previous state
+      State = PreUnlockState;
       EndStatus = 1; //Send a message to the server that the session ended
     }
     //Set the ACS output based on state;
