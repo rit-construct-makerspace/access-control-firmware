@@ -36,12 +36,21 @@ void InternalWrite(void *pvParameters) {
       PollCheck = 0;
     }
     if(NewLED){
-      //Apply the brightness override here;
-      byte DimRed = map(Red, 0, 255, 0, Brightness);
-      byte DimGreen = map(Green, 0, 255, 0, Brightness);
-      byte DimBlue = map(Blue, 0, 255, 0, Brightness);
-      Internal.println("L " + String(DimRed) + "," + String(DimGreen) + "," + String(DimBlue));
-      NewLED = 0;
+      //Check when the last time we updated the lighting was - we don't want to set it too often to prevent rapid flashes
+      //333ms is 3Hz, the cutoff for epileptic triggers.
+      if((LastLightChange + 333)  <= millis64()){
+        LastLightChange = millis64();
+        //Apply the brightness override here;
+        byte DimRed = map(Red, 0, 255, 0, Brightness);
+        byte DimGreen = map(Green, 0, 255, 0, Brightness);
+        byte DimBlue = map(Blue, 0, 255, 0, Brightness);
+        Internal.println("L " + String(DimRed) + "," + String(DimGreen) + "," + String(DimBlue));
+        NewLED = 0;
+      } else{
+        if(DebugMode){
+          Serial.println(F("Commanded to change LED to soon! Ignoring."));
+        }
+      }
     }
     if(NewBuzzer){
       Internal.println("B " + String(Tone));
