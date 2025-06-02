@@ -157,7 +157,7 @@ void SocketManager(void *pvParameters) {
         if(kv.key() == "TempLimit"){
           //Set the temperature limit
           TempLimit = wsin["TempLimit"].as<unsigned int>();
-          settings.putString("TempLimit",TempLimit);
+          settings.putString("TempLimit",String(TempLimit));
           if(DebugMode){
             Serial.print(F("Set Temperature Limit to: "));
             Serial.print(TempLimit);
@@ -167,7 +167,7 @@ void SocketManager(void *pvParameters) {
         if(kv.key() == "Brightness"){
           //Set the overall brightness
           Brightness = wsin["Brightness"].as<byte>();
-          settings.putString("Brightness",Brightness);
+          settings.putString("Brightness",String(Brightness));
           if(DebugMode){
             Serial.print(F("Brightness set to:"));
             Serial.print(Brightness);
@@ -177,7 +177,7 @@ void SocketManager(void *pvParameters) {
         //TODO Eventually check for UseEthernet and UseWiFi here. or NetworkMode.
         if(kv.key() == "Frequency"){
           Frequency = wsin["Frequency"].as<unsigned int>();
-          settings.putString("Frequency", Frequency);
+          settings.putString("Frequency", String(Frequency));
           if(DebugMode){
             Serial.print(F("Regular message frequency set to once every: "));
             Serial.print(Frequency);
@@ -186,7 +186,7 @@ void SocketManager(void *pvParameters) {
         }
         if(kv.key() == "NoBuzzer"){
           NoBuzzer = wsin["NoBuzzer"].as<bool>();
-          settings.putString("NoBuzzer",NoBuzzer);
+          settings.putString("NoBuzzer",String(NoBuzzer));
           if(DebugMode){
             if(NoBuzzer){
               Serial.println(F("Buzzer Disabled"));
@@ -229,7 +229,7 @@ void SocketManager(void *pvParameters) {
               wsresp["State"] = State;
             }
             if(wsin["Request"][i] == "TempLimit"){
-              wsresp["TempLimit" = TempLimit;
+              wsresp["TempLimit"] = TempLimit;
             }
             if(wsin["Request"][i] == "Brightness"){
               wsresp["Brightness"] = Brightness;

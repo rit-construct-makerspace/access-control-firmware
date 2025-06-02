@@ -43,8 +43,8 @@ USBConfig: Allows programatic changing of settings over USB
 #define BAD_INPUT_THRESHOLD 5 //If the wrong password or a bad JSON is loaded more than this many times, delete all information as a safety.
 #define TXINTERRUPT 0 //Set to 1 to route UART0 TX to the DB9 interrupt pin, to allow external loggers to capture crash data.
 #define NoOTA 0 //Set to 1 to disable OTA check on startup, makes startup faster.
-#define WebsocketUART //Uncomment to get messages from uart as if it is a websocket for testing. Also disables USB config to prevent issues there.
-#define DebugMode 1 //Set to 1 for verbose output via UART, /!\ WARNING /!\ can dump sensitive information
+//#define WebsocketUART //Uncomment to get messages from uart as if it is a websocket for testing. Also disables USB config to prevent issues there.
+#define DebugMode 0 //Set to 1 for verbose output via UART, /!\ WARNING /!\ can dump sensitive information
 
 //Global Variables:
 bool TemperatureUpdate;                  //1 when writing new information, to indicate other devices shouldn't read temperature-related info
@@ -247,10 +247,10 @@ void setup(){
 
   //New setting added in V1.3.2. Need to check if it exists, if not make with a default value
   if(settings.isKey("Brightness")){
-    Brightness = setting.getString("Brightness").toInt();
+    Brightness = settings.getString("Brightness").toInt();
   } else{
     Brightness = 255;
-    settings.putString("Brightness",Brightness);
+    settings.putString("Brightness",String(Brightness));
   }
 
   //Go through and delete any keys we no longer use from old versions. 
