@@ -34,39 +34,42 @@ void MachineState(void *pvParameters) {
     if(Fault && State != "Fault"){
       State = "Fault";
     }
+    
     //Read the key switches and set the state, with a debounce time
-    //Also no point in reading if we are in a fault state
-    if(millis64() >= LastKeyState){
-      //it has been more than the debounce time
-      LastKeyState = millis64() + KEYSWITCH_DEBOUNCE;
-      if((OldKey1 != Key1) || (OldKey2 != Key2)){
-        //A key switch has changed
-        OldKey1 = Key1;
-        OldKey2 = Key2;
-        if(NoNetwork && (State != "Fault")){
-          //We only acknowledge the key switch if there is no network connection and we are not in a fault state.
-          if(Key1){
-            //Locked On
-            State = "AlwaysOn";
-            SessionStart = millis64();
-          } 
-          else if(!Key1 && !Key2){
-            //Locked Off
-            //We only want to go into lockout if we've been in this key position for a bit
-            //Because this is how the keys report when between positions as well
-            byte KeyDebounce = 0;
-            while(!Key1 && !Key2 && KeyDebounce <= 250){
-              delay(1);
-              KeyDebounce++;
+    //We only have to do this if there is no network connection, and the state is not fault.
+    if(NoNetwork && (State != Fault)){
+      if(millis64() >= LastKeyState){
+        //it has been more than the debounce time
+        LastKeyState = millis64() + KEYSWITCH_DEBOUNCE;
+        if((OldKey1 != Key1) || (OldKey2 != Key2)){
+          //A key switch has changed
+          OldKey1 = Key1;
+          OldKey2 = Key2;
+          if(NoNetwork && (State != "Fault")){
+            //We only acknowledge the key switch if there is no network connection and we are not in a fault state.
+            if(Key1){
+              //Locked On
+              State = "AlwaysOn";
+              SessionStart = millis64();
+            } 
+            else if(!Key1 && !Key2){
+              //Locked Off
+              //We only want to go into lockout if we've been in this key position for a bit
+              //Because this is how the keys report when between positions as well
+              byte KeyDebounce = 0;
+              while(!Key1 && !Key2 && KeyDebounce <= 250){
+                delay(1);
+                KeyDebounce++;
+              }
+              if(KeyDebounce >= 150 && !Key1 && !Key2){
+                //We made it the full debounce time
+                State = "Lockout";
+              }
             }
-            if(KeyDebounce >= 150 && !Key1 && !Key2){
-              //We made it the full debounce time
-              State = "Lockout";
+            else if(Key2){
+              //Normal Mode
+              State = "Idle";
             }
-          }
-          else if(Key2){
-            //Normal Mode
-            State = "Idle";
           }
         }
       }
