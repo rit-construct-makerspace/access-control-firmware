@@ -79,6 +79,10 @@ void LEDControl(void *pvParameters) {
       //Animation 7: Solid Blue
       LEDAnimation = 7;
     }
+    if(Identify){
+      //Animation 9: Flashing Blue
+      LEDAnimation = 9;
+    }
     if(ResetLED){
       //Animation 8: Solid Purple
       LEDAnimation = 8;
@@ -177,6 +181,18 @@ void LEDControl(void *pvParameters) {
         Red = 255;
         Green = 0;
         Blue = 255;
+      break;
+      case 9:
+        //Flashing blue
+        if(AnimationBlock){
+          Red = 0;
+          Green = 0;
+          Blue = 255;
+        } else{
+          Red = 0;
+          Green = 0;
+          Blue = 0;
+        }
       break;
       }
       NewLED = 1;

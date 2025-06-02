@@ -66,6 +66,10 @@ void SocketManager(void *pvParameters) {
             Serial.println(F("New key saved and updated."));
           }
         }
+        if(kv.key() == "Identify"){
+          //Set the Identify mode, to easily find a shlug
+          Identify = wsin["Identify"].as<bool>();
+        }
         if(kv.key() == "State"){
           //Immediately set the state of the machine to this
           String WSState = wsin["State"].as<String>();

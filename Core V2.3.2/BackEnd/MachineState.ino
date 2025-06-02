@@ -37,7 +37,7 @@ void MachineState(void *pvParameters) {
     
     //Read the key switches and set the state, with a debounce time
     //We only have to do this if there is no network connection, and the state is not fault.
-    if(NoNetwork && (State != Fault)){
+    if(NoNetwork && (State != "Fault")){
       if(millis64() >= LastKeyState){
         //it has been more than the debounce time
         LastKeyState = millis64() + KEYSWITCH_DEBOUNCE;
