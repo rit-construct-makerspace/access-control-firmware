@@ -126,6 +126,7 @@ String SerialNumber;                     //Plaintext store of the shlug identifi
 bool JustDisconnected;                   //Lets us detect if a websocket was just dropped or has been for a bit.
 bool ChangeBeep;                         //Flag to beep if the state has been remotely changed.
 String PreUnlockState;                   //State the machine was in before being unlocked.
+bool Identify;                           //Set to 1 to play a constant noise and lighting to find the device. Useful in websocket setup.
 
 //Libraries:
 #include <OneWireESP32.h>         //Version 2.0.2 | Source: https://github.com/junkfix/esp32-ds18b20
