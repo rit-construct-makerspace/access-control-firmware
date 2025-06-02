@@ -36,7 +36,11 @@ void InternalWrite(void *pvParameters) {
       PollCheck = 0;
     }
     if(NewLED){
-      Internal.println("L " + String(Red) + "," + String(Green) + "," + String(Blue));
+      //Apply the brightness override here;
+      byte DimRed = map(Red, 0, 255, 0, Brightness);
+      byte DimGreen = map(Green, 0, 255, 0, Brightness);
+      byte DimBlue = map(Blue, 0, 255, 0, Brightness);
+      Internal.println("L " + String(DimRed) + "," + String(DimGreen) + "," + String(DimBlue));
       NewLED = 0;
     }
     if(NewBuzzer){

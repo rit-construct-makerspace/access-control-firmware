@@ -77,74 +77,74 @@ void SocketManager(void *pvParameters) {
             if(DebugMode){
               Serial.println(F("State change to same state. Ignoring."));
             }
-          } else{
-              if(WSState.equalsIgnoreCase("Restart")){
-                //The system has ordered an immediate restart of the device.
-                if(DebugMode){
-                  Serial.println(F("Restart Ordered."));
-                }
-                xSemaphoreTake(StateMutex, portMAX_DELAY);
-                settings.putString("LastState", State);
-                delay(10);
-                State = "Restart";
-                //Turn off the internal write task so that it doesn't overwrite the restart led color.
-                vTaskSuspend(xHandle);
-                delay(100);
-                settings.putString("ResetReason","Server-Ordered");
-                Internal.println("L 255,0,0");
-                Internal.println("S 0");
-                Internal.flush();
-                ESP.restart();
+          } 
+          else{
+            if(WSState.equalsIgnoreCase("Restart")){
+              //The system has ordered an immediate restart of the device.
+              if(DebugMode){
+                Serial.println(F("Restart Ordered."));
               }
-              //If the state is fault, we do not accept anything but restart.
-              if(State == "Fault"){
-                if(DebugMode){
-                  Serial.println(F("Unable to change state from Fault. Must restart."));
-                }
-              } else{
-                if(WSState.equalsIgnoreCase("Fault")){
-                  //Ordered to an irreversible fault state
-                  Fault = 1;
-                  State = "Fault";
-                  Serial.println(F("FAULTING"));
-                }
-                //Some special fixings:
-                //If the state is "Unlocked" the machine gets confused when we change state with a card still present.
-                //So, act like the card was removed
-                if(State == "Unlocked"){
-                  CardPresent = 0;
-                  CardVerified = 0;
-                }
-                if(WSState.equalsIgnoreCase("Unlocked")){
-                  if(CardPresent){
-                    PreUnlockState = State;
-                    State = "Unlocked";
-                  } else{
-                    if(DebugMode){
-                      Serial.println(F("Cannot set Unlocked, no card present!"));
-                    }
+              xSemaphoreTake(StateMutex, portMAX_DELAY);
+              settings.putString("LastState", State);
+              delay(10);
+              State = "Restart";
+              //Turn off the internal write task so that it doesn't overwrite the restart led color.
+              vTaskSuspend(xHandle);
+              delay(100);
+              settings.putString("ResetReason","Server-Ordered");
+              Internal.println("L 255,0,0");
+              Internal.println("S 0");
+              Internal.flush();
+              ESP.restart();
+            }
+            //If the state is fault, we do not accept anything but restart.
+            if(State == "Fault"){
+              if(DebugMode){
+                Serial.println(F("Unable to change state from Fault. Must restart."));
+              }
+            } else{
+              if(WSState.equalsIgnoreCase("Fault")){
+                //Ordered to an irreversible fault state
+                Fault = 1;
+                State = "Fault";
+                Serial.println(F("FAULTING"));
+              }
+              //Some special fixings:
+              //If the state is "Unlocked" the machine gets confused when we change state with a card still present.
+              //So, act like the card was removed
+              if(State == "Unlocked"){
+                CardPresent = 0;
+                CardVerified = 0;
+              }
+              if(WSState.equalsIgnoreCase("Unlocked")){
+                if(CardPresent){
+                  PreUnlockState = State;
+                  State = "Unlocked";
+                } else{
+                  if(DebugMode){
+                    Serial.println(F("Cannot set Unlocked, no card present!"));
                   }
                 }
-                if(WSState.equalsIgnoreCase("Idle")){
-                  State = "Idle";
-                }
-                if(WSState.equalsIgnoreCase("Lockout")){
-                  State = "Lockout";
-                }
-                if(WSState.equalsIgnoreCase("AlwaysOn")){
-                  State = "AlwaysOn";
-                }
-                if(WSState.equalsIgnoreCase("Startup")){
-                  State = "Startup";
-                }
-                ChangeBeep = 1;
-                if(DebugMode){
-                  Serial.print(F("State remotely set to: "));
-                  Serial.println(State);
-                }
               }
-
+              if(WSState.equalsIgnoreCase("Idle")){
+                State = "Idle";
+              }
+              if(WSState.equalsIgnoreCase("Lockout")){
+                State = "Lockout";
+              }
+              if(WSState.equalsIgnoreCase("AlwaysOn")){
+                State = "AlwaysOn";
+              }
+              if(WSState.equalsIgnoreCase("Startup")){
+                State = "Startup";
+              }
+              ChangeBeep = 1;
+              if(DebugMode){
+                Serial.print(F("State remotely set to: "));
+                Serial.println(State);
+              }
             }
+          }
         }
         if(kv.key() == "Time"){
           //Set the time to this (unix seconds)
@@ -154,20 +154,49 @@ void SocketManager(void *pvParameters) {
             Serial.println(rtc.getDateTime(true));
           }
         }
+        if(kv.key() == "TempLimit"){
+          //Set the temperature limit
+          TempLimit = wsin["TempLimit"].as<unsigned int>();
+          settings.putString("TempLimit",TempLimit);
+          if(DebugMode){
+            Serial.print(F("Set Temperature Limit to: "));
+            Serial.print(TempLimit);
+            Serial.println(F(" degrees C."));
+          }
+        }
+        if(kv.key() == "Brightness"){
+          //Set the overall brightness
+          Brightness = wsin["Brightness"].as<byte>();
+          settings.putString("Brightness",Brightness);
+          if(DebugMode){
+            Serial.print(F("Brightness set to:"));
+            Serial.print(Brightness);
+            Serial.println(F(" / 255."));
+          }
+        }
+        //TODO Eventually check for UseEthernet and UseWiFi here. or NetworkMode.
+        if(kv.key() == "Frequency"){
+          Frequency = wsin["Frequency"].as<unsigned int>();
+          settings.putString("Frequency", Frequency);
+          if(DebugMode){
+            Serial.print(F("Regular message frequency set to once every: "));
+            Serial.print(Frequency);
+            Serial.println(F(" seconds."));
+          }
+        }
+        if(kv.key() == "NoBuzzer"){
+          NoBuzzer = wsin["NoBuzzer"].as<bool>();
+          settings.putString("NoBuzzer",NoBuzzer);
+          if(DebugMode){
+            if(NoBuzzer){
+              Serial.println(F("Buzzer Disabled"));
+            } else{
+              Serial.println(F("Buzzer Enabled"));
+            }
+          }
+        }
         if(kv.key() == "Request"){
           //The server has requested some values from us.
-          //The following parameters can be requested:
-            //UID: The current user's UID (0 if no user)
-            //Zone: The zone we are located in
-            //NeedsWelcome: 1 if the machine requires sign-in before use
-            //MachineName: The unique name of this machine
-            //MachineType: The numerical identifer of the machine's type
-            //Message: The last message we sent to the server (idk why you'd want this)
-            //Key: The API key the Shlug is using currently
-            //FWVersion: The firmware version of the device
-            //HWVersion: The hardware revision of the device
-            //HWType: The role the hardware is serving (Core in our case)
-            //State: The current state of the system
           //We send back the sequence number in the response, so the server knows what the response is in regards to
           wsresp["Seq"] = wsin["Seq"];
           //Extract each element of the array;
@@ -180,18 +209,6 @@ void SocketManager(void *pvParameters) {
             //Go through all possible requests and fulfill them:
             if(wsin["Request"][i] == "UID"){
               wsresp["UID"] = UID;
-            }
-            if(wsin["Request"][i] == "Zone"){
-              wsresp["Zone"] = Zone;
-            }
-            if(wsin["Request"][i] == "NeedsWelcome"){
-              wsresp["NeedsWelcome"] = NeedsWelcome;
-            }
-            if(wsin["Request"][i] == "MachineName"){
-              wsresp["MachineName"] = MachineName;
-            }
-            if(wsin["Request"][i] == "MachineType"){
-              wsresp["MachineType"] = MachineType;
             }
             if(wsin["Request"][i] == "Message"){
               wsresp["Message"] = Message;
@@ -211,6 +228,24 @@ void SocketManager(void *pvParameters) {
             if(wsin["Request"][i] == "State"){
               wsresp["State"] = State;
             }
+            if(wsin["Request"][i] == "TempLimit"){
+              wsresp["TempLimit" = TempLimit;
+            }
+            if(wsin["Request"][i] == "Brightness"){
+              wsresp["Brightness"] = Brightness;
+            }
+            if(wsin["Request"][i] == "NetworkMode"){
+              //Report what network mode we are in - sanitize it to how the server expects
+              wsresp["WifiAllowed"] = UseWiFi;
+              wsresp["EthernetAllowed"] = UseEthernet;
+              wsresp["EthernetPresent"] = EthernetPresent;
+            }
+            if(wsin["Request"][i] == "NoBuzzer"){
+              wsresp["NoBuzzer"] = NoBuzzer;
+            }      
+            if(wsin["Request"][i] == "Frequency"){
+              wsresp["Frequency"] = Frequency;
+            }                                    
           }
           //Prime us to send the response:
           WSSend = 1;
