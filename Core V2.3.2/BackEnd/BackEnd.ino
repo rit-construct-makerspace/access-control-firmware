@@ -27,13 +27,13 @@ USBConfig: Allows programatic changing of settings over USB
 */
 
 //Settings
-#define Version "1.3.1"
+#define Version "1.3.2"
 #define Hardware "2.3.2-LE"
 #define MAX_DEVICES 5 //How many possible temperature sensors to scan for
 #define OTA_URL "https://raw.githubusercontent.com/rit-construct-makerspace/access-control-firmware/refs/heads/main/otadirectory.json"
 #define TemperatureTime 5000 //How long to delay between temperature measurements, in milliseconds
 #define FEPollRate 10000 //How long, in milliseconds, to go between an all-values poll of the frontend (in addition to event-based)
-#define LEDFlashTime 150 //Time in milliseconds between aniimation steps of the LED when flashing or similar. 
+#define LEDFlashTime 400 //Time in milliseconds between aniimation steps of the LED when flashing or similar. Set to 400 (2.5Hz) for epilepsy safety
 #define LEDBlinkTime 3000 //Time in milliseconds between animation stepf of an LED when doing a slower blink indication.
 #define BuzzerNoteTime 250 //Time in milliseconds between different tones
 #define KEYSWITCH_DEBOUNCE 150 //time in milliseconds between checks of the key switch, to help prevent rapid state changes.
@@ -127,6 +127,7 @@ bool JustDisconnected;                   //Lets us detect if a websocket was jus
 bool ChangeBeep;                         //Flag to beep if the state has been remotely changed.
 String PreUnlockState;                   //State the machine was in before being unlocked.
 bool Identify;                           //Set to 1 to play a constant noise and lighting to find the device. Useful in websocket setup.
+uint64_t LastLightChange;                //Tracks when the last time the lighting was changed.
 
 //Libraries:
 #include <OneWireESP32.h>         //Version 2.0.2 | Source: https://github.com/junkfix/esp32-ds18b20
@@ -497,11 +498,11 @@ void GamerMode(void *pvParameters){
   //This task simply blinks the front LED red-green-blue, aka gamer mode, to indicate startup in progress.
   while(1){
     Internal.println("L 255,0,0");
-    delay(300);
+    delay(LEDFlashTime);
     Internal.println("L 0,255,0");
-    delay(300);
+    delay(LEDFlashTime);
     Internal.println("L 0,0,255");
-    delay(300);
+    delay(LEDFlashTime);
   }
 }
 
