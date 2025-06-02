@@ -172,11 +172,12 @@ void ReadCard(void *pvParameters) {
       //We've noticed on many devices they get stuck down over time.
       //Set a flag and see if the state persists next time around;
       if(!StuckSwitch){
+        delay(100);
         StuckSwitch = 1;
       } else{
         //Still stuck after another round, may be an issue.
         //Send a message to the server.
-        ReadyMessage(F("POSSIBLE_STUCK_CARD_SWITCH"));
+        ReadyMessage(F("Possible stuck card detect switch, or state commanded to change while in use. Faulting for safety."));
         Fault = 1;
         vTaskSuspend(NULL);
       }
