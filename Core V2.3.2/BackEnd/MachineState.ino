@@ -30,9 +30,11 @@ void MachineState(void *pvParameters) {
     xSemaphoreTake(StateMutex, portMAX_DELAY);
     if(TemperatureFault && State != "Fault"){
       State = "Fault";
+      StateSource = "Fault Temperature";
     }
     if(Fault && State != "Fault"){
       State = "Fault";
+      StateSource = "Fault Other";
     }
     
     //Read the key switches and set the state, with a debounce time
@@ -50,6 +52,7 @@ void MachineState(void *pvParameters) {
             if(Key1){
               //Locked On
               State = "AlwaysOn";
+              StateSource = "Key Switch";
               SessionStart = millis64();
             } 
             else if(!Key1 && !Key2){
@@ -64,11 +67,13 @@ void MachineState(void *pvParameters) {
               if(KeyDebounce >= 150 && !Key1 && !Key2){
                 //We made it the full debounce time
                 State = "Lockout";
+                StateSource = "Key Switch";
               }
             }
             else if(Key2){
               //Normal Mode
               State = "Idle";
+              StateSource = "Key Switch";
             }
           }
         }
@@ -81,12 +86,14 @@ void MachineState(void *pvParameters) {
       //We should be unlocked
       PreUnlockState = State;
       State = "Unlocked";
+      StateSource = "Access Granted";
       SessionStart = millis64();
     }
     if(State == "Unlocked" && !CardPresent){
       //The machine is unlocked, but the keycard was removed.
       //We should return to our previous state
       State = PreUnlockState;
+      StateSource = "Card Removed";
       EndStatus = 1; //Send a message to the server that the session ended
     }
     //Set the ACS output based on state;

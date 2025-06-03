@@ -82,6 +82,7 @@ void SocketManager(void *pvParameters) {
         }
         if(kv.key() == "State"){
           //Immediately set the state of the machine to this
+          bool ServerStateSet = 0;
           String WSState = wsin["State"].as<String>();
           if(State.equalsIgnoreCase(WSState)){
             if(DebugMode){
@@ -98,6 +99,7 @@ void SocketManager(void *pvParameters) {
               settings.putString("LastState", State);
               delay(10);
               State = "Restart";
+              ServerStateSet = 1;
               //Turn off the internal write task so that it doesn't overwrite the restart led color.
               vTaskSuspend(xHandle);
               delay(100);
@@ -117,6 +119,7 @@ void SocketManager(void *pvParameters) {
                 //Ordered to an irreversible fault state
                 Fault = 1;
                 State = "Fault";
+                ServerStateSet = 1;
                 Serial.println(F("FAULTING"));
               }
               //Some special fixings:
@@ -130,6 +133,7 @@ void SocketManager(void *pvParameters) {
                 if(CardPresent){
                   PreUnlockState = State;
                   State = "Unlocked";
+                  ServerStateSet = 1;
                 } else{
                   if(DebugMode){
                     Serial.println(F("Cannot set Unlocked, no card present!"));
@@ -138,20 +142,34 @@ void SocketManager(void *pvParameters) {
               }
               if(WSState.equalsIgnoreCase("Idle")){
                 State = "Idle";
+                ServerStateSet = 1;
               }
               if(WSState.equalsIgnoreCase("Lockout")){
                 State = "Lockout";
+                ServerStateSet = 1;
               }
               if(WSState.equalsIgnoreCase("AlwaysOn")){
                 State = "AlwaysOn";
+                ServerStateSet = 1;
               }
               if(WSState.equalsIgnoreCase("Startup")){
                 State = "Startup";
+                ServerStateSet = 1;
               }
-              ChangeBeep = 1;
-              if(DebugMode){
-                Serial.print(F("State remotely set to: "));
-                Serial.println(State);
+              if(ServerStateSet){
+                if(DebugMode){
+                  Serial.print(F("State remotely set to: "));
+                  Serial.println(State);
+                }
+                ChangeBeep = 1;
+                StateSource = "Server";
+              } else{
+                if(DebugMode){
+                  Serial.print(F("Got an unexpected state set: "));
+                  Serial.println(WSState);
+                }
+                Message = "Got unexpected state set: " + WSState;
+                ReadyToSend = 1;
               }
             }
           }
@@ -312,6 +330,7 @@ void SocketManager(void *pvParameters) {
     if(ChangeStatus && !WSSend){
       wsresp["State"] = State;
       wsresp["UID"] = UID;
+      wsresp["StateSource"] = StateSource;
       WSSend = 1;
       ChangeStatus = 0;
     }
