@@ -129,6 +129,7 @@ String StateSource = "Startup";          //Logs what caused the state to change 
 uint64_t NextPing;                       //When we should send the next ping to see if we are connected to the server.
 bool PingPending;                        //If 1, we are waiting to hear back from a ping
 uint64_t PingTimeout;                    //If we reach this time, it has been too long since we sent the ping.
+uint32_t CertCRC32;                      //CRC32 of the certificate
 
 //Libraries:
 #include <OneWireESP32.h>         //Version 2.0.2 | Source: https://github.com/junkfix/esp32-ds18b20
@@ -153,7 +154,7 @@ uint64_t PingTimeout;                    //If we reach this time, it has been to
 #include <ESP32Ping.h>            //Version 1.6   | Source: https://github.com/marian-craciunescu/ESP32Ping
 #include <ping.h>                 //Version 1.6   | Source: https://github.com/marian-craciunescu/ESP32Ping
 #include "esp_ota_ops.h"          //Version 3.1.1 | Inherent to ESP32 Arduino
-
+#include "CEC32.h"                //Version 2.0.0 | Source: https://github.com/bakercp/CRC32
 
 //Pin Definitions:
 const int ETHINT = 13;
