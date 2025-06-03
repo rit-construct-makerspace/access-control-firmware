@@ -126,6 +126,7 @@ bool Identify;                           //Set to 1 to play a constant noise and
 byte Brightness = 255;                   //Overarching setting that sets the LED brightness
 uint64_t LastLightChange;                //Tracks when the last time the lighting was changed.
 bool OTATimeout;                         //Set to 1 if we checked the OTA timeout
+String StateSource = "Startup";          //Logs what caused the state to change for reporting.
 
 //Libraries:
 #include <OneWireESP32.h>         //Version 2.0.2 | Source: https://github.com/junkfix/esp32-ds18b20
