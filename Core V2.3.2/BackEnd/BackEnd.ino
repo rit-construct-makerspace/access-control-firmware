@@ -31,6 +31,7 @@ USBConfig: Allows programatic changing of settings over USB
 #define Hardware "2.3.2-LE"
 #define MAX_DEVICES 5 //How many possible temperature sensors to scan for
 #define OTA_URL "https://raw.githubusercontent.com/rit-construct-makerspace/access-control-firmware/refs/heads/main/otadirectory.json"
+#define CONFIG_APP_ROLLBACK_ENABLE
 #define TemperatureTime 5000 //How long to delay between temperature measurements, in milliseconds
 #define FEPollRate 10000 //How long, in milliseconds, to go between an all-values poll of the frontend (in addition to event-based)
 #define LEDFlashTime 400 //Time in milliseconds between aniimation steps of the LED when flashing or similar. Set to 400 (2.5Hz) for epilepsy safety
@@ -124,6 +125,7 @@ String PreUnlockState;                   //State the machine was in before being
 bool Identify;                           //Set to 1 to play a constant noise and lighting to find the device. Useful in websocket setup.
 byte Brightness = 255;                   //Overarching setting that sets the LED brightness
 uint64_t LastLightChange;                //Tracks when the last time the lighting was changed.
+bool OTATimeout;                         //Set to 1 if we checked the OTA timeout
 
 //Libraries:
 #include <OneWireESP32.h>         //Version 2.0.2 | Source: https://github.com/junkfix/esp32-ds18b20
@@ -147,6 +149,7 @@ uint64_t LastLightChange;                //Tracks when the last time the lightin
 #include <WebSocketsClient.h>     //Version 2.6.1 | Source: https://github.com/Links2004/arduinoWebSockets
 #include <ESP32Ping.h>            //Version 1.6   | Source: https://github.com/marian-craciunescu/ESP32Ping
 #include <ping.h>                 //Version 1.6   | Source: https://github.com/marian-craciunescu/ESP32Ping
+#include "esp_ota_ops.h"          //Version 3.1.1 | Inherent to ESP32 Arduino
 
 
 //Pin Definitions:
@@ -192,7 +195,14 @@ SemaphoreHandle_t OneWireMutex; //Reserves the OneWire connection. Currently onl
 SemaphoreHandle_t StateMutex; //Reserves the State string, since it takes a long time to change.
 SemaphoreHandle_t MessageMutex; //Reserves the ability to send a message.
 
+extern "C" bool verifyRollbackLater() {
+  //This code is run to verify the OTA before actual setup.
+  //Since we are handling OTA verification ourselves, we just return true.
+  return true;
+}
+
 void setup(){
+  xTaskCreate(OTAWatchdog, "OTAWatchdog", 2048, NULL, 1, NULL);
 	delay(100);
   
   //Create mutexes:
@@ -508,6 +518,27 @@ void RegularReport(void *pvParameters){
   while(1){
     RegularStatus = 1;
     vTaskDelay(Frequency*1000 / portTICK_PERIOD_MS);
+  }
+}
+
+void OTAWatchdog(void *pvParameters){
+  while(1){
+    //This task reverts an OTA if not marked valid in 60 seconds.
+    if(!OTATimeout && (millis64() >= 60000)){
+      OTATimeout = 1;
+      const esp_partition_t *running_partition = esp_ota_get_running_partition();
+      esp_ota_img_states_t ota_state;
+      esp_ota_get_state_partition(running_partition, &ota_state);
+      if(ota_state == ESP_OTA_IMG_PENDING_VERIFY){
+        Serial.println(F("OTA update timer failed after 60 seconds."));
+        Serial.println(F("Reverting firmware."));
+        settings.putString("ResetReason","OTA-Revert");
+        esp_ota_mark_app_invalid_rollback_and_reboot();
+      } else{
+        Serial.println(F("OTA update timer passed. Disabling."));
+        vTaskSuspend(NULL);
+      }
+    }
   }
 }
 
