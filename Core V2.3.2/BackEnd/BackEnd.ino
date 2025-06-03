@@ -43,7 +43,6 @@ USBConfig: Allows programatic changing of settings over USB
 #define SanitizeDebug 1 //Set to 1 to remove the key when printing debug information. With this and DumpKey, there is no way to pull the API key without uploading malicious code.
 #define BAD_INPUT_THRESHOLD 5 //If the wrong password or a bad JSON is loaded more than this many times, delete all information as a safety.
 #define TXINTERRUPT 0 //Set to 1 to route UART0 TX to the DB9 interrupt pin, to allow external loggers to capture crash data.
-#define NoOTA 0 //Set to 1 to disable OTA check on startup, makes startup faster.
 //#define WebsocketUART //Uncomment to get messages from uart as if it is a websocket for testing. Also disables USB config to prevent issues there.
 #define DebugMode 0 //Set to 1 for verbose output via UART, /!\ WARNING /!\ can dump sensitive information
 
@@ -127,6 +126,9 @@ byte Brightness = 255;                   //Overarching setting that sets the LED
 uint64_t LastLightChange;                //Tracks when the last time the lighting was changed.
 bool OTATimeout;                         //Set to 1 if we checked the OTA timeout
 String StateSource = "Startup";          //Logs what caused the state to change for reporting.
+uint64_t NextPing;                       //When we should send the next ping to see if we are connected to the server.
+bool PingPending;                        //If 1, we are waiting to hear back from a ping
+uint64_t PingTimeout;                    //If we reach this time, it has been too long since we sent the ping.
 
 //Libraries:
 #include <OneWireESP32.h>         //Version 2.0.2 | Source: https://github.com/junkfix/esp32-ds18b20
@@ -287,24 +289,22 @@ void setup(){
   ResetReason = settings.getString("ResetReason");
   settings.putString("ResetReason","OTA-Update");
 
-  if(!NoOTA){
-    //Then, check for an OTA update.
-    if(DebugMode){
-      Serial.println(F("Checking for OTA Updates..."));
-      Serial.println(F("If any are found, will install immediately."));
-    }
-    ota.SetCallback(callback_percent);
-    ota.SetConfig(Hardware);
-    ota.OverrideDevice("ACS Core");
-    if(DebugMode){
-      ota.EnableSerialDebug();
-    }
-    int otaresp = ota.CheckForOTAUpdate(OTA_URL, Version);
-    if(DebugMode){
-      Serial.print(F("OTA Response Code: ")); Serial.println(otaresp);
-      Serial.println(errtext(otaresp));
-      Serial.println(F("We're still here, so there must not have been an update."));
-    }
+  //Then, check for an OTA update.
+  if(DebugMode){
+    Serial.println(F("Checking for OTA Updates..."));
+    Serial.println(F("If any are found, will install immediately."));
+  }
+  ota.SetCallback(callback_percent);
+  ota.SetConfig(Hardware);
+  ota.OverrideDevice("ACS Core");
+  if(DebugMode){
+    ota.EnableSerialDebug();
+  }
+  int otaresp = ota.CheckForOTAUpdate(OTA_URL, Version);
+  if(DebugMode){
+    Serial.print(F("OTA Response Code: ")); Serial.println(otaresp);
+    Serial.println(errtext(otaresp));
+    Serial.println(F("We're still here, so there must not have been an update."));
   }
   
   settings.putString("ResetReason","Unknown");

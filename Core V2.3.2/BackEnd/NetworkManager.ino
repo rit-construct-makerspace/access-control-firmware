@@ -60,8 +60,10 @@ void NetworkManager(void *pvParameters){
       if(TestNetwork()){
         if(DebugMode){
           Serial.println(F("Internet connection appears OK."));
-          Serial.println(F("Probably an issue with the server itself?"));
+          Serial.println(F("Will try restarting websocket."));
         }
+        socket.disconnect();
+        StartWebsocket();
       } 
       else{
         if(DebugMode){

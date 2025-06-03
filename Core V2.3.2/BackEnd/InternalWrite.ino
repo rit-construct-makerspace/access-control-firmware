@@ -48,7 +48,7 @@ void InternalWrite(void *pvParameters) {
         NewLED = 0;
       } else{
         if(DebugMode){
-          Serial.println(F("Commanded to change LED to soon! Ignoring."));
+          //Serial.println(F("Commanded to change LED to soon! Ignoring."));
         }
       }
     }

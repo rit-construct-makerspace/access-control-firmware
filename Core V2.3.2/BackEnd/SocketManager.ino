@@ -10,10 +10,7 @@ This task is responsible for sending and receiving all network traffic via webso
 void SocketManager(void *pvParameters) {    
   JsonDocument wsresp;
   #ifndef WebsocketUART
-    //socket.beginSslWithBundle(Server.c_str(), 443, "/api/ws", NULL, 0, "");
-    socket.begin(Server.c_str(), 80, "/api/ws");
-    socket.onEvent(webSocketEvent);
-    socket.setReconnectInterval(1000); //Attempt to reconnect every second if we lose connection
+    StartWebsocket();
     //Wait to connect before continuing
     while(!socket.isConnected()){
       delay(10);
@@ -368,6 +365,24 @@ void SocketManager(void *pvParameters) {
         }
       }
     }
+    //Check if it has been long enough to send a ping to the server.
+    if((millis64() >= NextPing) && socket.isConnected() && !PingPending){
+      PingTimeout = millis64() + 1000;
+      PingPending = 1;
+      socket.sendPing();
+      if(DebugMode){
+        Serial.println(F("Ping..."));
+      }
+    }
+    //Check if we have waited to long to get a ping response.
+    if(PingPending && millis64() >= PingTimeout){
+      if(DebugMode){
+        Serial.println(F("Did not get a ping in time! Websocket issue?"));
+      }
+      PingPending = 0;
+      NoNetwork = 1;
+      socket.disconnect();
+    }
   }
 }
 
@@ -433,13 +448,31 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
       Serial.printf("[WSc] Connected to url: %s\n", payload);
       SendWSReconnect = 1;
       NoNetwork = 0;
+      NextPing = millis64() + 2000;
       break;
     case WStype_TEXT:
       WSIncoming = String((char *)payload, length);
       NewFromWS = 1;
+      NextPing = millis64() + 2000;
+      break;
+    case WStype_PONG:
+      PingPending = 0;
+      if(DebugMode){
+        Serial.println(F("Pong!"));
+      }
+      NextPing = millis64() + 2000;
       break;
     case WStype_ERROR:
       Serial.println(F("Got a websocket error!"));
       break;
   }
+}
+
+
+void StartWebsocket(){
+  //This function starts the websocket
+  //socket.beginSslWithBundle(Server.c_str(), 443, "/api/ws", NULL, 0, "");
+  socket.begin(Server.c_str(), 80, "/api/ws");
+  socket.onEvent(webSocketEvent);
+  socket.setReconnectInterval(1000); //Attempt to reconnect every second if we lose connection
 }
