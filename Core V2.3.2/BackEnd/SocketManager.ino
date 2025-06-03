@@ -36,6 +36,16 @@ void SocketManager(void *pvParameters) {
 
     //First, check if there is a new message:
     if(NewFromWS){
+      //If we managed to get a message input, that means the firmware is good enough to mark as valid.
+      const esp_partition_t *running_partition = esp_ota_get_running_partition();
+      esp_ota_img_states_t ota_state;
+      esp_ota_get_state_partition(running_partition, &ota_state);
+      if(ota_state == ESP_OTA_IMG_PENDING_VERIFY){
+        esp_ota_mark_app_valid_cancel_rollback();
+        Serial.println(F("OTA update marked valid."));
+        Message = "OTA update marked valid.";
+        ReadyToSend = 1;
+      }
       NewFromWS = 0;
       bool alreadyAuth = 0;
       if(DebugMode){
@@ -386,6 +396,7 @@ void authUser(JsonDocument input){
 
 
 void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
+  //We check for OTA validity on the receipt of a text message. Need this info to do that;
   switch(type) {
     case WStype_DISCONNECTED:
       if(JustDisconnected){
@@ -406,10 +417,6 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
       break;
     case WStype_TEXT:
       WSIncoming = String((char *)payload, length);
-      if(DebugMode){
-        Serial.print(F("Got Websocket Payload: "));
-        Serial.println(WSIncoming);
-      }
       NewFromWS = 1;
       break;
     case WStype_ERROR:
