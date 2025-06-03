@@ -23,7 +23,7 @@ void FileGetter(void *pvParameters){
       //Used during dev, probably want to remove since we will hopefully never not have a cert
       client.setInsecure();
     } else{
-      client.setCACert(CACert);
+      client.setCACert(CACert.c_str());
     }
     //In case resources moved, follow redirects.
     http.useHTTP10(true);
@@ -53,42 +53,43 @@ void FileGetter(void *pvParameters){
       //2. Install it using the ESP updater library
       //3. Set the return based on the error, or if we are ok.
       //4. Server will restart us when ready and we will boot into the new app.
-      //Rest of this code was modeled closely on the OTA-Pull library
       if(DebugMode){
         Serial.println(F("FileGetter Starting OTA!"));
       }
+      String AbortOTA;
+      NetworkClient *client = http.getStreamPtr();
       int OTASize = http.getSize();
-      if (!Update.begin(UPDATE_SIZE_UNKNOWN)){
+      if (!Update.begin(OTASize)){
         if(DebugMode){
-          Serial.println(F("Updater Failed!"));
+          Serial.print(F("Updater failed to start, error:"));
+          Serial.println(String(Update.errorString()));
         }
-        abortGet("Updater Begin Failure");
+        AbortOTA = String("Failed to start OTA: ") + String(Update.errorString());
+        abortGet(AbortOTA);
         continue;
       }
-      //Buffer to read into;
-      uint8_t buff[1280] = { 0 };
-      //Get TCP Stream
-      WiFiClient* stream = http.getStreamPtr();
-      //Read all data from the server
-      int offset = 0;
-      while(http.connected() && offset < OTASize){
-        size_t SizeAvailable = stream->available();
-        if(SizeAvailable > 0){
-          size_t bytes_to_read = min(SizeAvailable, sizeof(buff));
-          size_t bytes_read = stream->readBytes(buff, bytes_to_read);
-          size_t bytes_written = Update.write(buff, bytes_read);
-          if (bytes_read != bytes_written){
-            //This is the error that gave me so many headaches early on with OTA
-            if(DebugMode){
-              Serial.printf("Unexpected error in OTA: %d %d %d\n", bytes_to_read, bytes_read, bytes_written);
-            }
-            abortGet("OTA Bytes Read != Bytes Written");
-            continue;
-          }
-          //Where I left off TODO
+      if(Update.writeStream(*client) != OTASize){
+        if(DebugMode){
+          Serial.print(F("Failed to write OTA stream with error:"));
+          Serial.println(String(Update.errorString()));
         }
+        AbortOTA = String("Failed to write OTA stream: ") + String(Update.errorString());
+        abortGet(AbortOTA);
+        continue;
       }
-
+      if(!Update.end()){
+        if(DebugMode){
+          Serial.print(F("Failed to end OTA update with error: "));
+          Serial.println(String(Update.errorString()));
+        }
+        AbortOTA = String("Failed to end OTA: ") + String(Update.errorString());
+        abortGet(AbortOTA);
+        continue;
+      }
+      if(DebugMode){
+        Serial.println(F("OTA update installed properly."));
+      }
+      abortGet("OTA Done.");
     } else
     if((FileType == "Staff") || (FileType == "Makers") || FileType == "Cert"){
       //All 3 of these file types have the same general approach;
@@ -98,8 +99,8 @@ void FileGetter(void *pvParameters){
       //So everything is combined into one here;
       //1. Make a new file of the right name
       String FileName = "/New" + FileType + ".txt";
-      File file = fs.open(FileName, FILE_WRITE);
-
+      File file = SPIFFS.open(FileName, FILE_WRITE);
+      //TODO actually save the file, and verify it somehow
     } else{
       //This is an unrecognized or unsupported type
       //Respond to the server with "BadType"
