@@ -9,18 +9,40 @@ This task is responsible for sending and receiving all network traffic via webso
 
 void SocketManager(void *pvParameters) {    
   JsonDocument wsresp;
-  socket.beginSslWithBundle(Server.c_str(), 443, "/api/ws", NULL, 0, "");
-  socket.onEvent(webSocketEvent);
-  socket.setReconnectInterval(1000); //Attempt to reconnect every second if we lose connection
-  //Wait to connect before continuing
-  while(!socket.isConnected()){
-    delay(10);
-  }
+  #ifndef WebsocketUART
+    StartWebsocket();
+    //Wait to connect before continuing
+    while(!socket.isConnected()){
+      delay(10);
+    }
+  #endif
+
   Serial.println("Websocket Initial Connection.");
+  
   while (1) {
     delay(50);
+
+    #ifdef WebsocketUART
+      NoNetwork = 0;
+      if(Serial.available() > 0){
+        WSIncoming = Serial.readString();
+        WSIncoming.trim();
+        NewFromWS = 1;
+      }
+    #endif
+
     //First, check if there is a new message:
     if(NewFromWS){
+      //If we managed to get a message input, that means the firmware is good enough to mark as valid.
+      const esp_partition_t *running_partition = esp_ota_get_running_partition();
+      esp_ota_img_states_t ota_state;
+      esp_ota_get_state_partition(running_partition, &ota_state);
+      if(ota_state == ESP_OTA_IMG_PENDING_VERIFY){
+        esp_ota_mark_app_valid_cancel_rollback();
+        Serial.println(F("OTA update marked valid."));
+        Message = "OTA update marked valid.";
+        ReadyToSend = 1;
+      }
       NewFromWS = 0;
       bool alreadyAuth = 0;
       if(DebugMode){
@@ -70,58 +92,103 @@ void SocketManager(void *pvParameters) {
             Serial.println(F("New key saved and updated."));
           }
         }
+        if(kv.key() == "Identify"){
+          //Set the Identify mode, to easily find a shlug
+          Identify = wsin["Identify"].as<bool>();
+        }
         if(kv.key() == "State"){
           //Immediately set the state of the machine to this
+          bool ServerStateSet = 0;
           String WSState = wsin["State"].as<String>();
-          if(WSState == State){
+          if(State.equalsIgnoreCase(WSState)){
             if(DebugMode){
               Serial.println(F("State change to same state. Ignoring."));
             }
-          } else{
-              if(WSState == "Restart"){
-                //The system has ordered an immediate restart of the device.
-                if(DebugMode){
-                  Serial.println(F("Restart Ordered."));
-                }
-                xSemaphoreTake(StateMutex, portMAX_DELAY);
-                settings.putString("LastState", State);
-                delay(10);
-                State = "Restart";
-                //Turn off the internal write task so that it doesn't overwrite the restart led color.
-                vTaskSuspend(xHandle);
-                delay(100);
-                settings.putString("ResetReason","Server-Ordered");
-                Internal.println("L 255,0,0");
-                Internal.println("S 0");
-                Internal.flush();
-                ESP.restart();
+          } 
+          else{
+            if(WSState.equalsIgnoreCase("Restart")){
+              //The system has ordered an immediate restart of the device.
+              if(DebugMode){
+                Serial.println(F("Restart Ordered."));
               }
-              //If the state is fault, we do not accept anything but restart.
-              if(State == "Fault"){
-                if(DebugMode){
-                  Serial.println(F("Unable to change state from Fault. Must restart."));
+              xSemaphoreTake(StateMutex, portMAX_DELAY);
+              settings.putString("LastState", State);
+              delay(10);
+              State = "Restart";
+              ServerStateSet = 1;
+              //Turn off the internal write task so that it doesn't overwrite the restart led color.
+              vTaskSuspend(xHandle);
+              delay(100);
+              settings.putString("ResetReason","Server-Ordered");
+              Internal.println("L 255,0,0");
+              Internal.println("S 0");
+              Internal.flush();
+              ESP.restart();
+            }
+            //If the state is fault, we do not accept anything but restart.
+            if(State == "Fault"){
+              if(DebugMode){
+                Serial.println(F("Unable to change state from Fault. Must restart."));
+              }
+            } else{
+              if(WSState.equalsIgnoreCase("Fault")){
+                //Ordered to an irreversible fault state
+                Fault = 1;
+                State = "Fault";
+                ServerStateSet = 1;
+                Serial.println(F("FAULTING"));
+              }
+              //Some special fixings:
+              //If the state is "Unlocked" the machine gets confused when we change state with a card still present.
+              //So, act like the card was removed
+              if(State == "Unlocked"){
+                CardPresent = 0;
+                CardVerified = 0;
+              }
+              if(WSState.equalsIgnoreCase("Unlocked")){
+                if(CardPresent){
+                  PreUnlockState = State;
+                  State = "Unlocked";
+                  ServerStateSet = 1;
+                } else{
+                  if(DebugMode){
+                    Serial.println(F("Cannot set Unlocked, no card present!"));
+                  }
                 }
-              } else{
-                if(WSState == "Fault"){
-                  //Ordered to an irreversible fault state
-                  Fault = 1;
-                  State = "Fault";
-                  Serial.println(F("FAULTING"));
-                }
-                //Some special fixings:
-                //If the state is "Unlocked" the machine gets confused when we change state with a card still present.
-                //So, act like the card was removed
-                if(State == "Unlocked"){
-                  CardVerified = 0;
-                }
-                State = WSState;
+              }
+              if(WSState.equalsIgnoreCase("Idle")){
+                State = "Idle";
+                ServerStateSet = 1;
+              }
+              if(WSState.equalsIgnoreCase("Lockout")){
+                State = "Lockout";
+                ServerStateSet = 1;
+              }
+              if(WSState.equalsIgnoreCase("AlwaysOn")){
+                State = "AlwaysOn";
+                ServerStateSet = 1;
+              }
+              if(WSState.equalsIgnoreCase("Startup")){
+                State = "Startup";
+                ServerStateSet = 1;
+              }
+              if(ServerStateSet){
                 if(DebugMode){
                   Serial.print(F("State remotely set to: "));
                   Serial.println(State);
                 }
+                ChangeBeep = 1;
+                StateSource = "Server";
+              } else{
+                if(DebugMode){
+                  Serial.print(F("Got an unexpected state set: "));
+                  Serial.println(WSState);
+                }
+                Message = "Got unexpected state set: " + WSState;
+                ReadyToSend = 1;
               }
-
             }
+          }
         }
         if(kv.key() == "Time"){
           //Set the time to this (unix seconds)
@@ -131,20 +198,49 @@ void SocketManager(void *pvParameters) {
             Serial.println(rtc.getDateTime(true));
           }
         }
+        if(kv.key() == "TempLimit"){
+          //Set the temperature limit
+          TempLimit = wsin["TempLimit"].as<unsigned int>();
+          settings.putString("TempLimit",String(TempLimit));
+          if(DebugMode){
+            Serial.print(F("Set Temperature Limit to: "));
+            Serial.print(TempLimit);
+            Serial.println(F(" degrees C."));
+          }
+        }
+        if(kv.key() == "Brightness"){
+          //Set the overall brightness
+          Brightness = wsin["Brightness"].as<byte>();
+          settings.putString("Brightness",String(Brightness));
+          if(DebugMode){
+            Serial.print(F("Brightness set to:"));
+            Serial.print(Brightness);
+            Serial.println(F(" / 255."));
+          }
+        }
+        //TODO Eventually check for UseEthernet and UseWiFi here. or NetworkMode.
+        if(kv.key() == "Frequency"){
+          Frequency = wsin["Frequency"].as<unsigned int>();
+          settings.putString("Frequency", String(Frequency));
+          if(DebugMode){
+            Serial.print(F("Regular message frequency set to once every: "));
+            Serial.print(Frequency);
+            Serial.println(F(" seconds."));
+          }
+        }
+        if(kv.key() == "NoBuzzer"){
+          NoBuzzer = wsin["NoBuzzer"].as<bool>();
+          settings.putString("NoBuzzer",String(NoBuzzer));
+          if(DebugMode){
+            if(NoBuzzer){
+              Serial.println(F("Buzzer Disabled"));
+            } else{
+              Serial.println(F("Buzzer Enabled"));
+            }
+          }
+        }
         if(kv.key() == "Request"){
           //The server has requested some values from us.
-          //The following parameters can be requested:
-            //UID: The current user's UID (0 if no user)
-            //Zone: The zone we are located in
-            //NeedsWelcome: 1 if the machine requires sign-in before use
-            //MachineName: The unique name of this machine
-            //MachineType: The numerical identifer of the machine's type
-            //Message: The last message we sent to the server (idk why you'd want this)
-            //Key: The API key the Shlug is using currently
-            //FWVersion: The firmware version of the device
-            //HWVersion: The hardware revision of the device
-            //HWType: The role the hardware is serving (Core in our case)
-            //State: The current state of the system
           //We send back the sequence number in the response, so the server knows what the response is in regards to
           wsresp["Seq"] = wsin["Seq"];
           //Extract each element of the array;
@@ -157,18 +253,6 @@ void SocketManager(void *pvParameters) {
             //Go through all possible requests and fulfill them:
             if(wsin["Request"][i] == "UID"){
               wsresp["UID"] = UID;
-            }
-            if(wsin["Request"][i] == "Zone"){
-              wsresp["Zone"] = Zone;
-            }
-            if(wsin["Request"][i] == "NeedsWelcome"){
-              wsresp["NeedsWelcome"] = NeedsWelcome;
-            }
-            if(wsin["Request"][i] == "MachineName"){
-              wsresp["MachineName"] = MachineName;
-            }
-            if(wsin["Request"][i] == "MachineType"){
-              wsresp["MachineType"] = MachineType;
             }
             if(wsin["Request"][i] == "Message"){
               wsresp["Message"] = Message;
@@ -188,6 +272,24 @@ void SocketManager(void *pvParameters) {
             if(wsin["Request"][i] == "State"){
               wsresp["State"] = State;
             }
+            if(wsin["Request"][i] == "TempLimit"){
+              wsresp["TempLimit"] = TempLimit;
+            }
+            if(wsin["Request"][i] == "Brightness"){
+              wsresp["Brightness"] = Brightness;
+            }
+            if(wsin["Request"][i] == "NetworkMode"){
+              //Report what network mode we are in - sanitize it to how the server expects
+              wsresp["WifiAllowed"] = UseWiFi;
+              wsresp["EthernetAllowed"] = UseEthernet;
+              wsresp["EthernetPresent"] = EthernetPresent;
+            }
+            if(wsin["Request"][i] == "NoBuzzer"){
+              wsresp["NoBuzzer"] = NoBuzzer;
+            }      
+            if(wsin["Request"][i] == "Frequency"){
+              wsresp["Frequency"] = Frequency;
+            }                                    
           }
           //Prime us to send the response:
           WSSend = 1;
@@ -195,81 +297,73 @@ void SocketManager(void *pvParameters) {
       }
     }
     //There are very few reasons we need to send a message. 
-    //It is not worth checking if we should be sending a response if we don't have a socket connection
-    //That way we don't drop more messages than needed
-    if(socket.isConnected()){
-      //0: We just (re)connected
-      if(SendWSReconnect && !WSSend){
-        wsresp["Zone"] = Zone;
-        wsresp["NeedsWelcome"] = NeedsWelcome;
-        wsresp["MachineType"] = MachineType;
-        wsresp["MachineName"] = MachineName;
-        wsresp["Key"] = Key;
-        wsresp["State"] = State;
-        wsresp["FWVersion"] = Version;
-        wsresp["HWVersion"] = Hardware;
-        wsresp["HWType"] = "ACS Core";
-        wsresp["SerialNumber"] = SerialNumber;
-        if(devices == 0){
-          //The Onewire manager hasn't finished finding IDs yet
-          delay(50);
-        }
-        for (uint8_t i = 0; i < devices; i += 1) {
-          String TempID = String(SerialNumbers[i],HEX);
-          TempID.toUpperCase();
-          wsresp["HardwareIDs"][i] = TempID;
-        }
-        //Determine if this is the first time we are sending this since startup. 
-        if(MessageNumber > 0){
-          //We've sent messages in the past, reset the message count but no need to ask for anything special
-          MessageNumber = 0;
-        } else{
-          //This is the first message, so ask what state we should be in and what time it is
-          wsresp["Request"][0] = "State";
-          wsresp["Request"][1] = "Time";
-        }
-        WSSend = 1;
-        SendWSReconnect = 0;
+    //Check if each is the case:
+    //0: We just (re)connected
+    if(SendWSReconnect && !WSSend){
+      wsresp["Key"] = Key;
+      wsresp["State"] = State;
+      wsresp["FWVersion"] = Version;
+      wsresp["HWVersion"] = Hardware;
+      wsresp["HWType"] = "ACS Core";
+      if(devices == 0){
+        //The Onewire manager hasn't finished finding IDs yet
+        delay(50);
       }
-      //1: Authenticating an ID
-      if(VerifyID && !WSSend){
-        wsresp["Auth"] = UID;
-        WSSend = 1;
-        VerifyID = 0;
+      //Now that we have found the onewire devices, we should know our serial number;
+      wsresp["SerialNumber"] = SerialNumber;
+      //And we also know the hardware IDs of the entire system;
+      for (uint8_t i = 0; i < devices; i += 1) {
+        String TempID = String(SerialNumbers[i],HEX);
+        TempID.toUpperCase();
+        wsresp["HardwareIDs"][i] = TempID;
       }
-      //2: There's an error message to send
-      if(ReadyToSend && !WSSend){
-        wsresp["Message"] = Message;
-        WSSend = 1;
-        ReadyToSend = 0;
-        WritingMessage = 0;
+      //Determine if this is the first time we are sending this since startup. 
+      if(MessageNumber > 0){
+        //We've sent messages in the past, reset the message count but no need to ask for anything special
+        MessageNumber = 0;
+      } else{
+        //This is the first message, so ask what state we should be in and what time it is
+        wsresp["Request"][0] = "State";
+        wsresp["Request"][1] = "Time";
       }
-      //3: The state changed
-      if(ChangeStatus && !WSSend){
-        wsresp["State"] = State;
-        wsresp["UID"] = UID;
-        WSSend = 1;
-        ChangeStatus = 0;
-      }
-      //4: The FileGetter is done
-      if(DoneGetting && !WSSend){
+      WSSend = 1;
+      SendWSReconnect = 0;
+    }
+    //1: Authenticating an ID
+    if(VerifyID && !WSSend){
+      wsresp["Auth"] = UID;
+      WSSend = 1;
+      VerifyID = 0;
+    }
+    //2: There's an error message to send
+    if(ReadyToSend && !WSSend){
+      wsresp["Message"] = Message;
+      WSSend = 1;
+      ReadyToSend = 0;
+      WritingMessage = 0;
+    }
+    //3: The state changed
+    if(ChangeStatus && !WSSend){
+      wsresp["State"] = State;
+      wsresp["UID"] = UID;
+      wsresp["StateSource"] = StateSource;
+      WSSend = 1;
+      ChangeStatus = 0;
+    }
+    //4: The FileGetter is done
+    if(DoneGetting && !WSSend){
         wsresp["Got"] = Got;
         WSSend = 1;
         DoneGetting = 0;
         //Once we send this message we are ready to get the next file we need;
         GetFile = 0;
-      }
-      //5: It is time for a regular report
-      if(RegularStatus && !WSSend){
-        wsresp["State"] = State;
-        wsresp["UID"] = UID;
-        WSSend = 1;
-        RegularStatus = 0;
-      }
-    } else{
-        if(DebugMode){
-          Serial.println(F("Not checking if we should be sending a websocket message, since we are not connected anyway."));
-        }
+    }
+    //5: It is time for a regular report
+    if(RegularStatus && !WSSend){
+      wsresp["State"] = State;
+      wsresp["UID"] = UID;
+      WSSend = 1;
+      RegularStatus = 0;
     }
     delay(1);
     if(WSSend){
@@ -298,6 +392,24 @@ void SocketManager(void *pvParameters) {
         }
       }
     }
+    //Check if it has been long enough to send a ping to the server.
+    if((millis64() >= NextPing) && socket.isConnected() && !PingPending){
+      PingTimeout = millis64() + 1000;
+      PingPending = 1;
+      socket.sendPing();
+      if(DebugMode){
+        Serial.println(F("Ping..."));
+      }
+    }
+    //Check if we have waited to long to get a ping response.
+    if(PingPending && millis64() >= PingTimeout){
+      if(DebugMode){
+        Serial.println(F("Did not get a ping in time! Websocket issue?"));
+      }
+      PingPending = 0;
+      NoNetwork = 1;
+      socket.disconnect();
+    }
   }
 }
 
@@ -321,7 +433,7 @@ void authUser(JsonDocument input){
     InternalStatus = 0;
     InternalVerified = 1;
     if(DebugMode){
-      Serial.print(F("Acces Denied. Reason: "));
+      Serial.print(F("Access Denied. Reason: "));
       Serial.println(input["Reason"].as<String>());
     }
     return;
@@ -345,6 +457,7 @@ void authUser(JsonDocument input){
 
 
 void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
+  //We check for OTA validity on the receipt of a text message. Need this info to do that;
   switch(type) {
     case WStype_DISCONNECTED:
       if(JustDisconnected){
@@ -362,17 +475,39 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
       Serial.printf("[WSc] Connected to url: %s\n", payload);
       SendWSReconnect = 1;
       NoNetwork = 0;
+      NextPing = millis64() + 2000;
       break;
     case WStype_TEXT:
       WSIncoming = String((char *)payload, length);
-      if(DebugMode){
-        Serial.print(F("Got Websocket Payload: "));
-        Serial.println(WSIncoming);
-      }
       NewFromWS = 1;
+      NextPing = millis64() + 2000;
+      break;
+    case WStype_PONG:
+      PingPending = 0;
+      if(DebugMode){
+        Serial.println(F("Pong!"));
+      }
+      NextPing = millis64() + 2000;
       break;
     case WStype_ERROR:
       Serial.println(F("Got a websocket error!"));
       break;
   }
+}
+
+
+void StartWebsocket(){
+  //This function starts the websocket
+  if(CACert == ""){
+    //There is no cert, connect without TLS.
+    //WARNING: INSECURE!
+    socket.begin(Server.c_str(), 80, "/api/ws", "SHED ACS");
+    if(DebugMode){
+      Serial.println(F("No Cert for TLS!"));
+    }
+  } else{
+    socket.beginSslWithCA(Server.c_str(), 443, "/api/ws", CACert.c_str(), "SHED ACS");
+  }
+  socket.onEvent(webSocketEvent);
+  socket.setReconnectInterval(1000); //Attempt to reconnect every second if we lose connection
 }

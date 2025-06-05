@@ -27,13 +27,14 @@ USBConfig: Allows programatic changing of settings over USB
 */
 
 //Settings
-#define Version "1.3.1"
+#define Version "1.3.2"
 #define Hardware "2.3.2-LE"
 #define MAX_DEVICES 5 //How many possible temperature sensors to scan for
 #define OTA_URL "https://raw.githubusercontent.com/rit-construct-makerspace/access-control-firmware/refs/heads/main/otadirectory.json"
+#define CONFIG_APP_ROLLBACK_ENABLE
 #define TemperatureTime 5000 //How long to delay between temperature measurements, in milliseconds
 #define FEPollRate 10000 //How long, in milliseconds, to go between an all-values poll of the frontend (in addition to event-based)
-#define LEDFlashTime 150 //Time in milliseconds between aniimation steps of the LED when flashing or similar. 
+#define LEDFlashTime 400 //Time in milliseconds between aniimation steps of the LED when flashing or similar. Set to 400 (2.5Hz) for epilepsy safety
 #define LEDBlinkTime 3000 //Time in milliseconds between animation stepf of an LED when doing a slower blink indication.
 #define BuzzerNoteTime 250 //Time in milliseconds between different tones
 #define KEYSWITCH_DEBOUNCE 150 //time in milliseconds between checks of the key switch, to help prevent rapid state changes.
@@ -42,7 +43,8 @@ USBConfig: Allows programatic changing of settings over USB
 #define SanitizeDebug 1 //Set to 1 to remove the key when printing debug information. With this and DumpKey, there is no way to pull the API key without uploading malicious code.
 #define BAD_INPUT_THRESHOLD 5 //If the wrong password or a bad JSON is loaded more than this many times, delete all information as a safety.
 #define TXINTERRUPT 0 //Set to 1 to route UART0 TX to the DB9 interrupt pin, to allow external loggers to capture crash data.
-#define NoOTA 0 //Set to 1 to disable OTA check on startup, makes startup faster.
+//#define WebsocketUART //Uncomment to get messages from uart as if it is a websocket for testing. Also disables USB config to prevent issues there.
+#define DebugMode 0 //Set to 1 for verbose output via UART, /!\ WARNING /!\ can dump sensitive information
 
 //Global Variables:
 bool TemperatureUpdate;                  //1 when writing new information, to indicate other devices shouldn't read temperature-related info
@@ -50,20 +52,13 @@ uint64_t SerialNumbers[MAX_DEVICES];     //an array of uint64_t serial numbers o
 char devices;                            //How many onewire devices were detected, and therefore how many hardware components make up the ACS deployment
 float SysMaxTemp;                        //a float of the maximum temperature of the system
 bool DebugPrinting;                      //1 when a thread is writing on debug serial
-bool DebugMode = 1;                      //1 when debug data should be printed, always starts at 1. WARNING: Will plain-text print sensitive information!
 byte NetworkMode = 1;                    //0 means WiFi only, 1 means WiFi or Ethernet, 2 means Ethernet only. TODO ethernet not implemented
-String SecurityCode = "Shlug";           //Stores the password that needs to be verified before a JSON of new settings is loaded
 String SSID = "";                        //The SSID that the wireless network will connect to.
 String Password = "";                    //Stores the WiFi password
-String Server = "make.rit.edu";          //The server address that API calls are made against
+String Server;                           //The server address that API calls are made against
 String Key;                              //Stores the API access key
-int Zone;                                //Stores the area that a machine is deployed in.
 int TempLimit;                           //The temperature above which the system shuts down and sends a warning.
 int Frequency;                           //How often an update should be sent
-int MachineType;                         //Non-unique identifier of the machine type
-String MachineName;                      //The unique name of the machine
-byte ExpectedSwitchType;                 //The kind of swtich that should be attached on the analog detector.
-bool NeedsWelcome;                       //1 if the system requires a sign-in before use. 
 bool Button;                             //state of the frontend button.
 bool Switch1;                            //State of card detect switch 1
 bool Switch2;                            //state of card detect switch 2
@@ -119,6 +114,7 @@ bool SendWSReconnect;                    //1 indicates we've (re)connected to th
 bool WSSend = 0;                         //1 if there is already a websocket message primed to send out
 bool UseEthernet = 0;                    //1 if we should be using ethernet
 bool UseWiFi = 0;                        //1 if we should be using wifi
+bool EthernetPresent = 0;                //Flag if there is ethrtnet hardware installed.
 char InterfaceUsed;                      //0 if using WiFi, 1 if using Ethernet.
 String PreState;                         //What state the system was in right before a keycard is inserted, to prevent glitches to the state.
 String SerialNumber;                     //Plaintext store of the shlug identifier from OneWire
@@ -129,6 +125,16 @@ String FilePath;                         //The path to get to a file, appended t
 bool DoneGetting;                        //1 when the FileGetter is done doing its thing, and the websocket should return an response
 String CACert;                           //Stores the CA cert loaded at startup
 String Got;                              //The FileGetter response to the server
+bool ChangeBeep;                         //Flag to beep if the state has been remotely changed.
+String PreUnlockState;                   //State the machine was in before being unlocked.
+bool Identify;                           //Set to 1 to play a constant noise and lighting to find the device. Useful in websocket setup.
+byte Brightness = 255;                   //Overarching setting that sets the LED brightness
+uint64_t LastLightChange;                //Tracks when the last time the lighting was changed.
+bool OTATimeout;                         //Set to 1 if we checked the OTA timeout
+String StateSource = "Startup";          //Logs what caused the state to change for reporting.
+uint64_t NextPing;                       //When we should send the next ping to see if we are connected to the server.
+bool PingPending;                        //If 1, we are waiting to hear back from a ping
+uint64_t PingTimeout;                    //If we reach this time, it has been too long since we sent the ping.
 
 //Libraries:
 #include <OneWireESP32.h>         //Version 2.0.2 | Source: https://github.com/junkfix/esp32-ds18b20
@@ -152,6 +158,7 @@ String Got;                              //The FileGetter response to the server
 #include <WebSocketsClient.h>     //Version 2.6.1 | Source: https://github.com/Links2004/arduinoWebSockets
 #include <ESP32Ping.h>            //Version 1.6   | Source: https://github.com/marian-craciunescu/ESP32Ping
 #include <ping.h>                 //Version 1.6   | Source: https://github.com/marian-craciunescu/ESP32Ping
+#include "esp_ota_ops.h"          //Version 3.1.1 | Inherent to ESP32 Arduino
 
 
 //Pin Definitions:
@@ -197,9 +204,16 @@ SemaphoreHandle_t OneWireMutex; //Reserves the OneWire connection. Currently onl
 SemaphoreHandle_t StateMutex; //Reserves the State string, since it takes a long time to change.
 SemaphoreHandle_t MessageMutex; //Reserves the ability to send a message.
 
+extern "C" bool verifyRollbackLater() {
+  //This code is run to verify the OTA before actual setup.
+  //Since we are handling OTA verification ourselves, we just return true.
+  return true;
+}
+
 void setup(){
+  xTaskCreate(OTAWatchdog, "OTAWatchdog", 2048, NULL, 1, NULL);
 	delay(100);
-  
+
   //Create mutexes:
   DebugMutex = xSemaphoreCreateMutex();
   NetworkMutex = xSemaphoreCreateMutex();
@@ -215,7 +229,10 @@ void setup(){
   delay(5000); 
 
   //We want to start the USBConfig early, so we can send new credentials for WiFi and the like before startup.
-  xTaskCreate(USBConfig, "USBConfig", 4096, NULL, 2, NULL);
+  #ifndef WebsocketUART
+    Serial.println(F("USB Settings Input Started."));
+    xTaskCreate(USBConfig, "USBConfig", 4096, NULL, 2, NULL);
+  #endif
 
   if(TXINTERRUPT){
     Serial.begin(115200, SERIAL_8N1, 44, DB9INT);
@@ -226,8 +243,8 @@ void setup(){
 
   //First, load all settings from memory
   settings.begin("settings", false);
-  SecurityCode = settings.getString("SecurityCode");
-  if(SecurityCode == NULL){
+  Server = settings.getString("Server");
+  if(Server == NULL){
     Serial.println(F("CAN'T FIND SETTINGS - FRESH INSTALL?"));
     Serial.println(F("HOLDING FOR UPDATE FOREVER..."));
     //Nuke the rest of this process - we can't do anything without our config.
@@ -242,27 +259,27 @@ void setup(){
   SSID = settings.getString("SSID");
   Server = settings.getString("Server");
   Key = settings.getString("Key");
-  //Special for V1.3.1 and beyond - "MachineID" replaced with "MachineType", should be same value though
-  //What was "MachineType" now becomes "MachineName"
-  //Check if MachineName exists, if not we haven't done the updates yet.
-  if(!settings.isKey("MachineName")){
-    String TransferSetting1 = settings.getString("MachineID");
-    String TransferSetting2 = settings.getString("MachineType");
-    settings.remove("MachineID");
-    settings.putString("MachineType",TransferSetting1);
-    settings.putString("MachineName",TransferSetting2);
-    Serial.println(F("NOTICE: Updated Naming Scheme of Preferences in Compliance with V1.3.1 Changes."));
-  }
-  MachineType = settings.getString("MachineType").toInt();
-  MachineName = settings.getString("MachineName");
-  ExpectedSwitchType = settings.getString("SwitchType").toInt();
-  Zone = settings.getString("Zone").toInt();
   TempLimit = settings.getString("TempLimit").toInt();
   Frequency = settings.getString("Frequency").toInt();
   NetworkMode = settings.getString("NetworkMode").toInt();
-  NeedsWelcome = settings.getString("NeedsWelcome").toInt();
-  DebugMode = settings.getString("DebugMode").toInt();
   NoBuzzer = settings.getString("NoBuzzer").toInt();
+
+  //New setting added in V1.3.2. Need to check if it exists, if not make with a default value
+  if(settings.isKey("Brightness")){
+    Brightness = settings.getString("Brightness").toInt();
+  } else{
+    Brightness = 255;
+    settings.putString("Brightness",String(Brightness));
+  }
+
+  //Go through and delete any keys we no longer use from old versions. 
+  DeleteOld("SecurityCode");
+  DeleteOld("MachineName");
+  DeleteOld("MachineID");
+  DeleteOld("MachineType");
+  DeleteOld("SwitchType");
+  DeleteOld("Zone");
+  DeleteOld("NeedsWelcome");
 
   //Start the network connection;
   xTaskCreate(NetworkManager, "NetworkManager", 2048, NULL, 2, NULL);
@@ -278,24 +295,22 @@ void setup(){
   ResetReason = settings.getString("ResetReason");
   settings.putString("ResetReason","OTA-Update");
 
-  if(!NoOTA){
-    //Then, check for an OTA update.
-    if(DebugMode){
-      Serial.println(F("Checking for OTA Updates..."));
-      Serial.println(F("If any are found, will install immediately."));
-    }
-    ota.SetCallback(callback_percent);
-    ota.SetConfig(Hardware);
-    ota.OverrideDevice("ACS Core");
-    if(DebugMode){
-      ota.EnableSerialDebug();
-    }
-    int otaresp = ota.CheckForOTAUpdate(OTA_URL, Version);
-    if(DebugMode){
-      Serial.print(F("OTA Response Code: ")); Serial.println(otaresp);
-      Serial.println(errtext(otaresp));
-      Serial.println(F("We're still here, so there must not have been an update."));
-    }
+  //Then, check for an OTA update.
+  if(DebugMode){
+    Serial.println(F("Checking for OTA Updates..."));
+    Serial.println(F("If any are found, will install immediately."));
+  }
+  ota.SetCallback(callback_percent);
+  ota.SetConfig(Hardware);
+  ota.OverrideDevice("ACS Core");
+  if(DebugMode){
+    ota.EnableSerialDebug();
+  }
+  int otaresp = ota.CheckForOTAUpdate(OTA_URL, Version);
+  if(DebugMode){
+    Serial.print(F("OTA Response Code: ")); Serial.println(otaresp);
+    Serial.println(errtext(otaresp));
+    Serial.println(F("We're still here, so there must not have been an update."));
   }
   
   settings.putString("ResetReason","Unknown");
@@ -497,11 +512,11 @@ void GamerMode(void *pvParameters){
   //This task simply blinks the front LED red-green-blue, aka gamer mode, to indicate startup in progress.
   while(1){
     Internal.println("L 255,0,0");
-    delay(300);
+    delay(LEDFlashTime);
     Internal.println("L 0,255,0");
-    delay(300);
+    delay(LEDFlashTime);
     Internal.println("L 0,0,255");
-    delay(300);
+    delay(LEDFlashTime);
   }
 }
 
@@ -510,5 +525,35 @@ void RegularReport(void *pvParameters){
   while(1){
     RegularStatus = 1;
     vTaskDelay(Frequency*1000 / portTICK_PERIOD_MS);
+  }
+}
+
+void OTAWatchdog(void *pvParameters){
+  while(1){
+    //This task reverts an OTA if not marked valid in 60 seconds.
+    if(!OTATimeout && (millis64() >= 60000)){
+      OTATimeout = 1;
+      const esp_partition_t *running_partition = esp_ota_get_running_partition();
+      esp_ota_img_states_t ota_state;
+      esp_ota_get_state_partition(running_partition, &ota_state);
+      if(ota_state == ESP_OTA_IMG_PENDING_VERIFY){
+        Serial.println(F("OTA update timer failed after 60 seconds."));
+        Serial.println(F("Reverting firmware."));
+        settings.putString("ResetReason","OTA-Revert");
+        esp_ota_mark_app_invalid_rollback_and_reboot();
+      } else{
+        Serial.println(F("OTA update timer passed. Disabling."));
+        vTaskSuspend(NULL);
+      }
+    }
+  }
+}
+
+void DeleteOld(String KeyName){
+  //Delete the old key if it exists
+  if(settings.isKey(KeyName.c_str())){
+    settings.remove(KeyName.c_str());
+    Serial.print("Deleted old setting: ");
+    Serial.println(KeyName);
   }
 }

@@ -30,6 +30,77 @@ DebugPrinting used to determine if UART output is free and to use and reserves i
 DebugMode used to turn on verbose outputs
 */
 
+//REWRITING to support websockets
+
+void USBConfig(void *pvParameters){
+  //This is the new USBConfig for websocket MVP
+  while(1){
+    delay(50);
+    String Input = "";
+    
+    #ifdef WebsocketUART
+      //We shouldn't be in this task if we are using UART for websocket testing
+      continue;
+    #endif
+
+    if(Serial.available()){
+      //There's something in the serial terminal.
+      Serial.setTimeout(5);
+      Input = Serial.readString();
+      Input.trim();
+    }
+    if(Input == ""){
+      //Empty string, return
+      continue;
+    }
+    if(DebugMode){
+      Serial.println(F("Processing USB Input:"));
+      Serial.println(Input);
+    }
+    if(Input.charAt(0) == '{'){
+      if(DebugMode){
+        Serial.println(F("This appears to be a configuration JSON."));
+      }
+      //This is the start of a JSON with settings
+      deserializeJson(usbjson, Input);
+      //Apply all of the settings
+      //We always overwrite the server and key on any change
+      Key = usbjson["Key"].as<String>();
+      settings.putString("Key",Key);
+      Server = usbjson["Server"].as<String>();
+      settings.putString("Server",Server);
+      //Update the rest if found
+      if(usbjson["SSID"]){
+        SSID = usbjson["SSID"].as<String>();
+        settings.putString("SSID",SSID);
+      }
+      if(usbjson["Password"]){
+        Password = usbjson["Password"].as<String>();
+        settings.putString("Password",Password);
+      }
+    }
+    if(Input.equalsIgnoreCase("Restart")){
+      //Restart command
+      Serial.println(F("Restarting."));
+      delay(1000);
+      ESP.restart();
+    }
+    if(Input.equalsIgnoreCase("DumpMAC")){
+      //Print the MAC address
+      Serial.println(F("WiFi Mac:"));
+      Serial.println(ESP.getEfuseMac(), HEX);
+      Serial.println(F("Formatted:"));
+      Serial.println(WiFi.macAddress());
+    }
+    if(Input.equalsIgnoreCase("DumpSerial")){
+      //Print the Serial Number
+      Serial.println(F("Serial Number:"));
+      Serial.println(SerialNumber);
+    }
+  }
+}
+
+/*
 void USBConfig(void *pvParameters){
   byte BadInputCount = 0; //Tracks how many times an incorrect password/JSON was input.
 
@@ -190,3 +261,5 @@ void WriteSetting(String Parameter){
   //Writes the specified parameter to the JSON "usbjson", for eventual printing.
   usbjson[Parameter] = settings.getString(Parameter.c_str());
 }
+
+*/

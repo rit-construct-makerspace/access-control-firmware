@@ -34,10 +34,9 @@ void BuzzerControl(void *pvParameters) {
   byte MelodyStep;
   uint64_t MelodyTime = 0;
   while (1) {
-    if(NoBuzzer){
+    while(NoBuzzer){
       //Buzzer disabled.
-      vTaskDelay(20000 / portTICK_PERIOD_MS);
-      continue;
+      vTaskDelay(100 / portTICK_PERIOD_MS);
     }
     vTaskDelay(3 / portTICK_PERIOD_MS);
     //First, check the situations to see if we should be playing any tones right now:
@@ -60,6 +59,13 @@ void BuzzerControl(void *pvParameters) {
       Melody = 4;
     } else{
       VerifiedBeep = 0;
+    }
+    if(ChangeBeep){
+      Melody = 4;
+    }
+    if(Identify){
+      //Play a constant tone to identify the device
+      Melody = 5;
     }
     if(Melody == 0){
       //No tone to play
@@ -140,7 +146,20 @@ void BuzzerControl(void *pvParameters) {
           case 1:
             Tone = 0;
             VerifiedBeep = 0;
+            ChangeBeep = 0;
             DonePlaying = 1;
+          break;
+        }
+      break;
+      case 5:
+        switch(MelodyStep){
+          //No case 0, this basically makes the sound delay before it starts playing.
+          case 1:
+            Tone = HIGH_TONE;
+          break;
+          case 2:
+            Tone = LOW_TONE;
+            MelodyStep = 0;
           break;
         }
       break;
