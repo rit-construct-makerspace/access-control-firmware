@@ -355,7 +355,7 @@ void SocketManager(void *pvParameters) {
       //Is it because we are sending before connected?
       if(socket.isConnected()){
         //If we don't have a connection, we don't want to send
-        socket.sendTXT(WSToSend);
+        SocketText = WSToSend;
         if(DebugMode){
           Serial.println(F("Sent."));
         }
@@ -369,7 +369,7 @@ void SocketManager(void *pvParameters) {
     if((millis64() >= NextPing) && socket.isConnected() && !PingPending){
       PingTimeout = millis64() + 1000;
       PingPending = 1;
-      socket.sendPing();
+      SendPing = 1;
       if(DebugMode){
         Serial.println(F("Ping..."));
       }
@@ -379,9 +379,18 @@ void SocketManager(void *pvParameters) {
       if(DebugMode){
         Serial.println(F("Did not get a ping in time! Websocket issue?"));
       }
-      PingPending = 0;
-      NoNetwork = 1;
-      socket.disconnect();
+      if(!SecondPing){
+        SecondPing = 1;
+        PingPending = 0;
+      } else{
+        PingPending = 0;
+        SecondPing = 0;
+        NoNetwork = 1;
+        DisconnectWebsocket = 1;
+        if(DebugMode){
+          Serial.println(F("Missed second websocket ping. Attempting to reconnect..."));
+        }
+      }
     }
   }
 }
@@ -457,6 +466,7 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
       break;
     case WStype_PONG:
       PingPending = 0;
+      SecondPing = 0;
       if(DebugMode){
         Serial.println(F("Pong!"));
       }

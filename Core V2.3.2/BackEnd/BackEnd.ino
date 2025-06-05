@@ -27,7 +27,7 @@ USBConfig: Allows programatic changing of settings over USB
 */
 
 //Settings
-#define Version "1.3.2"
+#define Version "1.3.3"
 #define Hardware "2.3.2-LE"
 #define MAX_DEVICES 5 //How many possible temperature sensors to scan for
 #define OTA_URL "https://raw.githubusercontent.com/rit-construct-makerspace/access-control-firmware/refs/heads/main/otadirectory.json"
@@ -129,6 +129,11 @@ String StateSource = "Startup";          //Logs what caused the state to change 
 uint64_t NextPing;                       //When we should send the next ping to see if we are connected to the server.
 bool PingPending;                        //If 1, we are waiting to hear back from a ping
 uint64_t PingTimeout;                    //If we reach this time, it has been too long since we sent the ping.
+bool SecondPing;                         //Tracks how many pings we've missed
+String SocketText;                       //Stores the text message to be sent via the websocket
+bool InternetOK;                         //1 if we have an OK connection to the internet, not necessarily the server though.
+bool DisconnectWebsocket;                //Set to 1 to disconnect websockets.
+bool SendPing;                           //Set to 1 to send a ping
 
 //Libraries:
 #include <OneWireESP32.h>         //Version 2.0.2 | Source: https://github.com/junkfix/esp32-ds18b20
@@ -419,8 +424,24 @@ void setup(){
 
 void loop(){
   //Check for new websocket messages constantly
-  socket.loop();
-  delay(1);
+  if(InternetOK){
+    if(DisconnectWebsocket){
+      socket.disconnect();
+      DisconnectWebsocket = 0;
+    } else{
+      if(SocketText != ""){
+        //There is a websocket message in the outbox.
+        //This is here to keep all websocket stuff in the same thread.
+        socket.sendTXT(SocketText);
+        SocketText = "";
+      }
+      if(SendPing){
+        socket.sendPing();
+        SendPing = 0;
+      }
+      socket.loop();
+    }
+  }
 }
 
 

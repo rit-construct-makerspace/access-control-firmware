@@ -52,20 +52,21 @@ void NetworkManager(void *pvParameters){
       delay(1);
     }
     //Then, check if we still have a network issue
-    if(NoNetwork){
+    if(NoNetwork || !InternetOK){
       //If our network is actually connected, this may be a sign of a server-specific outage 
       if(DebugMode){
-        Serial.println(F("Socket Manager reports no network connection."));
+        Serial.println(F("No network connection reported."));
       }
       if(TestNetwork()){
+        InternetOK = 1;
         if(DebugMode){
           Serial.println(F("Internet connection appears OK."));
           Serial.println(F("Will try restarting websocket."));
         }
-        socket.disconnect();
-        StartWebsocket();
+        DisconnectWebsocket = 1;
       } 
       else{
+        InternetOK = 0;
         if(DebugMode){
           Serial.println(F("Was not able to reach the internet."));
         }
