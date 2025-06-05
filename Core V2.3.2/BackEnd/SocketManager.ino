@@ -484,5 +484,5 @@ void StartWebsocket(){
   //socket.beginSslWithBundle(Server.c_str(), 443, "/api/ws", NULL, 0, "");
   socket.begin(Server.c_str(), 80, "/api/ws");
   socket.onEvent(webSocketEvent);
-  socket.setReconnectInterval(1000); //Attempt to reconnect every second if we lose connection
+  socket.setReconnectInterval(10000); //Attempt to reconnect every 10 seconds if we lose connection
 }

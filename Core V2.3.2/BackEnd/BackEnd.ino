@@ -426,7 +426,8 @@ void loop(){
   //Check for new websocket messages constantly
   if(InternetOK){
     if(DisconnectWebsocket){
-      socket.disconnect();
+      //socket.disconnect();
+      Serial.println(F("Was asked to disconnect websocket. Ignoring."));
       DisconnectWebsocket = 0;
     } else{
       if(SocketText != ""){
