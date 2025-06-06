@@ -127,10 +127,11 @@ void SocketManager(void *pvParameters) {
                 CardVerified = 0;
               }
               if(WSState.equalsIgnoreCase("Unlocked")){
-                if(CardPresent){
+                ServerStateSet = 1;
+                if(Switch1 && Switch2){
+                  //There is a card present
                   PreUnlockState = State;
                   State = "Unlocked";
-                  ServerStateSet = 1;
                 } else{
                   if(DebugMode){
                     Serial.println(F("Cannot set Unlocked, no card present!"));
@@ -385,7 +386,8 @@ void SocketManager(void *pvParameters) {
       } else{
         PingPending = 0;
         SecondPing = 0;
-        NoNetwork = 1;
+        Message = "Missed 2 pings. Can you hear me?";
+        ReadyToSend = 1;
         DisconnectWebsocket = 1;
         if(DebugMode){
           Serial.println(F("Missed second websocket ping. Attempting to reconnect..."));

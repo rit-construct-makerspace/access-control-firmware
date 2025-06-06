@@ -27,7 +27,7 @@ USBConfig: Allows programatic changing of settings over USB
 */
 
 //Settings
-#define Version "1.3.3"
+#define Version "1.3.4"
 #define Hardware "2.3.2-LE"
 #define MAX_DEVICES 5 //How many possible temperature sensors to scan for
 #define OTA_URL "https://raw.githubusercontent.com/rit-construct-makerspace/access-control-firmware/refs/heads/main/otadirectory.json"
@@ -134,6 +134,8 @@ String SocketText;                       //Stores the text message to be sent vi
 bool InternetOK;                         //1 if we have an OK connection to the internet, not necessarily the server though.
 bool DisconnectWebsocket;                //Set to 1 to disconnect websockets.
 bool SendPing;                           //Set to 1 to send a ping
+byte SocketRetry;                        //Count of how many times we retried to send a message.
+uint64_t NextSocketTry;                  //The time we should try to send the next message.
 
 //Libraries:
 #include <OneWireESP32.h>         //Version 2.0.2 | Source: https://github.com/junkfix/esp32-ds18b20
@@ -426,15 +428,42 @@ void loop(){
   //Check for new websocket messages constantly
   if(InternetOK){
     if(DisconnectWebsocket){
+      //Turned off for testing
       //socket.disconnect();
-      Serial.println(F("Was asked to disconnect websocket. Ignoring."));
-      DisconnectWebsocket = 0;
     } else{
       if(SocketText != ""){
         //There is a websocket message in the outbox.
-        //This is here to keep all websocket stuff in the same thread.
-        socket.sendTXT(SocketText);
-        SocketText = "";
+        if(millis64() >= NextSocketTry){
+          if(!socket.sendTXT(SocketText)){
+            //Was unable to send message
+            SocketRetry = SocketRetry + 1;
+            //Set the time to retry
+            //Try 200ms later on the first fail, 400ms next, etc.
+            NextSocketTry = millis64() + (SocketRetry * 400);
+            if(SocketRetry >= 15){
+              //We've failed way too many times
+              SocketText = "";
+              Message = "Socket failed to send message 15 times over 5 seconds!";
+              ReadyToSend = 1;
+            }
+          } else{
+            if(DebugMode){
+              Serial.print(F("Websocket payload sent after "));
+              Serial.print(SocketRetry);
+              Serial.println(F(" attempts."));
+            }
+            SocketText = "";
+            NextSocketTry = millis64();
+            if(SocketRetry > 0){
+              if(!ReadyToSend){
+                //No message pending, so send one
+                Message = "Had to retry sending last " + String(SocketRetry) + " times.";
+                ReadyToSend = 1;
+              }
+            }
+            SocketRetry = 0;
+          }
+        }
       }
       if(SendPing){
         socket.sendPing();

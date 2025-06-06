@@ -20,6 +20,7 @@ CardUnread: Flag that indicates a card is present but not yet read for animation
 
 void ReadCard(void *pvParameters) {
   bool NewCard = 1;  //Used to track if this is the first time the card has been inserted.
+  CardPresent = 1;
   bool StuckSwitch = 0;
   while(1){
     //Check for a card every 50mS
@@ -114,7 +115,6 @@ void ReadCard(void *pvParameters) {
         if(readreserved){
           xSemaphoreGive(DebugMutex);
         }
-        CardPresent = 1;
         CardVerified = 0; //Card can't be verified yet
         CardUnread = 0;
 

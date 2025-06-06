@@ -63,7 +63,8 @@ void NetworkManager(void *pvParameters){
           Serial.println(F("Internet connection appears OK."));
           Serial.println(F("Will try restarting websocket."));
         }
-        DisconnectWebsocket = 1;
+        Message = "Internet is OK but no websocket. Can you hear me?";
+        ReadyToSend = 1;
       } 
       else{
         InternetOK = 0;
