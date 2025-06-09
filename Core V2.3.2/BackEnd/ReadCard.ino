@@ -20,7 +20,7 @@ CardUnread: Flag that indicates a card is present but not yet read for animation
 
 void ReadCard(void *pvParameters) {
   bool NewCard = 1;  //Used to track if this is the first time the card has been inserted.
-  CardPresent = 1;
+  CardPresent = 0;
   bool StuckSwitch = 0;
   while(1){
     //Check for a card every 50mS
@@ -30,6 +30,7 @@ void ReadCard(void *pvParameters) {
       PreState = State; //Used to stop animation glitches
       NewCard = 0;
       CardUnread = 1;
+      CardPresent = 1;
       //Loop to retry NFC a few times;
       byte NFCRetryCount = 0;
       bool success;                                //Determines if an NFC read was successful
@@ -167,6 +168,7 @@ void ReadCard(void *pvParameters) {
         }
       }
     }
+    /*
     if(Switch1 && Switch2 && !NewCard && !CardUnread && !CardPresent){
       //This is likely an indication of an internal switch issue.
       //We've noticed on many devices they get stuck down over time.
@@ -182,6 +184,7 @@ void ReadCard(void *pvParameters) {
         vTaskSuspend(NULL);
       }
     }
+    */
     if(!Switch1 || !Switch2){
       //Card not present. Reset card-related parameters.
       ReadFailed = 0;

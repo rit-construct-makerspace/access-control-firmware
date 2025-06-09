@@ -28,6 +28,7 @@ void NetworkManager(void *pvParameters){
     //This variable normally means a connection to the socket
     NoNetwork = 0;
   }
+  bool StartupNetworkMessage = 1;
   while(1){
     delay(5000);
     //Constantly run through the following steps;
@@ -61,9 +62,18 @@ void NetworkManager(void *pvParameters){
         InternetOK = 1;
         if(DebugMode){
           Serial.println(F("Internet connection appears OK."));
-          Serial.println(F("Will try restarting websocket."));
         }
-        Message = "Internet is OK but no websocket. Can you hear me?";
+        if(StartupNetworkMessage){
+          while(ReadyToSend){
+            //Wait for the current message to make it out.
+            delay(100);
+            continue;
+          }
+          StartupNetworkMessage = 0;
+          Message = "NetworkManager test on initial boot.";
+        } else{
+          //Message = "Internet is OK but no websocket. Can you hear me?";
+        }
         ReadyToSend = 1;
       } 
       else{

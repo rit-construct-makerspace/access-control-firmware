@@ -128,7 +128,7 @@ void SocketManager(void *pvParameters) {
               }
               if(WSState.equalsIgnoreCase("Unlocked")){
                 ServerStateSet = 1;
-                if(Switch1 && Switch2){
+                if(CardPresent){
                   //There is a card present
                   PreUnlockState = State;
                   State = "Unlocked";
@@ -368,7 +368,7 @@ void SocketManager(void *pvParameters) {
     }
     //Check if it has been long enough to send a ping to the server.
     if((millis64() >= NextPing) && socket.isConnected() && !PingPending){
-      PingTimeout = millis64() + 1000;
+      PingTimeout = millis64() + 2000;
       PingPending = 1;
       SendPing = 1;
       if(DebugMode){
@@ -386,9 +386,9 @@ void SocketManager(void *pvParameters) {
       } else{
         PingPending = 0;
         SecondPing = 0;
-        Message = "Missed 2 pings. Can you hear me?";
-        ReadyToSend = 1;
-        DisconnectWebsocket = 1;
+        //Message = "Missed 2 pings. Can you hear me?";
+        //ReadyToSend = 1;
+        NoNetwork = 1;
         if(DebugMode){
           Serial.println(F("Missed second websocket ping. Attempting to reconnect..."));
         }
@@ -449,7 +449,6 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
         Serial.printf("[WSc] Disconnected!\n");
         JustDisconnected = 0;
       }
-
       NoNetwork = 1;
       WSSend = 0; //Clear out anything that needs to be sent
       break;
@@ -465,10 +464,12 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
       WSIncoming = String((char *)payload, length);
       NewFromWS = 1;
       NextPing = millis64() + 2000;
+      NoNetwork = 0;
       break;
     case WStype_PONG:
       PingPending = 0;
       SecondPing = 0;
+      NoNetwork = 0;
       if(DebugMode){
         Serial.println(F("Pong!"));
       }
@@ -486,5 +487,5 @@ void StartWebsocket(){
   //socket.beginSslWithBundle(Server.c_str(), 443, "/api/ws", NULL, 0, "");
   socket.begin(Server.c_str(), 80, "/api/ws");
   socket.onEvent(webSocketEvent);
-  socket.setReconnectInterval(10000); //Attempt to reconnect every 10 seconds if we lose connection
+  socket.setReconnectInterval(5000); //Attempt to reconnect every 5 seconds if we lose connection
 }

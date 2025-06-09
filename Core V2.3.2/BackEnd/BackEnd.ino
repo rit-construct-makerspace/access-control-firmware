@@ -27,7 +27,7 @@ USBConfig: Allows programatic changing of settings over USB
 */
 
 //Settings
-#define Version "1.3.4"
+#define Version "1.3.7"
 #define Hardware "2.3.2-LE"
 #define MAX_DEVICES 5 //How many possible temperature sensors to scan for
 #define OTA_URL "https://raw.githubusercontent.com/rit-construct-makerspace/access-control-firmware/refs/heads/main/otadirectory.json"
@@ -136,6 +136,9 @@ bool DisconnectWebsocket;                //Set to 1 to disconnect websockets.
 bool SendPing;                           //Set to 1 to send a ping
 byte SocketRetry;                        //Count of how many times we retried to send a message.
 uint64_t NextSocketTry;                  //The time we should try to send the next message.
+uint64_t WebsocketResetTime;             //When we should reconnect the websocket.
+bool ConnectWebsocket;                   //Set to 1 to trigger a connection.
+bool SecondMessageFail;                  //Tracks how many outgoing messages have been lost.
 
 //Libraries:
 #include <OneWireESP32.h>         //Version 2.0.2 | Source: https://github.com/junkfix/esp32-ds18b20
@@ -261,6 +264,11 @@ void setup(){
   Server = settings.getString("Server");
   Key = settings.getString("Key");
   TempLimit = settings.getString("TempLimit").toInt();
+  if(TempLimit == 50){
+    //Increase from default
+    TempLimit = 65;
+    settings.putString("TempLimit",String(TempLimit));
+  }
   Frequency = settings.getString("Frequency").toInt();
   NetworkMode = settings.getString("NetworkMode").toInt();
   NoBuzzer = settings.getString("NoBuzzer").toInt();
@@ -427,9 +435,20 @@ void setup(){
 void loop(){
   //Check for new websocket messages constantly
   if(InternetOK){
+    if((WebsocketResetTime != 0) && (millis64() <= WebsocketResetTime)){
+      WebsocketResetTime = 0;
+      ConnectWebsocket = 1;
+    }
+    if(ConnectWebsocket){
+      if(!socket.isConnected()){
+        StartWebsocket();
+      }
+      ConnectWebsocket = 0;
+    }
     if(DisconnectWebsocket){
-      //Turned off for testing
-      //socket.disconnect();
+      socket.disconnect();
+      DisconnectWebsocket = 0;
+      WebsocketResetTime = millis64() + 5000;
     } else{
       if(SocketText != ""){
         //There is a websocket message in the outbox.
@@ -442,9 +461,17 @@ void loop(){
             NextSocketTry = millis64() + (SocketRetry * 400);
             if(SocketRetry >= 15){
               //We've failed way too many times
+              NoNetwork = 1;
               SocketText = "";
               Message = "Socket failed to send message 15 times over 5 seconds!";
               ReadyToSend = 1;
+              NoNetwork = 1;
+              if(!SecondMessageFail){
+                SecondMessageFail = 1;
+              } else{
+                DisconnectWebsocket = 1;
+                SecondMessageFail = 0;
+              }
             }
           } else{
             if(DebugMode){
