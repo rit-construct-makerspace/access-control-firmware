@@ -111,6 +111,45 @@ void MachineState(void *pvParameters) {
     //Release the semaphore;
     xSemaphoreGive(StateMutex);
 
+    //Check if it is 4am and we need to restart
+    if((NightlyFlag == 0) && (rtc.getHour(true) == 4) && (millis64() > 3700000)){
+      NightlyFlag = 1;
+      if(DebugMode){
+        Serial.println(F("Set nightly restart flag."));
+      }
+    }
+
+    //Restart the machine if not in use and nightlyflag set.
+    if((State != "AlwaysOn") && (State != "Unlocked") && NightlyFlag){
+      settings.putString("LastState", State);
+      delay(10);
+      //Set the front LED blue
+      vTaskSuspend(xHandle);
+      Internal.println("L 0,0,255");
+      Internal.println("S 0");
+      Internal.flush();
+      //Tell the server we are shutting down, and close the socket.
+      while(ReadyToSend){
+        //Wait for any current message to go
+        delay(10);
+      }
+      Message = "Nightly Restart. Goodnight!";
+      ReadyToSend = 1;
+      while(ReadyToSend){
+        delay(10);
+      }
+      DisconnectWebsocket = 1;
+      while(DisconnectWebsocket){
+        delay(10);
+      }
+      State = "Restart";
+      delay(100);
+      Serial.println(F("RESTARTING. Source: Timer."));
+      settings.putString("ResetReason","Nightly-Restart");
+      delay(100);
+      ESP.restart();
+    }
+
     //Check the button on the front panel. If it has been held down for more than 5 seconds, restart. 
     //Constantly set the reset time 5 seconds in the future when the button isn't pressed.
     if(Button){

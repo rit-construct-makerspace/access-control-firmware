@@ -139,6 +139,7 @@ uint64_t NextSocketTry;                  //The time we should try to send the ne
 uint64_t WebsocketResetTime;             //When we should reconnect the websocket.
 bool ConnectWebsocket;                   //Set to 1 to trigger a connection.
 bool SecondMessageFail;                  //Tracks how many outgoing messages have been lost.
+bool NightlyFlag;                        //Flag indicates it is past 4am and time to restart next time in an OK state.
 
 //Libraries:
 #include <OneWireESP32.h>         //Version 2.0.2 | Source: https://github.com/junkfix/esp32-ds18b20
@@ -280,6 +281,15 @@ void setup(){
     Brightness = 255;
     settings.putString("Brightness",String(Brightness));
   }
+
+  //New setting in V1.3.8, timezone. Set to EST if not present
+  int TimezoneHr;
+  if(settings.isKey("Timezone")){
+    TimezoneHr = settings.getString("Timezone").toInt();
+  } else{
+    TimezoneHr = -4;
+  }
+  rtc.offset = TimezoneHr * 3600;
 
   //Go through and delete any keys we no longer use from old versions. 
   DeleteOld("SecurityCode");
