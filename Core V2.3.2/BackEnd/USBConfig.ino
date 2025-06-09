@@ -82,6 +82,7 @@ void USBConfig(void *pvParameters){
     if(Input.equalsIgnoreCase("Restart")){
       //Restart command
       Serial.println(F("Restarting."));
+      settings.putString("ResetReason","USB-Commanded");
       delay(1000);
       ESP.restart();
     }

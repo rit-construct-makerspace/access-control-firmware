@@ -180,6 +180,17 @@ void SocketManager(void *pvParameters) {
             Serial.println(rtc.getDateTime(true));
           }
         }
+        if(kv.key() == "Timezone"){
+          //Set the timezone in hours offset
+          int TimezoneHr = wsin["Timezone"].as<int>();
+          settings.putString("Timezone",String(TimezoneHr));
+          rtc.offset = TimezoneHr * 3600;
+          if(DebugMode){
+            Serial.print(F("Set timezone to: "));
+            Serial.print(TimezoneHr);
+            Serial.println(F(" from UTC"));
+          }
+        }
         if(kv.key() == "TempLimit"){
           //Set the temperature limit
           TempLimit = wsin["TempLimit"].as<unsigned int>();
@@ -253,6 +264,9 @@ void SocketManager(void *pvParameters) {
             }
             if(wsin["Request"][i] == "State"){
               wsresp["State"] = State;
+            }
+            if(wsin["Request"][i] == "Timezone"){
+              wsresp["Timezone"] = settings.getString("Timezone");
             }
             if(wsin["Request"][i] == "TempLimit"){
               wsresp["TempLimit"] = TempLimit;
@@ -336,6 +350,14 @@ void SocketManager(void *pvParameters) {
     if(RegularStatus && !WSSend){
       wsresp["State"] = State;
       wsresp["UID"] = UID;
+      if(rtc.getYear() < 2016){
+        //Time is not correct
+        if(DebugMode){
+          Serial.println(F("Wrong time in RTC."));
+          Serial.println(F("Requesting right time from server."));
+        }
+        wsresp["Request"][0] = "Time";
+      }
       WSSend = 1;
       RegularStatus = 0;
     }
