@@ -94,16 +94,27 @@ void SocketManager(void *pvParameters) {
               }
               xSemaphoreTake(StateMutex, portMAX_DELAY);
               settings.putString("LastState", State);
+              xSemaphoreGive(StateMutex);
               delay(10);
               State = "Restart";
               ServerStateSet = 1;
+              ChangeBeep = 1;
+              while(ChangeBeep){
+                //Wait for the change beep to happen
+                delay(10);
+              }
+              delay(100);
+              settings.putString("LastState",State);
               //Turn off the internal write task so that it doesn't overwrite the restart led color.
               vTaskSuspend(xHandle);
               delay(100);
               settings.putString("ResetReason","Server-Ordered");
               Internal.println("L 255,0,0");
+              delay(10);
               Internal.println("S 0");
+              delay(10);
               Internal.flush();
+              delay(10);
               ESP.restart();
             }
             //If the state is fault, we do not accept anything but restart.
