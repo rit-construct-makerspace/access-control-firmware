@@ -387,7 +387,7 @@ void setup(){
   if(rtc_get_reset_reason(0) != POWERON_RESET){
     //Reset for a reason other than power on reset.
     State = settings.getString("LastState");
-    if(State == NULL || State == "Restart"){
+    if(State == "" || State == NULL || State == "Restart"){
       //There wasn't a state to retrieve?
       State = "Startup";
     }
