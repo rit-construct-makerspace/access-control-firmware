@@ -108,6 +108,15 @@ void MachineState(void *pvParameters) {
       ChangeStatus = 1; //Send a message to the server that the state changed.
     }
 
+    //Check what the saved LastState is. Sometimes this gets into a weird state.
+    if((settings.getString("LastState") != "Idle") && (State == "Idle")){
+      //Saved state is something weird, even though device is in normal state. Override it.
+      settings.putString("LastState","Idle");
+      if(DebugMode){
+        Serial.println(F("Set LastState in settings to Idle, don't know why it wasn't."));
+      }
+    }
+
     //Release the semaphore;
     xSemaphoreGive(StateMutex);
 
