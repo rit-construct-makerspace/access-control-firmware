@@ -27,7 +27,7 @@ USBConfig: Allows programatic changing of settings over USB
 */
 
 //Settings
-#define Version "1.3.8"
+#define Version "1.3.9"
 #define Hardware "2.3.2-LE"
 #define MAX_DEVICES 5 //How many possible temperature sensors to scan for
 #define OTA_URL "https://raw.githubusercontent.com/rit-construct-makerspace/access-control-firmware/refs/heads/main/otadirectory.json"
@@ -140,6 +140,8 @@ uint64_t WebsocketResetTime;             //When we should reconnect the websocke
 bool ConnectWebsocket;                   //Set to 1 to trigger a connection.
 bool SecondMessageFail;                  //Tracks how many outgoing messages have been lost.
 bool NightlyFlag;                        //Flag indicates it is past 4am and time to restart next time in an OK state.
+uint64_t NextNetworkCheck;               //Time when we next check the network for connectivity
+bool SecondNetworkFail;                  //Bool to check if we have had network issues in the past.
 
 //Libraries:
 #include <OneWireESP32.h>         //Version 2.0.2 | Source: https://github.com/junkfix/esp32-ds18b20

@@ -60,26 +60,71 @@ void NetworkManager(void *pvParameters){
       }
       if(TestNetwork()){
         InternetOK = 1;
+        SecondNetworkFail = 0;
         if(DebugMode){
           Serial.println(F("Internet connection appears OK."));
+        }
+        //Maybe the issue is the server itself? Let's check that.
+        if(DebugMode){
+          Serial.print(F("Attempting to ping "));
+          Serial.println(c_str(Server));
+        }
+        if(Ping.ping(Server){
+          //Was able to reach the website fine.
+          //If we ping the website, but don't get websocket activity, it is probably a websocket issue. Restart websocket.
+          DisconnectWebsocket = 1;
+          if(DebugMode){
+            Serial.println(F("Was able to reach the server frontend. Restarting websocket."));
+          }
+        } else{
+          //Was unable to reach the website. Must be an outage.
+          if(DebugMode){
+            Serial.println(F("Server is offline but internet OK."));
+          }
+          continue;
         }
         if(StartupNetworkMessage){
           while(ReadyToSend){
             //Wait for the current message to make it out.
-            delay(100);
+            delay(10);
             continue;
           }
           StartupNetworkMessage = 0;
           Message = "NetworkManager test on initial boot.";
         } else{
-          //Message = "Internet is OK but no websocket. Can you hear me?";
+          Message = "Internet is OK but no websocket. Can you hear me?";
         }
         ReadyToSend = 1;
       } 
       else{
         InternetOK = 0;
+        NoNetwork = 1;
         if(DebugMode){
           Serial.println(F("Was not able to reach the internet."));
+        }
+
+        if(SecondNetworkFail){
+          //We've already detected that the network failed once before. This is not a momentary blip.
+          if(millis64() >= NextNetworkCheck){
+            //It has been a bit of time since we first detected we couldn't connect, and still can't.
+            //Try reconnecting to the internet
+            if(DebugMode){
+              Serial.println(F("Restarting WiFi..."));
+            }
+            WiFi.disconnect();
+            WiFi.mode(WIFI_OFF);
+            NoNetwork = 1;
+            delay(1000);
+            NetworkConnect();
+            if(DebugMode){
+              Serial.println(F("WiFi restarted."));
+            }
+            Message = "WiFi restarted.";
+            ReadyToSend = 1;
+          }
+        } else{
+          SecondNetworkFail = 1;
+          NextNetworkCheck = millis64() + 5000;
         }
       }
     }
@@ -122,14 +167,16 @@ bool NetworkConnect(){
       }
       delay(1000);
     }
-    WiFi.setSleep(false);
-    WiFi.setAutoReconnect(true);
-    if(DebugMode){
-      Serial.println(F("WiFi reporting connected, testing if we can reach the internet."));
-    }
-    if(TestNetwork()){
-      InterfaceUsed = 0;
-      return 1;
+    if(WiFiCount <= 10){
+      WiFi.setSleep(false);
+      WiFi.setAutoReconnect(true);
+      if(DebugMode){
+        Serial.println(F("WiFi reporting connected, testing if we can reach the internet."));
+      }
+      if(TestNetwork()){
+        InterfaceUsed = 0;
+        return 1;
+      }
     }
   }
   //If we made it here, we failed to connect to the network
