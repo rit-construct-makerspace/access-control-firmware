@@ -57,7 +57,7 @@ void NetworkManager(void *pvParameters){
       //If our network is actually connected, this may be a sign of a server-specific outage 
       if(DebugMode){
         Serial.println(F("No network connection reported."));
-      }
+      } 
       if(TestNetwork()){
         InternetOK = 1;
         SecondNetworkFail = 0;
@@ -67,9 +67,9 @@ void NetworkManager(void *pvParameters){
         //Maybe the issue is the server itself? Let's check that.
         if(DebugMode){
           Serial.print(F("Attempting to ping "));
-          Serial.println(c_str(Server));
+          Serial.println(Server);
         }
-        if(Ping.ping(Server){
+        if(Ping.ping(Server.c_str())){
           //Was able to reach the website fine.
           //If we ping the website, but don't get websocket activity, it is probably a websocket issue. Restart websocket.
           DisconnectWebsocket = 1;
@@ -95,7 +95,7 @@ void NetworkManager(void *pvParameters){
           Message = "Internet is OK but no websocket. Can you hear me?";
         }
         ReadyToSend = 1;
-      } 
+      }
       else{
         InternetOK = 0;
         NoNetwork = 1;

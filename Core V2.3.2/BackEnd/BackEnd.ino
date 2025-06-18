@@ -414,6 +414,10 @@ void setup(){
     //Definitely a panic crash
     ResetReason = "Panic-Crash";
   }
+  if(rtc_get_reset_reason(0) == 3){
+    //Likely a brownout
+    ResetReason = "3-Maybe-Power-Issues";
+  }
   if(ResetReason == "Unknown"){
     //Append the reset reason for debug
     ResetReason = "Unknown-Type-" + String(rtc_get_reset_reason(0));
