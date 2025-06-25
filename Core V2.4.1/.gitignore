@@ -1,3 +1,11 @@
 CMakeFiles/
 CMakeCache.txtx
 build/
+kconfigs_projbuild.in
+config.env
+kconfigs.in
+config/
+.vscode/
+sdkconfig
+sdkconfig.old
+

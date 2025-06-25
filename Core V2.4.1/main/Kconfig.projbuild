@@ -2,13 +2,13 @@ menu "Example Configuration"
 
     config ESP_WIFI_SSID
         string "WiFi SSID"
-        default "myssid"
+        default "EXAMPLES SSID"
         help
             SSID (network name) for the example to connect to.
 
     config ESP_WIFI_PASSWORD
         string "WiFi Password"
-        default "mypassword"
+        default "EXAMPLE PASSWOR"
         help
             WiFi password (WPA or WPA2) for the example to use.
 
@@ -32,7 +32,7 @@ menu "Example Configuration"
         help
             password identifier for SAE H2E
 
-    config ESP_MAXIMUM_RETRY
+    config ESP_MAXIMUM_RETRY 
         int "Maximum retry"
         default 5
         help

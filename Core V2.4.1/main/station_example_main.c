@@ -170,4 +170,9 @@ void app_main(void)
 
     ESP_LOGI(TAG, "ESP_WIFI_MODE_STA");
     wifi_init_sta();
+
+    for (int i = 0; i < 100; i++) {
+      ESP_LOGI(TAG, "Counting %d", i);
+      sleep(1);
+    }
 }
