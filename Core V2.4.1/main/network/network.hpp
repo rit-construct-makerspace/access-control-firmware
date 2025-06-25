@@ -1,3 +1,5 @@
-#include "main/common/types.hpp"
+#include "common/types.hpp"
 
-int debugLog(LogMessage) {}
+int network_init();
+
+void debug_log(const LogMessage &msg);

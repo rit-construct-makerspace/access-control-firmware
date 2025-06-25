@@ -1,3 +1,7 @@
 menu "Shlug Configuration"
-
+    config DEBUG_LOG_QUEUE_SIZE
+        int "Number of items"
+        default 5
+        
 endmenu
+    
