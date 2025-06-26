@@ -1,4 +1,7 @@
+#include "cJSON.h"
 #include "common/types.hpp"
-#include "esp_json.hpp"
 
-void submit_log(const LogMessage &);
+/**
+ * Send a message
+ */
+void submit_log_data(cJSON *json);

@@ -14,5 +14,6 @@ static const char *TAG = "network";
 int debug_log_init();
 int network_init() {
   debug_log_init();
+
   return 0;
 }

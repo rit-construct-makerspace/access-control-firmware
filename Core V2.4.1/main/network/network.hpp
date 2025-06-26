@@ -1,5 +1,10 @@
 #include "common/types.hpp"
 
-int network_init();
+namespace Network {
+int init();
 
+void send_state_transition();
+
+bool is_network_online();
+} // namespace Network
 void debug_log(const LogMessage &msg);

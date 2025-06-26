@@ -87,13 +87,45 @@ dependencies:
       registry_url: https://components.espressif.com
       type: service
     version: 1.0.11
+  espressif/jsmn:
+    component_hash: d80350c41bbaa827c98a25b6072df00884e72f54885996fab4a4f0aebce6b6c3
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=4.3'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    version: 1.1.0
+  espressif/json_generator:
+    component_hash: 45033e1c199b13f1c8c1b544fb7d4e2df6a8e3071ebdcb1b22582b61a7974ff2
+    dependencies: []
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.1.2
+  espressif/json_parser:
+    component_hash: d74b81729ad06ec11ff5eb5b1b0d7df1d00e6027fc11471f4b139c70dcf1b1e4
+    dependencies:
+    - name: espressif/jsmn
+      registry_url: https://components.espressif.com
+      require: private
+      rules:
+      - if: idf_version >=5.0
+      version: ~1.1
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.0.3
   idf:
     source:
       type: idf
     version: 5.4.1
 direct_dependencies:
 - espp/neopixel
+- espressif/json_generator
+- espressif/json_parser
 - idf
-manifest_hash: 7381c3a4d08bb82fda816f86cb2c97d413f50db65315b9446dfd004b7518a12b
+manifest_hash: 8297c53a983777f5be0881ae03d0043a0bea222c343ead5ff28a79c4e2775022
 target: esp32s2
 version: 2.0.0
