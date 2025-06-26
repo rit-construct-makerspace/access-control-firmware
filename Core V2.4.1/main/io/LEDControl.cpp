@@ -3,11 +3,10 @@
 #include <chrono>
 #include <thread>
 #include <array>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <freertos/semphr.h>
 
-#include "freertos/FreeRTOS.h"
-#include "freertos/queue.h"
-#include "freertos/task.h"
-#include "freertos/semphr.h"
 #include "common/pins.hpp"
 #include "neopixel.hpp"
 #include "esp_log.h"
@@ -177,7 +176,7 @@ int LED::init() {
     state_mutex = xSemaphoreCreateMutex();
     
     if (state_mutex == NULL) {
-        // TODO: Fault here
+        // TODO: Crash here
         return 1;
     }
 

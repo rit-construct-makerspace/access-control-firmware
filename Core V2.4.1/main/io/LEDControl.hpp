@@ -1,3 +1,5 @@
+#pragma once
+
 namespace LED {
     enum class DisplayState {
         IDLE,

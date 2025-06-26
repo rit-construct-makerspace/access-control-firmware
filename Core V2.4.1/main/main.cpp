@@ -1,4 +1,5 @@
 #include "io/LEDControl.hpp"
+#include "io/IO.hpp"
 
 extern "C" void app_main(void) {
     LED::init();

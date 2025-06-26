@@ -1,0 +1,192 @@
+#include "IO.hpp"
+
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <freertos/semphr.h>
+#include <freertos/queue.h>
+
+#include "esp_log.h"
+#include "LEDControl.hpp"
+
+const char* TAG = "io";
+
+QueueHandle_t event_queue;
+TaskHandle_t io_thread;
+
+
+#define IO_TASK_STACK_SIZE 4000
+
+static IOState state = IOState::STARTUP;
+static SemaphoreHandle_t state_mutex;
+
+bool IO::get_state(IOState &send_state) {
+    if (xSemaphoreTake(state_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+        send_state = state;
+        xSemaphoreGive(state_mutex);
+        return true;
+    } else {
+        return false;
+    }
+}
+
+bool IO::send_event(IOEvent event) {
+    return xQueueSend(event_queue, &(event), pdMS_TO_TICKS(100)) == pdTRUE;
+}
+
+bool set_state(IOState new_state) {
+    if (xSemaphoreTake(state_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+        state = new_state;
+        xSemaphoreGive(state_mutex);
+        return true;
+    } else {
+        return false;
+    }
+}
+
+void go_to_state(IOState next_state) {
+    IOState current_state;
+    IO::get_state(current_state);
+
+    if (next_state == IOState::RESTART) {
+        LED::set_state(LED::DisplayState::RESTART);
+        return;
+    }
+
+    if (current_state == IOState::FAULT) {
+        return;
+    }
+
+    switch (next_state) {
+        case IOState::IDLE:
+            LED::set_state(LED::DisplayState::IDLE);
+            break;
+        case IOState::UNLOCKED:
+            LED::set_state(LED::DisplayState::UNLOCKED);
+            break;
+        case IOState::ALWAYS_ON:
+            LED::set_state(LED::DisplayState::ALWAYS_ON);
+            break;
+        case IOState::LOCKOUT:
+            LED::set_state(LED::DisplayState::LOCKOUT);
+            break;
+        case IOState::NEXT_CARD:
+            LED::set_state(LED::DisplayState::NEXT_CARD);
+            break;
+        case IOState::WELCOMING:
+            LED::set_state(LED::DisplayState::WELCOMING);
+            break;
+        case IOState::WELCOMED:
+            LED::set_state(LED::DisplayState::WELCOMED);
+            break;
+        case IOState::ALWAYS_ON_WAITING:
+            LED::set_state(LED::DisplayState::ALWAYS_ON_WAITING);
+            break;
+        case IOState::LOCKOUT_WAITING:
+            LED::set_state(LED::DisplayState::LOCKOUT_WAITING);
+            break;
+        case IOState::IDLE_WAITING:
+            LED::set_state(LED::DisplayState::IDLE_WAITING);
+            break;
+        case IOState::AWAIT_AUTH:
+            LED::set_state(LED::DisplayState::AWAIT_AUTH);
+            break;
+        case IOState::DENIED:
+            LED::set_state(LED::DisplayState::DENIED);
+            break;
+        case IOState::FAULT:
+            LED::set_state(LED::DisplayState::FAULT);
+            break;
+        default:
+            ESP_LOGI(TAG, "Attempted to go to an unkown state");
+        return;
+    }
+
+    if (!set_state(next_state)) {
+        ESP_LOGI(TAG, "Failed to update the stored state");
+        // TODO: Crash
+    }
+}
+
+void handle_button_pressed() {
+    IOState current_state;
+    if (!IO::get_state(current_state)) {
+        ESP_LOGI(TAG, "Failed to get state");
+        return;
+    }
+
+    switch (current_state) {
+        case IOState::UNLOCKED:
+        case IOState::AWAIT_AUTH:
+        case IOState::DENIED:
+        case IOState::RESTART:
+        case IOState::STARTUP:
+        case IOState::FAULT:
+        case IOState::WELCOMED:
+        case IOState::WELCOMING:
+        ESP_LOGI(TAG, "Tried to go to a waiting state from a dissallowed state");
+        return;
+    }
+
+    switch (current_state) {
+        case IOState::IDLE_WAITING:
+            go_to_state(IOState::ALWAYS_ON_WAITING);
+            break;
+        case IOState::LOCKOUT_WAITING:
+            go_to_state(IOState::IDLE_WAITING);
+            break;
+        case IOState::ALWAYS_ON_WAITING:
+            go_to_state(IOState::LOCKOUT_WAITING);
+            break;
+        default:
+            go_to_state(IOState::IDLE_WAITING);
+            break;
+    }
+}
+
+void io_thread_fn(void *) {
+
+    IOEvent current_event;
+
+    while (true) {
+        if (xQueueReceive(event_queue, &current_event, portMAX_DELAY) != pdTRUE) {
+            continue;
+        }
+
+        switch (current_event.type) {
+            case IOEventType::BUTTON_PRESSED:
+                handle_button_pressed();
+            break;
+
+            case IOEventType::CARD_DETECTED:
+
+            break;
+
+            case IOEventType::CARD_REMOVED:
+
+            break;
+
+            case IOEventType::NETWORK_COMMAND:
+
+            break;
+
+            default:
+                ESP_LOGI(TAG, "Unexpected event type recieved");
+            break;
+        }
+    }
+}
+
+int IO::init() {
+    event_queue = xQueueCreate(8, sizeof(IOEvent));
+    state_mutex = xSemaphoreCreateMutex();
+
+    if (event_queue == 0 || state_mutex == NULL) {
+        // TODO: Crash here
+    }
+
+    LED::init();
+
+    xTaskCreate(io_thread_fn, "io", IO_TASK_STACK_SIZE, NULL, 0, &io_thread);
+
+    return 0;
+}
