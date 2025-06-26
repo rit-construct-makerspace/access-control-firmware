@@ -4,10 +4,10 @@
 #include <thread>
 #include <array>
 
-#include "freertos/FreeRTOS.h"
-#include "freertos/queue.h"
-#include "freertos/task.h"
-#include "freertos/semphr.h"
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <freertos/semphr.h>
+
 #include "common/pins.hpp"
 #include "neopixel.hpp"
 #include "esp_log.h"
@@ -23,10 +23,10 @@ TaskHandle_t led_thread;
 
 #define LED_TASK_STACK_SIZE 4000
 
-static LEDDisplayState display_state;
+static LED::DisplayState display_state = LED::DisplayState::STARTUP;
 static SemaphoreHandle_t state_mutex;
 
-const char * TAG = "led";
+static const char * TAG = "led";
 
 static const espp::Rgb WHITE(15, 15, 15);
 static const espp::Rgb OFF(0, 0, 0);
@@ -84,6 +84,48 @@ const LEDAnimation DENIED_ANIMATION {
     }
 };
 
+const LEDAnimation STARTUP_ANIMATION {
+    .length = 3,
+    .frames = {
+        LEDState {RED, RED, RED, RED},
+        LEDState {GREEN, GREEN, GREEN, GREEN},
+        LEDState {BLUE, BLUE, BLUE, BLUE},
+    }
+};
+
+const LEDAnimation IDLE_WAITING_ANIMATION {
+    .length = 2,
+    .frames = {
+        LEDState {OFF, ORANGE, ORANGE, OFF},
+        LEDState {OFF, OFF, OFF, OFF},
+    }
+};
+
+const LEDAnimation ALWAYS_ON_WAITING_ANIMATION {
+    .length = 2,
+    .frames = {
+        LEDState {OFF, GREEN, GREEN, OFF},
+        LEDState {OFF, OFF, OFF, OFF},
+    }
+};
+
+const LEDAnimation LOCKOUT_WAITING_ANIMATION {
+    .length = 2,
+    .frames = {
+        LEDState {OFF, RED, RED, OFF},
+        LEDState {OFF, OFF, OFF, OFF},
+    }
+};
+
+const LEDAnimation RESTART_ANIMATION {
+    .length = 3,
+    .frames = {
+        LEDState {RED, GREEN, BLUE, RED},
+        LEDState {BLUE, RED, GREEN, BLUE},
+        LEDState {GREEN, BLUE, RED, GREEN},
+    }
+};
+
 void advance_frame(LEDAnimation animation, espp::Neopixel &strip, uint8_t &current_frame) {
     if (current_frame + 1 >= animation.length) {
         current_frame = 0;
@@ -96,7 +138,7 @@ void advance_frame(LEDAnimation animation, espp::Neopixel &strip, uint8_t &curre
     }
 }
 
-bool set_led_state(LEDDisplayState state) {
+bool LED::set_state(LED::DisplayState state) {
     if (xSemaphoreTake(state_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
         display_state = state;
         xSemaphoreGive(state_mutex);
@@ -107,7 +149,7 @@ bool set_led_state(LEDDisplayState state) {
 };
 
 // Returns true if current_state was updated, false otherwise
-bool get_led_state(LEDDisplayState &current_state) {
+bool get_state(LED::DisplayState &current_state) {
     if (xSemaphoreTake(state_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
         if (current_state == display_state) {
             xSemaphoreGive(state_mutex);
@@ -123,7 +165,7 @@ bool get_led_state(LEDDisplayState &current_state) {
 
 bool get_network_state() {
     // TODO: Ask the network task
-    return false;
+    return true;
 };
 
 void led_thread_fn(void *) {
@@ -132,52 +174,66 @@ void led_thread_fn(void *) {
         .num_leds = 4
     });
 
-    LEDDisplayState loop_state = LEDDisplayState::STARTUP;
+    LED::DisplayState loop_state = LED::DisplayState::STARTUP;
     bool network_good = get_network_state();
     uint8_t current_frame = 0;
 
     while (true) {
-
-        if (get_led_state(loop_state)) {
+        if (get_state(loop_state)) {
             current_frame = 0;
         }
         network_good = get_network_state();
 
         switch (loop_state) {
-            case LEDDisplayState::IDLE:
+            case LED::DisplayState::IDLE:
                 advance_frame(IDLE_ANIMATION, strip, current_frame);
                 break;
-            case LEDDisplayState::ALWAYS_ON:
+            case LED::DisplayState::ALWAYS_ON:
                 advance_frame(ALWAYS_ON_ANIMATION, strip, current_frame);
                 break;
-            case LEDDisplayState::UNLOCKED:
+            case LED::DisplayState::UNLOCKED:
                 advance_frame(UNLOCKED_ANIMATION, strip, current_frame);
                 break;
-            case LEDDisplayState::LOCKOUT:
+            case LED::DisplayState::LOCKOUT:
                 advance_frame(LOCK_OUT_ANIMATION, strip, current_frame);
                 break;
-            case LEDDisplayState::DENIED:
+            case LED::DisplayState::DENIED:
                 advance_frame(DENIED_ANIMATION, strip, current_frame);
+                break;
+            case LED::DisplayState::STARTUP:
+                advance_frame(STARTUP_ANIMATION, strip, current_frame);
+                break;
+            case LED::DisplayState::IDLE_WAITING:
+                advance_frame(IDLE_WAITING_ANIMATION, strip, current_frame);
+                break;
+            case LED::DisplayState::ALWAYS_ON_WAITING:
+                advance_frame(ALWAYS_ON_WAITING_ANIMATION, strip, current_frame);
+                break;
+            case LED::DisplayState::LOCKOUT_WAITING:
+                advance_frame(LOCKOUT_WAITING_ANIMATION, strip, current_frame);
+                break;
+            case LED::DisplayState::RESTART:
+                advance_frame(RESTART_ANIMATION, strip, current_frame);
                 break;
             default:
                 break;
         }
 
-        if (!network_good && (current_frame % 2 == 0)) {
+        if (!network_good && (current_frame % 2 == 0) && (loop_state != LED::DisplayState::STARTUP || loop_state != LED::DisplayState::RESTART)) {
             strip.set_color(WHITE, 0);
             strip.set_color(WHITE, 3);
         }
 
         strip.show();
-        std::this_thread::sleep_for(std::chrono::milliseconds{400});
+        vTaskDelay(pdMS_TO_TICKS(400));
     };
 };
 
-int led_init() {
+int LED::init() {
     state_mutex = xSemaphoreCreateMutex();
     
     if (state_mutex == NULL) {
-        // TODO: Fault here
+        // TODO: Crash here
         return 1;
     }
 
