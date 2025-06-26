@@ -13,7 +13,7 @@ struct CardTagID {
     std::array<uint8_t, 7> value;
 };
 
-enum IOState {
+enum class IOState {
     IDLE,
     UNLOCKED,
     ALWAYS_ON,
@@ -21,6 +21,7 @@ enum IOState {
     NEXT_CARD,
     STARTUP,
     WELCOMING,
+    WELCOMED,
     ALWAYS_ON_WAITING,
     LOCKOUT_WAITING,
     IDLE_WAITING,
