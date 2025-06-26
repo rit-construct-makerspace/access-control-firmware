@@ -1,10 +1,12 @@
+#pragma once
 #include "common/types.hpp"
 
 namespace Network {
 int init();
 
-void send_state_transition();
+void report_state_transition(IOState from, IOState to);
+bool is_online();
 
-bool is_network_online();
 } // namespace Network
+
 void debug_log(const LogMessage &msg);
