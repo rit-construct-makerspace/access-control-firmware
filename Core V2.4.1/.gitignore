@@ -1,5 +1,5 @@
 CMakeFiles/
-CMakeCache.txtx
+CMakeCache.txt
 build/
 kconfigs_projbuild.in
 config.env
@@ -8,4 +8,4 @@ config/
 .vscode/
 sdkconfig
 sdkconfig.old
-
+managed_components
