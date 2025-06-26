@@ -23,7 +23,7 @@ TaskHandle_t led_thread;
 
 #define LED_TASK_STACK_SIZE 4000
 
-static LEDDisplayState display_state;
+static LED::DisplayState display_state;
 static SemaphoreHandle_t state_mutex;
 
 const char * TAG = "led";
@@ -96,7 +96,7 @@ void advance_frame(LEDAnimation animation, espp::Neopixel &strip, uint8_t &curre
     }
 }
 
-bool set_led_state(LEDDisplayState state) {
+bool LED::set_state(LED::DisplayState state) {
     if (xSemaphoreTake(state_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
         display_state = state;
         xSemaphoreGive(state_mutex);
@@ -107,7 +107,7 @@ bool set_led_state(LEDDisplayState state) {
 };
 
 // Returns true if current_state was updated, false otherwise
-bool get_led_state(LEDDisplayState &current_state) {
+bool get_state(LED::DisplayState &current_state) {
     if (xSemaphoreTake(state_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
         if (current_state == display_state) {
             xSemaphoreGive(state_mutex);
@@ -132,31 +132,31 @@ void led_thread_fn(void *) {
         .num_leds = 4
     });
 
-    LEDDisplayState loop_state = LEDDisplayState::STARTUP;
+    LED::DisplayState loop_state = LED::DisplayState::STARTUP;
     bool network_good = get_network_state();
     uint8_t current_frame = 0;
 
     while (true) {
 
-        if (get_led_state(loop_state)) {
+        if (get_state(loop_state)) {
             current_frame = 0;
         }
         network_good = get_network_state();
 
         switch (loop_state) {
-            case LEDDisplayState::IDLE:
+            case LED::DisplayState::IDLE:
                 advance_frame(IDLE_ANIMATION, strip, current_frame);
                 break;
-            case LEDDisplayState::ALWAYS_ON:
+            case LED::DisplayState::ALWAYS_ON:
                 advance_frame(ALWAYS_ON_ANIMATION, strip, current_frame);
                 break;
-            case LEDDisplayState::UNLOCKED:
+            case LED::DisplayState::UNLOCKED:
                 advance_frame(UNLOCKED_ANIMATION, strip, current_frame);
                 break;
-            case LEDDisplayState::LOCKOUT:
+            case LED::DisplayState::LOCKOUT:
                 advance_frame(LOCK_OUT_ANIMATION, strip, current_frame);
                 break;
-            case LEDDisplayState::DENIED:
+            case LED::DisplayState::DENIED:
                 advance_frame(DENIED_ANIMATION, strip, current_frame);
                 break;
             default:
@@ -173,7 +173,7 @@ void led_thread_fn(void *) {
     };
 };
 
-int led_init() {
+int LED::init() {
     state_mutex = xSemaphoreCreateMutex();
     
     if (state_mutex == NULL) {
