@@ -4,6 +4,7 @@
 #include <freertos/task.h>
 #include <freertos/semphr.h>
 #include <freertos/queue.h>
+#include <freertos/timers.h>
 
 #include "esp_log.h"
 #include "io/LEDControl.hpp"
@@ -108,6 +109,25 @@ void go_to_state(IOState next_state) {
     }
 }
 
+IOState waiting_prior_state;
+TimerHandle_t waiting_timer;
+
+void waiting_timer_callback(TimerHandle_t timer) {
+    go_to_state(waiting_prior_state);
+};
+
+void timer_refresh() {
+    if (xTimerIsTimerActive(waiting_timer) == pdFALSE) {
+        if (xTimerStart(waiting_timer, pdMS_TO_TICKS(100)) == pdFAIL) {
+            // TODO: Crash
+        }
+    } else {
+        if (xTimerReset(waiting_timer, pdMS_TO_TICKS(100)) == pdFAIL) {
+            // TODO: Crash
+        }
+    }
+}
+
 void handle_button_clicked() {
     IOState current_state;
     if (!IO::get_state(current_state)) {
@@ -130,6 +150,8 @@ void handle_button_clicked() {
             break;
     }
 
+    timer_refresh();
+
     switch (current_state) {
         case IOState::IDLE_WAITING:
             go_to_state(IOState::ALWAYS_ON_WAITING);
@@ -141,7 +163,8 @@ void handle_button_clicked() {
             go_to_state(IOState::LOCKOUT_WAITING);
             break;
         default:
-            go_to_state(IOState::IDLE_WAITING);
+            waiting_prior_state = current_state;
+            go_to_state(IOState::LOCKOUT_WAITING);
             break;
     }
 }
@@ -195,6 +218,7 @@ void io_thread_fn(void *) {
 int IO::init() {
     event_queue = xQueueCreate(8, sizeof(IOEvent));
     state_mutex = xSemaphoreCreateMutex();
+    waiting_timer = xTimerCreate("waiting", pdMS_TO_TICKS(5000), pdFALSE, (void *) 0, waiting_timer_callback);
 
     if (event_queue == 0 || state_mutex == NULL) {
         // TODO: Crash here
