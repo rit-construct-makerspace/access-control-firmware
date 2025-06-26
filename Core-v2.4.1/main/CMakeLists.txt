@@ -1,2 +1,6 @@
-idf_component_register(SRCS "main.cpp" "io/LEDControl.cpp" "network/network.cpp" "network/logging.cpp" "network/storage.cpp" "common/types.cpp"
-                    INCLUDE_DIRS "." REQUIRES neopixel esp_event esp_wifi PRIV_REQUIRES nvs_flash json)
+file(GLOB IO_SRCS "io/*.cpp")
+file(GLOB COMMON_SRCS "common/*.cpp")
+file(GLOB NET_SRCS "network/*.cpp")
+
+idf_component_register(SRCS "main.cpp" ${IO_SRCS} ${COMMON_SRCS} ${NET_SRCS}
+                    INCLUDE_DIRS "." REQUIRES neopixel)

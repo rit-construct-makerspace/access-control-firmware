@@ -2,14 +2,14 @@
 #include <iomanip>
 #include <sstream>
 
-std::string card_tag_type_to_string(CardTagType type) {
+const char* card_tag_type_to_string(CardTagType type) {
     switch (type) {
     case CardTagType::FOUR:
         return "Four Byte UID";
     case CardTagType::SEVEN:
         return "Seven Byte UID";
     default:
-        return "Unknown UID";
+        return "Unknown UID Type";
     }
 }
 std::string CardTagID::to_string() const {
@@ -28,7 +28,7 @@ std::string CardTagID::to_string() const {
     return ss.str();
 }
 
-std::string io_state_to_string(IOState state) {
+const char* io_state_to_string(IOState state) {
     switch (state) {
     case IOState::IDLE:
         return "Idle";
@@ -65,7 +65,7 @@ std::string io_state_to_string(IOState state) {
     }
 }
 
-std::string log_message_type_to_string(LogMessageType type) {
+const char* log_message_type_to_string(LogMessageType type) {
     switch (type) {
     case LogMessageType::DEBUG:
         return "debug";
@@ -78,7 +78,7 @@ std::string log_message_type_to_string(LogMessageType type) {
     }
 }
 
-std::string io_event_type_to_string(IOEventType type) {
+const char* io_event_type_to_string(IOEventType type) {
     switch (type) {
     case IOEventType::BUTTON_PRESSED:
         return "Button Pressed";
@@ -97,7 +97,7 @@ std::string CardDetectedEvent::to_string() const {
     return "detected:" + card_tag_id.to_string();
 }
 
-std::string network_command_event_type_to_string(NetworkCommandEventType type) {
+const char* network_command_event_type_to_string(NetworkCommandEventType type) {
     switch (type) {
     case NetworkCommandEventType::COMMAND_STATE:
         return "Command State";
@@ -110,10 +110,25 @@ std::string network_command_event_type_to_string(NetworkCommandEventType type) {
 
 std::string NetworkCommandEvent::to_string() const {
     if (type == NetworkCommandEventType::COMMAND_STATE) {
-        return "Commanded:" + io_state_to_string(commanded_state);
+        return "Commanded:" + std::string{io_state_to_string(commanded_state)};
     } else if (type == NetworkCommandEventType::IDENTIFY) {
         return "Identify";
     } else {
         return "UNKNOWN NETWORK COMMAND";
+    }
+}
+
+std::string IOEvent::to_string() const {
+    switch (type) {
+    case IOEventType::BUTTON_PRESSED:
+        return "Button Pressed";
+    case IOEventType::CARD_DETECTED:
+        return "Card Detected" + card_detected.to_string();
+    case IOEventType::CARD_REMOVED:
+        return "Card Removed";
+    case IOEventType::NETWORK_COMMAND:
+        return "Network Command: " + network_command.to_string();
+    default:
+        return "INVALID IOEVENT";
     }
 }
