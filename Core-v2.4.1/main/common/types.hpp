@@ -63,9 +63,7 @@ struct CardDetectedEvent {
     std::string to_string() const;
 };
 
-struct CardRemovedEvent {
-    std::string to_string() const;
-};
+struct CardRemovedEvent {};
 
 enum class NetworkCommandEventType {
     IDENTIFY,

@@ -117,3 +117,18 @@ std::string NetworkCommandEvent::to_string() const {
         return "UNKNOWN NETWORK COMMAND";
     }
 }
+
+std::string IOEvent::to_string() const {
+    switch (type) {
+    case IOEventType::BUTTON_PRESSED:
+        return "Button Pressed";
+    case IOEventType::CARD_DETECTED:
+        return "Card Detected" + card_detected.to_string();
+    case IOEventType::CARD_REMOVED:
+        return "Card Removed";
+    case IOEventType::NETWORK_COMMAND:
+        return "Network Command: " + network_command.to_string();
+    default:
+        return "INVALID IOEVENT";
+    }
+}
