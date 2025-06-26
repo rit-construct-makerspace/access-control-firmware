@@ -1,5 +1,6 @@
 #include "network.hpp"
 #include "esp_log.h"
+#include "storage.hpp"
 
 #include "sdkconfig.h"
 
@@ -14,9 +15,18 @@ static const char *TAG = "network";
 
 int debug_log_init();
 
+int network_thread_fn(void*) {
+    while (true) {
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+    return 0;
+}
+
 namespace Network {
     int init() {
         debug_log_init();
+        Storage::init();
+
         return 0;
     }
 
@@ -26,5 +36,6 @@ namespace Network {
     }
 
     bool is_online() { return true; }
-
 } // namespace Network
+
+namespace bad {}
