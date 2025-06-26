@@ -49,8 +49,14 @@ enum class IOEventType {
     NETWORK_COMMAND,
 };
 
-struct ButtonEvent {
+enum class ButtonEventType {
+    CLICK,
+    HELD,
+    RELEASED,
+};
 
+struct ButtonEvent {
+    ButtonEventType type;
 };
 
 struct CardDetectedEvent {

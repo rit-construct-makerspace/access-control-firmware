@@ -107,7 +107,7 @@ void go_to_state(IOState next_state) {
     }
 }
 
-void handle_button_pressed() {
+void handle_button_clicked() {
     IOState current_state;
     if (!IO::get_state(current_state)) {
         ESP_LOGI(TAG, "Failed to get state");
@@ -154,7 +154,19 @@ void io_thread_fn(void *) {
 
         switch (current_event.type) {
             case IOEventType::BUTTON_PRESSED:
-                handle_button_pressed();
+                switch (current_event.button.type) {
+                    case ButtonEventType::CLICK:
+                        handle_button_clicked();
+                        break;
+                    case ButtonEventType::HELD:
+                        go_to_state(IOState::RESTART);
+                        break;
+                    case ButtonEventType::RELEASED:
+                        // TODO tell network to restart
+                        break;
+                    default:
+                        ESP_LOGI(TAG, "Unknown button event type recieved");
+                }
             break;
 
             case IOEventType::CARD_DETECTED:
