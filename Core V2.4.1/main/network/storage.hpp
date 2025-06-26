@@ -1,3 +1,4 @@
+#include "common/types.hpp"
 #include <cstdint>
 #include <string>
 
@@ -5,8 +6,8 @@ namespace Storage {
 
     int init();
 
-    std::string get_network_ssid();
-    std::string get_network_password();
+    WifiSSID get_network_ssid();
+    WifiPassword get_network_password();
     std::string get_server();
     std::string get_server_certs();
 

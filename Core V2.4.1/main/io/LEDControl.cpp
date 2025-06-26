@@ -23,7 +23,7 @@ TaskHandle_t led_thread;
 
 #define LED_TASK_STACK_SIZE 4000
 
-static LEDDisplayState display_state;
+static LEDDisplayState display_state = LEDDisplayState::STARTUP;
 static SemaphoreHandle_t state_mutex;
 
 const char * TAG = "led";

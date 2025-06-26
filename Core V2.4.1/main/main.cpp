@@ -3,5 +3,5 @@
 extern "C" void app_main(void) {
     Network::init();
     led_init();
-    set_led_state(LEDDisplayState::DENIED);
+    // set_led_state(LEDDisplayState::DENIED);
 }
