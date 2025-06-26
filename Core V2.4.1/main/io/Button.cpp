@@ -14,15 +14,15 @@
 #define BUTTON_TASK_STACK_SIZE 2000
 TaskHandle_t button_thread;
 
-const char * TAG = "Button";
+static const char * TAG = "Button";
 
 void button_thread_fn(void *) {
-    int iterations_held;
+    int iterations_held = 0;
     int restart_threshold = 60; // 3 seconds
     int status;
     while (true) {
 
-        status = gpio_get_level(BUTTON_PIN);
+        status = !gpio_get_level(BUTTON_PIN);
 
         if (status == 1) {
             iterations_held++;
@@ -42,6 +42,7 @@ void button_thread_fn(void *) {
                         .type = ButtonEventType::RELEASED,
                     },
                 });
+                iterations_held = 0;
             } else if (iterations_held > 0) {
                 IO::send_event({
                     .type = IOEventType::BUTTON_PRESSED,
@@ -49,10 +50,11 @@ void button_thread_fn(void *) {
                         .type = ButtonEventType::CLICK,
                     },
                 });
+                iterations_held = 0;
             }
         }
 
-        std::this_thread::sleep_for(std::chrono::milliseconds{50});
+        vTaskDelay(pdMS_TO_TICKS(50));
     };
 }
 

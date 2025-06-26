@@ -22,10 +22,10 @@ TaskHandle_t led_thread;
 
 #define LED_TASK_STACK_SIZE 4000
 
-static LED::DisplayState display_state;
+static LED::DisplayState display_state = LED::DisplayState::STARTUP;
 static SemaphoreHandle_t state_mutex;
 
-const char * TAG = "led";
+static const char * TAG = "led";
 
 static const espp::Rgb WHITE(15, 15, 15);
 static const espp::Rgb OFF(0, 0, 0);
@@ -83,6 +83,35 @@ const LEDAnimation DENIED_ANIMATION {
     }
 };
 
+const LEDAnimation STARTUP_ANIMATION {
+    .length = 3,
+    .frames = {
+        LEDState {RED, RED, RED, RED},
+        LEDState {GREEN, GREEN, GREEN, GREEN},
+        LEDState {BLUE, BLUE, BLUE, BLUE},
+    }
+};
+
+const LEDAnimation IDLE_WAITING_ANIMATION {
+    .length = 2,
+    .frames = {
+        LEDState {OFF, ORANGE, ORANGE, OFF},
+        LEDState {OFF, OFF, OFF, OFF},
+    }
+};
+
+const LEDAnimation RESTART_ANIMATION {
+    .length = 6,
+    .frames = {
+        LEDState {RED, OFF, OFF, OFF},
+        LEDState {GREEN, RED, OFF, OFF},
+        LEDState {BLUE, GREEN, RED, OFF},
+        LEDState {OFF, BLUE, GREEN, RED},
+        LEDState {OFF, OFF, BLUE, GREEN},
+        LEDState {OFF, OFF, OFF, BLUE},
+    }
+};
+
 void advance_frame(LEDAnimation animation, espp::Neopixel &strip, uint8_t &current_frame) {
     if (current_frame + 1 >= animation.length) {
         current_frame = 0;
@@ -122,7 +151,7 @@ bool get_state(LED::DisplayState &current_state) {
 
 bool get_network_state() {
     // TODO: Ask the network task
-    return false;
+    return true;
 };
 
 void led_thread_fn(void *) {
@@ -158,17 +187,26 @@ void led_thread_fn(void *) {
             case LED::DisplayState::DENIED:
                 advance_frame(DENIED_ANIMATION, strip, current_frame);
                 break;
+            case LED::DisplayState::STARTUP:
+                advance_frame(STARTUP_ANIMATION, strip, current_frame);
+                break;
+            case LED::DisplayState::IDLE_WAITING:
+                advance_frame(IDLE_WAITING_ANIMATION, strip, current_frame);
+                break;
+            case LED::DisplayState::RESTART:
+                advance_frame(RESTART_ANIMATION, strip, current_frame);
+                break;
             default:
                 break;
         }
 
-        if (!network_good && (current_frame % 2 == 0)) {
+        if (!network_good && (current_frame % 2 == 0) && (loop_state != LED::DisplayState::STARTUP)) {
             strip.set_color(WHITE, 0);
             strip.set_color(WHITE, 3);
         }
 
         strip.show();
-        std::this_thread::sleep_for(std::chrono::milliseconds{400});
+        vTaskDelay(pdMS_TO_TICKS(400));
     };
 };
 

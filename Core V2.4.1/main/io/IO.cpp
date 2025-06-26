@@ -6,9 +6,10 @@
 #include <freertos/queue.h>
 
 #include "esp_log.h"
-#include "LEDControl.hpp"
+#include "io/LEDControl.hpp"
+#include "io/Button.hpp"
 
-const char* TAG = "io";
+static const char* TAG = "io";
 
 QueueHandle_t event_queue;
 TaskHandle_t io_thread;
@@ -123,8 +124,10 @@ void handle_button_clicked() {
         case IOState::FAULT:
         case IOState::WELCOMED:
         case IOState::WELCOMING:
-        ESP_LOGI(TAG, "Tried to go to a waiting state from a dissallowed state");
-        return;
+            ESP_LOGI(TAG, "Tried to go to a waiting state from a dissallowed state");
+            return;
+        default:
+            break;
     }
 
     switch (current_state) {
@@ -163,6 +166,7 @@ void io_thread_fn(void *) {
                         break;
                     case ButtonEventType::RELEASED:
                         // TODO tell network to restart
+                        esp_restart();
                         break;
                     default:
                         ESP_LOGI(TAG, "Unknown button event type recieved");
@@ -197,8 +201,10 @@ int IO::init() {
     }
 
     LED::init();
+    Button::init();
 
     xTaskCreate(io_thread_fn, "io", IO_TASK_STACK_SIZE, NULL, 0, &io_thread);
 
+    go_to_state(IOState::IDLE);
     return 0;
 }
