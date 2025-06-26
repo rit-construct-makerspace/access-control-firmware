@@ -1,6 +1,5 @@
 CMakeFiles/
 CMakeCache.txt
-
 build/
 kconfigs_projbuild.in
 config.env
