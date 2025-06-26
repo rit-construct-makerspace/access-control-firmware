@@ -7,10 +7,13 @@ enum class CardTagType {
     SEVEN,
     FOUR,
 };
+const char* card_tag_type_to_string(CardTagType type);
 
-struct CardTagID {
+struct CardTagID  {
     CardTagType type;
     std::array<uint8_t, 7> value;
+
+    std::string to_string() const;
 };
 
 enum class IOState {
@@ -30,12 +33,14 @@ enum class IOState {
     FAULT,
     RESTART,
 };
+const char* io_state_to_string(IOState state);
 
 enum class LogMessageType {
     NORMAL,
     DEBUG,
     ERROR,
 };
+const char* log_message_type_to_string(LogMessageType type);
 
 struct LogMessage {
     LogMessageType type;
@@ -48,6 +53,14 @@ enum class IOEventType {
     CARD_REMOVED,
     NETWORK_COMMAND,
 };
+const char* io_event_type_to_string(IOEventType type);
+
+struct CardDetectedEvent {
+    CardTagID card_tag_id;
+    std::string to_string() const;
+};
+
+struct CardRemovedEvent {};
 
 enum class ButtonEventType {
     CLICK,
@@ -59,22 +72,17 @@ struct ButtonEvent {
     ButtonEventType type;
 };
 
-struct CardDetectedEvent {
-    CardTagID card_tag_id;
-};
-
-struct CardRemovedEvent {
-
-};
 
 enum class NetworkCommandEventType {
     IDENTIFY,
     COMMAND_STATE,
 };
+const char* network_command_event_type_to_string(NetworkCommandEventType type);
 
 struct NetworkCommandEvent {
     NetworkCommandEventType type;
     IOState commanded_state; // Only valid if type is COMMAND_STATE
+    std::string to_string() const;
 };
 
 struct IOEvent {
@@ -85,4 +93,9 @@ struct IOEvent {
         CardRemovedEvent card_removed;
         NetworkCommandEvent network_command;
     };
+    std::string to_string() const;
+};
+
+using WifiSSID     = std::array<uint8_t, 32>;
+using WifiPassword = std::array<uint8_t, 64>;
 };

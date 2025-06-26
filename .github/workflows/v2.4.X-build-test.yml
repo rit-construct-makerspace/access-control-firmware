@@ -20,4 +20,4 @@ jobs:
             with:
                 esp_idf_version: v5.4.1
                 target: esp32s2
-                path: 'Core V2.4.1'
+                path: 'Core-v2.4.1'

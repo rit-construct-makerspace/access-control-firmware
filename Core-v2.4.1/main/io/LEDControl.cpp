@@ -3,6 +3,7 @@
 #include <chrono>
 #include <thread>
 #include <array>
+
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <freertos/semphr.h>
@@ -178,7 +179,6 @@ void led_thread_fn(void *) {
     uint8_t current_frame = 0;
 
     while (true) {
-
         if (get_state(loop_state)) {
             current_frame = 0;
         }

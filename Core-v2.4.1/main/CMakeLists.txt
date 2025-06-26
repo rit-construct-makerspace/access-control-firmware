@@ -1,2 +1,5 @@
-idf_component_register(SRCS "main.cpp" "io/LEDControl.cpp" "io/IO.cpp" "io/Button.cpp"
-                    INCLUDE_DIRS "." REQUIRES neopixel)
+file(GLOB IO_SRCS "io/*.cpp")
+file(GLOB COMMON_SRCS "common/*.cpp")
+file(GLOB NET_SRCS "network/*.cpp")
+
+idf_component_register(SRCS "main.cpp" ${IO_SRCS} ${COMMON_SRCS} ${NET_SRCS}
