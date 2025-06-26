@@ -169,7 +169,7 @@ void led_thread_fn(void *) {
         }
 
         strip.show();
-        std::this_thread::sleep_for(std::chrono::milliseconds{400});
+        vTaskDelay(pdMS_TO_TICKS(400));
     };
 };
 

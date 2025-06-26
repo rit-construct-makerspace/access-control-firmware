@@ -1,4 +1,3 @@
-
 #pragma once
 #include <array>
 #include <cstdint>
@@ -9,7 +8,7 @@ enum class CardTagType {
     SEVEN,
     FOUR,
 };
-std::string card_tag_type_to_string(CardTagType type);
+const char* card_tag_type_to_string(CardTagType type);
 
 struct CardTagID  {
     CardTagType type;
@@ -36,14 +35,14 @@ enum class IOState {
     RESTART,
 };
 
-std::string io_state_to_string(IOState state);
+const char* io_state_to_string(IOState state);
 
 enum class LogMessageType {
     NORMAL,
     DEBUG,
     ERROR,
 };
-std::string log_message_type_to_string(LogMessageType type);
+const char* log_message_type_to_string(LogMessageType type);
 
 struct LogMessage {
     LogMessageType type;
@@ -56,7 +55,7 @@ enum class IOEventType {
     CARD_REMOVED,
     NETWORK_COMMAND,
 };
-std::string io_event_type_to_string(IOEventType type);
+const char* io_event_type_to_string(IOEventType type);
 
 struct ButtonEvent {};
 
@@ -73,7 +72,7 @@ enum class NetworkCommandEventType {
     IDENTIFY,
     COMMAND_STATE,
 };
-std::string network_command_event_type_to_string(NetworkCommandEventType type);
+const char* network_command_event_type_to_string(NetworkCommandEventType type);
 
 struct NetworkCommandEvent {
     NetworkCommandEventType type;

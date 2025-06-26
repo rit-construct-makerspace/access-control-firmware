@@ -130,8 +130,8 @@ namespace Network {
     }
 
     void report_state_transition(IOState from, IOState to) {
-        ESP_LOGI(TAG, "Transition %s -> %s", io_state_to_string(from).c_str(),
-                 io_state_to_string(to).c_str());
+        ESP_LOGI(TAG, "Transition %s -> %s", io_state_to_string(from),
+                 io_state_to_string(to));
     }
 
     bool is_online() { return true; }
