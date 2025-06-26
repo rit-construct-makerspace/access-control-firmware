@@ -193,6 +193,7 @@ void io_thread_fn(void *) {
                         break;
                     default:
                         ESP_LOGI(TAG, "Unknown button event type recieved");
+                        break;
                 }
             break;
 
@@ -205,7 +206,17 @@ void io_thread_fn(void *) {
             break;
 
             case IOEventType::NETWORK_COMMAND:
+                switch (current_event.network_command.type) {
+                    case NetworkCommandEventType::COMMAND_STATE:
+                        go_to_state(current_event.network_command.commanded_state);
+                        break;
+                    case NetworkCommandEventType::IDENTIFY:
 
+                        break;
+                    default:
+                        ESP_LOGI(TAG, "Unkown network command type recieved");
+                        break;
+                }
             break;
 
             default:
