@@ -100,15 +100,28 @@ const LEDAnimation IDLE_WAITING_ANIMATION {
     }
 };
 
-const LEDAnimation RESTART_ANIMATION {
-    .length = 6,
+const LEDAnimation ALWAYS_ON_WAITING_ANIMATION {
+    .length = 2,
     .frames = {
-        LEDState {RED, OFF, OFF, OFF},
-        LEDState {GREEN, RED, OFF, OFF},
-        LEDState {BLUE, GREEN, RED, OFF},
-        LEDState {OFF, BLUE, GREEN, RED},
-        LEDState {OFF, OFF, BLUE, GREEN},
-        LEDState {OFF, OFF, OFF, BLUE},
+        LEDState {OFF, GREEN, GREEN, OFF},
+        LEDState {OFF, OFF, OFF, OFF},
+    }
+};
+
+const LEDAnimation LOCKOUT_WAITING_ANIMATION {
+    .length = 2,
+    .frames = {
+        LEDState {OFF, RED, RED, OFF},
+        LEDState {OFF, OFF, OFF, OFF},
+    }
+};
+
+const LEDAnimation RESTART_ANIMATION {
+    .length = 3,
+    .frames = {
+        LEDState {RED, GREEN, BLUE, RED},
+        LEDState {BLUE, RED, GREEN, BLUE},
+        LEDState {GREEN, BLUE, RED, GREEN},
     }
 };
 
@@ -193,6 +206,12 @@ void led_thread_fn(void *) {
             case LED::DisplayState::IDLE_WAITING:
                 advance_frame(IDLE_WAITING_ANIMATION, strip, current_frame);
                 break;
+            case LED::DisplayState::ALWAYS_ON_WAITING:
+                advance_frame(ALWAYS_ON_WAITING_ANIMATION, strip, current_frame);
+                break;
+            case LED::DisplayState::LOCKOUT_WAITING:
+                advance_frame(LOCKOUT_WAITING_ANIMATION, strip, current_frame);
+                break;
             case LED::DisplayState::RESTART:
                 advance_frame(RESTART_ANIMATION, strip, current_frame);
                 break;
@@ -200,7 +219,7 @@ void led_thread_fn(void *) {
                 break;
         }
 
-        if (!network_good && (current_frame % 2 == 0) && (loop_state != LED::DisplayState::STARTUP)) {
+        if (!network_good && (current_frame % 2 == 0) && (loop_state != LED::DisplayState::STARTUP || loop_state != LED::DisplayState::RESTART)) {
             strip.set_color(WHITE, 0);
             strip.set_color(WHITE, 3);
         }
