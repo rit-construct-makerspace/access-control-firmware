@@ -1,0 +1,3 @@
+namespace CardReader {
+    void init();
+}
