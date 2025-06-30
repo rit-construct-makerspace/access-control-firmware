@@ -1,9 +1,3 @@
-/*
- * SPDX-FileCopyrightText: 2022-2024 Espressif Systems (Shanghai) CO LTD
- *
- * SPDX-License-Identifier: Unlicense OR CC0-1.0
- */
-
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
@@ -15,7 +9,6 @@
 
 static const char* TAG = "example";
 
-const char* string_descriptor = "im a shlug";
 extern "C" void app_main(void) {
     USB::init();
     led_init();

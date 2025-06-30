@@ -1,7 +1,6 @@
 #pragma once
 #include <array>
 #include <cstdint>
-#include <format>
 #include <string>
 
 enum class CardTagType {

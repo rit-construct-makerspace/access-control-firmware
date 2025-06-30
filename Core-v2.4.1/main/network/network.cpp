@@ -12,8 +12,6 @@
 
 #include "io/LEDControl.hpp"
 
-#include "esp_core_dump.h"
-
 #include <chrono>
 #include <thread>
 
