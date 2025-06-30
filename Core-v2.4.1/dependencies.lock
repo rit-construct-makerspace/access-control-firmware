@@ -1,99 +1,18 @@
 dependencies:
-  espp/base_component:
-    component_hash: fc113b37edc55d1600b56b26868ed669e8a9a251ffae3244b0df3dab10de81d9
-    dependencies:
-    - name: espp/logger
-      registry_url: https://components.espressif.com
-      require: private
-      version: '>=1.0'
-    - name: idf
-      require: private
-      version: '>=5.0'
-    source:
-      registry_url: https://components.espressif.com
-      type: service
-    version: 1.0.11
-  espp/color:
-    component_hash: 46bdecb24fb14a5fc15d2436801e6b1a98b3bc04e38bb5c98fb457b9324460aa
-    dependencies:
-    - name: espp/format
-      registry_url: https://components.espressif.com
-      require: private
-      version: '>=1.0'
-    - name: idf
-      require: private
-      version: '>=5.0'
-    source:
-      registry_url: https://components.espressif.com
-      type: service
-    version: 1.0.11
-  espp/format:
-    component_hash: 18b83f3075950153c3596cb42ba61abac9100504b395e5f3ac8a54df07dfe61d
-    dependencies:
-    - name: idf
-      require: private
-      version: '>=5.0'
-    source:
-      registry_url: https://components.espressif.com
-      type: service
-    version: 1.0.11
-  espp/logger:
-    component_hash: 0198cc129fe3315d6aa892e9d752913e7385cc4fa33b183b361da4c618b4845f
-    dependencies:
-    - name: espp/format
-      registry_url: https://components.espressif.com
-      require: private
-      version: '>=1.0'
-    - name: idf
-      require: private
-      version: '>=5.0'
-    source:
-      registry_url: https://components.espressif.com
-      type: service
-    version: 1.0.11
-  espp/neopixel:
-    component_hash: 963c0a88741b960b5904a9d2dd7ddd1a8da510bebf146cfa7d5c11527d6324d7
-    dependencies:
-    - name: espp/base_component
-      registry_url: https://components.espressif.com
-      require: private
-      version: '>=1.0'
-    - name: espp/color
-      registry_url: https://components.espressif.com
-      require: private
-      version: '>=1.0'
-    - name: espp/rmt
-      registry_url: https://components.espressif.com
-      require: private
-      version: '>=1.0'
-    - name: idf
-      require: private
-      version: '>=5.0'
-    source:
-      registry_url: https://components.espressif.com/
-      type: service
-    version: 1.0.11
-  espp/rmt:
-    component_hash: fcb731ecd9c20cb1b66cbf2fff7e4b0195a7eef66a623bc1c3b6310d3c151271
-    dependencies:
-    - name: espp/base_component
-      registry_url: https://components.espressif.com
-      require: private
-      version: '>=1.0'
-    - name: idf
-      require: private
-      version: '>=5.0'
-    source:
-      registry_url: https://components.espressif.com
-      type: service
-    version: 1.0.11
   idf:
     source:
       type: idf
     version: 5.4.1
+  zorxx/neopixel:
+    component_hash: eb2457ac2b7fca04be1834cf3af7a901f72969918a30ce68a1c1b0c160306201
+    dependencies: []
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.0.10
 direct_dependencies:
-- espp/neopixel
 - idf
-manifest_hash: 7381c3a4d08bb82fda816f86cb2c97d413f50db65315b9446dfd004b7518a12b
+- zorxx/neopixel
+manifest_hash: a69ca5cd52e2f04cb8785b8dd2fd56dae9ef95c4ac73ff5384a1deec4d1b2854
 target: esp32s2
 version: 2.0.0
