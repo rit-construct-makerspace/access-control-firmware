@@ -1,6 +1,6 @@
 #include "CardReader.hpp"
 
-#include "mfrc630.h"
+#include "drivers/mfrc630.h"
 #include "driver/spi_common.h"
 #include "driver/spi_master.h"
 #include "esp_log.h"
@@ -8,7 +8,7 @@
 
 const char * TAG = "card";
 
-const static spi_host_device_t SPI_HOST = SPI1_HOST;
+const static spi_host_device_t spi_host = SPI1_HOST;
 static spi_device_handle_t spi_device;
 
 void mfrc630_SPI_transfer(const uint8_t* tx, uint8_t* rx, uint16_t len) {
@@ -38,12 +38,12 @@ spi_device_interface_config_t spi_device_config = {
 };
 
 void CardReader::init() {
-    if (spi_bus_initialize(SPI_HOST, &spi_bus_config, SPI_DMA_CH_AUTO) != ESP_OK) {
+    if (spi_bus_initialize(spi_host, &spi_bus_config, SPI_DMA_CH_AUTO) != ESP_OK) {
         ESP_LOGI(TAG, "Failed to initialize SPI bus");
         // TODO: Crash
     }
 
-    if (spi_bus_add_device(SPI_HOST, &spi_device_config, &spi_device) != ESP_OK) {
+    if (spi_bus_add_device(spi_host, &spi_device_config, &spi_device) != ESP_OK) {
         ESP_LOGI(TAG, "Failed to initialize SPI device");
         // TODO: Crash
     }
