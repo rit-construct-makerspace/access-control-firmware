@@ -9,10 +9,10 @@
 #include "freertos/task.h"
 #include "freertos/semphr.h"
 #include "common/pins.hpp"
-#include "neopixel.hpp"
+#include "neopixel.h"
 #include "esp_log.h"
 
-using LEDState = std::array<espp::Rgb, 4>;
+using LEDState = std::array<uint32_t, 4>;
 
 struct LEDAnimation {
     uint8_t length;
@@ -22,21 +22,21 @@ struct LEDAnimation {
 TaskHandle_t led_thread;
 
 #define LED_TASK_STACK_SIZE 4000
+#define NUM_LEDS 4
 
 static LEDDisplayState display_state = LEDDisplayState::IDLE;
 static SemaphoreHandle_t state_mutex;
 
 const char * TAG = "led";
 
-static const espp::Rgb WHITE(15, 15, 15);
-static const espp::Rgb OFF(0, 0, 0);
-static const espp::Rgb RED(15, 0, 0);
-static const espp::Rgb RED_DIM = (RED + OFF) + OFF;
-static const espp::Rgb GREEN(0, 15, 0);
-static const espp::Rgb GREEN_DIM = (GREEN + OFF) + OFF;
-static const espp::Rgb BLUE(0, 0, 15);
-static const espp::Rgb YELLOW = RED + GREEN;
-static const espp::Rgb ORANGE(15, 10, 0);
+static const uint32_t WHITE = NP_RGB(15, 15, 15);
+static const uint32_t OFF = NP_RGB(0, 0, 0);
+static const uint32_t RED = NP_RGB(15, 0, 0);
+static const uint32_t RED_DIM = NP_RGB(5, 0, 0);
+static const uint32_t GREEN = NP_RGB(0, 15, 0);
+static const uint32_t GREEN_DIM = NP_RGB(0, 5, 0);
+static const uint32_t BLUE = NP_RGB(0, 0, 15);
+static const uint32_t ORANGE = NP_RGB(15, 10, 0);
 
 const LEDAnimation IDLE_ANIMATION {
     .length = 2,
@@ -84,16 +84,21 @@ const LEDAnimation DENIED_ANIMATION {
     }
 };
 
-void advance_frame(LEDAnimation animation, espp::Neopixel &strip, uint8_t &current_frame) {
+void advance_frame(LEDAnimation animation, tNeopixelContext &strip, uint8_t &current_frame) {
     if (current_frame + 1 >= animation.length) {
         current_frame = 0;
     } else {
         current_frame++;
     }
 
-    for (int led = 0; led < strip.num_leds(); led++) {
-        strip.set_color(animation.frames[current_frame][led], led);
-    }
+    tNeopixel pixel[] = {
+        { 0, animation.frames[current_frame][0]},
+        { 1, animation.frames[current_frame][1]},
+        { 2, animation.frames[current_frame][2]},
+        { 3, animation.frames[current_frame][3]},
+    };
+
+    neopixel_SetPixel(strip, pixel, 4);
 }
 
 bool set_led_state(LEDDisplayState state) {
@@ -127,10 +132,11 @@ bool get_network_state() {
 };
 
 void led_thread_fn(void *) {
-    espp::Neopixel strip({
-        .data_gpio = LED_PIN,
-        .num_leds = 4
-    });
+    tNeopixelContext strip = neopixel_Init(NUM_LEDS, LED_PIN);
+    if (strip == NULL) {
+        ESP_LOGI(TAG, "Failed to intialize LEDs");
+        // TODO: Crash out
+    }
 
     LEDDisplayState loop_state = LEDDisplayState::STARTUP;
     bool network_good = get_network_state();
@@ -163,13 +169,16 @@ void led_thread_fn(void *) {
                 break;
         }
 
+        tNeopixel network_pixels[] = {
+            {0, WHITE},
+            {3, WHITE},
+        };
+
         if (!network_good && (current_frame % 2 == 0)) {
-            strip.set_color(WHITE, 0);
-            strip.set_color(WHITE, 3);
+            neopixel_SetPixel(strip, network_pixels, 2);
         }
 
-        strip.show();
-        vTaskDelay(pdMS_TO_TICKS(400));
+        std::this_thread::sleep_for(std::chrono::milliseconds{400});
     };
 };
 

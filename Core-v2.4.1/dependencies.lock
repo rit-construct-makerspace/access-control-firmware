@@ -87,77 +87,20 @@ dependencies:
       registry_url: https://components.espressif.com
       type: service
     version: 1.0.11
-  espressif/esp_tinyusb:
-    component_hash: 5e37c53a10518f40b288a48afec4ab549784be9e6eb74add699a30395543418a
-    dependencies:
-    - name: idf
-      require: private
-      version: '>=5.0'
-    - name: espressif/tinyusb
-      registry_url: https://components.espressif.com
-      require: public
-      version: 0.*
-    source:
-      registry_url: https://components.espressif.com/
-      type: service
-    targets:
-    - esp32s2
-    - esp32s3
-    version: 1.0.3
-  espressif/jsmn:
-    component_hash: d80350c41bbaa827c98a25b6072df00884e72f54885996fab4a4f0aebce6b6c3
-    dependencies:
-    - name: idf
-      require: private
-      version: '>=4.3'
-    source:
-      registry_url: https://components.espressif.com
-      type: service
-    version: 1.1.0
-  espressif/json_generator:
-    component_hash: 45033e1c199b13f1c8c1b544fb7d4e2df6a8e3071ebdcb1b22582b61a7974ff2
-    dependencies: []
-    source:
-      registry_url: https://components.espressif.com/
-      type: service
-    version: 1.1.2
-  espressif/json_parser:
-    component_hash: d74b81729ad06ec11ff5eb5b1b0d7df1d00e6027fc11471f4b139c70dcf1b1e4
-    dependencies:
-    - name: espressif/jsmn
-      registry_url: https://components.espressif.com
-      require: private
-      rules:
-      - if: idf_version >=5.0
-      version: ~1.1
-    source:
-      registry_url: https://components.espressif.com/
-      type: service
-    version: 1.0.3
-  espressif/tinyusb:
-    component_hash: 10703da2c3cd39a944711ee3d320c6dda54debabf13b4b933a7c90daf102372b
-    dependencies:
-    - name: idf
-      require: private
-      version: '>=5.0'
-    source:
-      registry_url: https://components.espressif.com
-      type: service
-    targets:
-    - esp32s2
-    - esp32s3
-    - esp32p4
-    version: 0.18.0~2
   idf:
     source:
       type: idf
     version: 5.4.1
+  zorxx/neopixel:
+    component_hash: eb2457ac2b7fca04be1834cf3af7a901f72969918a30ce68a1c1b0c160306201
+    dependencies: []
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.0.10
 direct_dependencies:
 - espp/neopixel
-- espressif/esp_tinyusb
-- espressif/json_generator
-- espressif/json_parser
 - idf
-manifest_hash: b7a77ddabee7e3c6994507d19e919f5c493802c99c0b85e8fd34a554a6a5543d
+manifest_hash: 7381c3a4d08bb82fda816f86cb2c97d413f50db65315b9446dfd004b7518a12b
 target: esp32s2
 version: 2.0.0
