@@ -87,6 +87,23 @@ dependencies:
       registry_url: https://components.espressif.com
       type: service
     version: 1.0.11
+  espressif/esp_tinyusb:
+    component_hash: 5e37c53a10518f40b288a48afec4ab549784be9e6eb74add699a30395543418a
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.0'
+    - name: espressif/tinyusb
+      registry_url: https://components.espressif.com
+      require: public
+      version: 0.*
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    targets:
+    - esp32s2
+    - esp32s3
+    version: 1.0.3
   espressif/jsmn:
     component_hash: d80350c41bbaa827c98a25b6072df00884e72f54885996fab4a4f0aebce6b6c3
     dependencies:
@@ -117,15 +134,30 @@ dependencies:
       registry_url: https://components.espressif.com/
       type: service
     version: 1.0.3
+  espressif/tinyusb:
+    component_hash: 10703da2c3cd39a944711ee3d320c6dda54debabf13b4b933a7c90daf102372b
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.0'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    targets:
+    - esp32s2
+    - esp32s3
+    - esp32p4
+    version: 0.18.0~2
   idf:
     source:
       type: idf
     version: 5.4.1
 direct_dependencies:
 - espp/neopixel
+- espressif/esp_tinyusb
 - espressif/json_generator
 - espressif/json_parser
 - idf
-manifest_hash: 8297c53a983777f5be0881ae03d0043a0bea222c343ead5ff28a79c4e2775022
+manifest_hash: b7a77ddabee7e3c6994507d19e919f5c493802c99c0b85e8fd34a554a6a5543d
 target: esp32s2
 version: 2.0.0

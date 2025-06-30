@@ -43,6 +43,7 @@ namespace Storage {
         esp_err_t err = nvs_flash_init();
         if (err == ESP_ERR_NVS_NO_FREE_PAGES ||
             err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+            ESP_LOGI(TAG, "Having to reset NVS (evil and bad)");
             ESP_ERROR_CHECK(nvs_flash_erase());
             err = nvs_flash_init();
         }

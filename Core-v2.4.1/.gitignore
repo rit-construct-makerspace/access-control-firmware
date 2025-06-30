@@ -9,3 +9,9 @@ config/
 sdkconfig
 sdkconfig.old
 managed_components
+
+bootloader-prefix
+esp-idf
+gdbinit
+app-flash_args
+coredump.bin
