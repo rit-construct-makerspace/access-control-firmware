@@ -7,6 +7,7 @@
 #include "network/usb.hpp"
 #include <stdint.h>
 
+#include "esp_heap_caps.h"
 static const char* TAG = "example";
 
 extern "C" void app_main(void) {

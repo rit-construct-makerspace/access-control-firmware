@@ -10,7 +10,6 @@
 #include "tinyusb.h"
 #include "tusb_cdc_acm.h"
 
-
 #define LOG_CDC_ITF ((tinyusb_cdcacm_itf_t)0)
 #define MAX_DEBUG_SIZE 3072
 #define DEBUG_STREAM_BUF_SIZE (2 * MAX_DEBUG_SIZE)
@@ -79,17 +78,17 @@ void tinyusb_cdc_line_state_changed_callback(int itf, cdcacm_event_t* event) {
     if (new_rts) {
         rts_ever = true;
     }
-    ESP_LOGI(TAG, "Line state changed on channel %d: From %d:%d to DTR:%d, RTS:%d", itf, dtr, rts, new_dtr,
-             new_rts);
+    ESP_LOGI(TAG,
+             "Line state changed on channel %d: From %d:%d to DTR:%d, RTS:%d",
+             itf, dtr, rts, new_dtr, new_rts);
 
     dtr = new_dtr;
     rts = new_rts;
 }
 
+static unsigned char* mike_buf = nullptr;
 
 extern "C" int usb_log_vprintf(const char* fmt, va_list args) {
-    static unsigned char mike_buf[MAX_DEBUG_SIZE + 1] = {
-        0}; // fine to be static since we're locked
 
     size_t mike_buflen = vsnprintf((char*)mike_buf, MAX_DEBUG_SIZE, fmt, args);
     mike_buf[mike_buflen]     = '\r';
@@ -121,6 +120,8 @@ void usb_thread_fn(void*) {
 esp_err_t USB::init() {
     stream_buffer_lock  = xSemaphoreCreateMutex();
     debug_stream_buffer = xStreamBufferCreate(DEBUG_STREAM_BUF_SIZE, 32);
+    mike_buf = (unsigned char*)malloc(MAX_DEBUG_SIZE);
+
     assert(stream_buffer_lock);
     assert(debug_stream_buffer);
     esp_log_set_vprintf(usb_log_vprintf);
