@@ -9,3 +9,5 @@ config/
 sdkconfig
 sdkconfig.old
 managed_components
+
+coredump.bin

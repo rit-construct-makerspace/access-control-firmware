@@ -24,7 +24,7 @@ TaskHandle_t led_thread;
 #define LED_TASK_STACK_SIZE 4000
 #define NUM_LEDS 4
 
-static LEDDisplayState display_state;
+static LEDDisplayState display_state = LEDDisplayState::IDLE;
 static SemaphoreHandle_t state_mutex;
 
 const char * TAG = "led";
@@ -187,9 +187,11 @@ int led_init() {
     
     if (state_mutex == NULL) {
         // TODO: Fault here
+        ESP_LOGE(TAG, "NO STATE MUTEX");
         return 1;
     }
 
-    xTaskCreate(led_thread_fn, "led", LED_TASK_STACK_SIZE, NULL, 0, &led_thread);
+    xTaskCreate(led_thread_fn, "led", LED_TASK_STACK_SIZE, NULL, 0,
+                &led_thread);
     return 0;
 };
