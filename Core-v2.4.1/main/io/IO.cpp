@@ -9,6 +9,7 @@
 #include "esp_log.h"
 #include "io/LEDControl.hpp"
 #include "io/Button.hpp"
+#include "io/CardReader.hpp"
 
 static const char* TAG = "io";
 
@@ -237,6 +238,7 @@ int IO::init() {
 
     LED::init();
     Button::init();
+    CardReader::init();
 
     xTaskCreate(io_thread_fn, "io", IO_TASK_STACK_SIZE, NULL, 0, &io_thread);
 

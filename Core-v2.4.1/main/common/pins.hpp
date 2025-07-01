@@ -2,7 +2,8 @@
 
 constexpr gpio_num_t BUTTON_PIN = GPIO_NUM_0;
 #define LED_PIN 1
-#define CS_NFC 6
-#define SPI_MOSI 8
-#define SPI_CLK 10
-#define SPI_MISO 11
+constexpr gpio_num_t NFC_PDOWN = GPIO_NUM_2;
+constexpr gpio_num_t CS_NFC = GPIO_NUM_6;
+constexpr gpio_num_t SPI_MOSI = GPIO_NUM_8;
+constexpr gpio_num_t SPI_CLK = GPIO_NUM_10;
+constexpr gpio_num_t SPI_MISO = GPIO_NUM_11;

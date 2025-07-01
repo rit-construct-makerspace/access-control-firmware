@@ -26,10 +26,13 @@
 #define MFRC630_H_
 #include <stdint.h>
 #include "mfrc630_def.h"
+#include "esp_log.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#define MFRC630_DEBUG_PRINTF(...) ESP_LOGI("mfrc630", __VA_ARGS__)
 
 // debug print statement.
 #ifdef MFRC630_DEBUG_PRINTF
