@@ -11,7 +11,7 @@ const char* card_tag_type_to_string(CardTagType type);
 
 struct CardTagID  {
     CardTagType type;
-    std::array<uint8_t, 7> value;
+    std::array<uint8_t, 10> value;
 
     std::string to_string() const;
 };
@@ -33,7 +33,6 @@ enum class IOState {
     FAULT,
     RESTART,
 };
-
 const char* io_state_to_string(IOState state);
 
 enum class LogMessageType {
@@ -56,8 +55,6 @@ enum class IOEventType {
 };
 const char* io_event_type_to_string(IOEventType type);
 
-struct ButtonEvent {};
-
 struct CardDetectedEvent {
     CardTagID card_tag_id;
     std::string to_string() const;
@@ -66,6 +63,17 @@ struct CardDetectedEvent {
 struct CardRemovedEvent {
     std::string to_string() const;
 };
+
+enum class ButtonEventType {
+    CLICK,
+    HELD,
+    RELEASED,
+};
+
+struct ButtonEvent {
+    ButtonEventType type;
+};
+
 
 enum class NetworkCommandEventType {
     IDENTIFY,
@@ -92,3 +100,4 @@ struct IOEvent {
 
 using WifiSSID     = std::array<uint8_t, 32>;
 using WifiPassword = std::array<uint8_t, 64>;
+
