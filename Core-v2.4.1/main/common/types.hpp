@@ -60,7 +60,9 @@ struct CardDetectedEvent {
     std::string to_string() const;
 };
 
-struct CardRemovedEvent {};
+struct CardRemovedEvent {
+    std::string to_string() const;
+};
 
 enum class ButtonEventType {
     CLICK,

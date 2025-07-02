@@ -245,6 +245,7 @@ int LED::init() {
         return 1;
     }
 
-    xTaskCreate(led_thread_fn, "led", LED_TASK_STACK_SIZE, NULL, 0, &led_thread);
+    xTaskCreate(led_thread_fn, "led", LED_TASK_STACK_SIZE, NULL, 0,
+                &led_thread);
     return 0;
 };
