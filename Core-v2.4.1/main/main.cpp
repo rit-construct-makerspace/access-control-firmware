@@ -5,5 +5,5 @@
 extern "C" void app_main(void) {
     USB::init();
     IO::init();
-    //Network::init();
+    Network::init();
 }

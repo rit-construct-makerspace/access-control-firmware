@@ -257,7 +257,6 @@ void led_thread_fn(void *) {
         }
 
         led_strip_refresh(strip);
-
         vTaskDelay(pdMS_TO_TICKS(400));
     };
 };
