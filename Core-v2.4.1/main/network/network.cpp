@@ -35,10 +35,8 @@ static void on_wifi_event(void* arg, esp_event_base_t event_base,
                           int32_t event_id, void* event_data) {
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
         esp_wifi_connect();
-        set_led_state(LEDDisplayState::IDLE);
     } else if (event_base == WIFI_EVENT &&
                event_id == WIFI_EVENT_STA_DISCONNECTED) {
-        set_led_state(LEDDisplayState::LOCKOUT);
         if (s_retry_num < 5) {
             esp_wifi_connect();
             s_retry_num++;
@@ -50,7 +48,6 @@ static void on_wifi_event(void* arg, esp_event_base_t event_base,
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t* event = (ip_event_got_ip_t*)event_data;
         ESP_LOGI(TAG, "got ip:" IPSTR, IP2STR(&event->ip_info.ip));
-        set_led_state(LEDDisplayState::ALWAYS_ON);
         // submit_ip(event->ip_info.ip);
 
         s_retry_num = 0;

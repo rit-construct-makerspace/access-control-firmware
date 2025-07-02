@@ -75,7 +75,7 @@ void card_reader_thread_fn(void *) {
 
                 // Try to athenticate block 0.
                 if (mfrc630_MF_auth(uid, MFRC630_MF_AUTH_KEY_A, 0)) {
-                    ESP_LOGD("card", "Yay! We are authenticated!");
+                    ESP_LOGD(TAG, "Yay! We are authenticated!");
 
                     // Attempt to read the first 4 blocks.
                     uint8_t readbuf[16] = {0};
