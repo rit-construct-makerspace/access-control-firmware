@@ -151,14 +151,15 @@ void network_thread_fn(void* p) {
 
     while (true) {
         Network::Event event;
-        if (xQueueReceive(network_event_queue, (void*)&event, portMAX_DELAY) ==
-            pdFALSE) {
+        if (xQueueReceive(network_event_queue, (void*)&event,
+                          portMAX_DELAY) == pdFALSE) {
             ESP_LOGW(TAG, "Noting for network");
             continue;
         }
+
         if (event.type == Network::EventType::WifiUp) {
             ESP_LOGI(TAG, "Wifi up, tell wsacs to connect");
-            WSACS::send_message(WSACS::Event{.type=WSACS::EventType::WifiUp});
+            WSACS::send_message(WSACS::Event{.type = WSACS::EventType::WifiUp});
         }
     }
     return;
@@ -166,6 +167,11 @@ void network_thread_fn(void* p) {
 
 namespace Network {
     int init() {
+        esp_log_level_set("esp-tls",
+                          ESP_LOG_DEBUG); // enable INFO logs from DHCP client
+        esp_log_level_set("transport_ws",
+                          ESP_LOG_DEBUG); // enable INFO logs from DHCP client
+
         network_event_queue = xQueueCreate(5, sizeof(Network::Event));
         consider_reset();
 
@@ -174,7 +180,8 @@ namespace Network {
         WSACS::init();
         is_online_mutex = xSemaphoreCreateMutex();
         Storage::init(); // Storage must come before wifi as wifi depends on NVS
-        xTaskCreate(network_thread_fn, "network", 8192, nullptr, 0, &network_task);
+        xTaskCreate(network_thread_fn, "network", 8192, nullptr, 0,
+                    &network_task);
 
         return 0;
     }

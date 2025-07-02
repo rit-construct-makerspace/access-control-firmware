@@ -1,92 +1,75 @@
 dependencies:
-  espp/base_component:
-    component_hash: fc113b37edc55d1600b56b26868ed669e8a9a251ffae3244b0df3dab10de81d9
-    dependencies:
-    - name: espp/logger
-      registry_url: https://components.espressif.com
-      require: private
-      version: '>=1.0'
-    - name: idf
-      require: private
-      version: '>=5.0'
-    source:
-      registry_url: https://components.espressif.com
-      type: service
-    version: 1.0.11
-  espp/color:
-    component_hash: 46bdecb24fb14a5fc15d2436801e6b1a98b3bc04e38bb5c98fb457b9324460aa
-    dependencies:
-    - name: espp/format
-      registry_url: https://components.espressif.com
-      require: private
-      version: '>=1.0'
-    - name: idf
-      require: private
-      version: '>=5.0'
-    source:
-      registry_url: https://components.espressif.com
-      type: service
-    version: 1.0.11
-  espp/format:
-    component_hash: 18b83f3075950153c3596cb42ba61abac9100504b395e5f3ac8a54df07dfe61d
+  espressif/esp_tinyusb:
+    component_hash: 5e37c53a10518f40b288a48afec4ab549784be9e6eb74add699a30395543418a
     dependencies:
     - name: idf
       require: private
       version: '>=5.0'
+    - name: espressif/tinyusb
+      registry_url: https://components.espressif.com
+      require: public
+      version: 0.*
     source:
-      registry_url: https://components.espressif.com
+      registry_url: https://components.espressif.com/
       type: service
-    version: 1.0.11
-  espp/logger:
-    component_hash: 0198cc129fe3315d6aa892e9d752913e7385cc4fa33b183b361da4c618b4845f
+    targets:
+    - esp32s2
+    - esp32s3
+    version: 1.0.3
+  espressif/esp_websocket_client:
+    component_hash: f77326f0e1c38da4e9c97e17c5d649b0dd13027f2645e720e48db269638fd622
     dependencies:
-    - name: espp/format
-      registry_url: https://components.espressif.com
-      require: private
-      version: '>=1.0'
-    - name: idf
-      require: private
-      version: '>=5.0'
-    source:
-      registry_url: https://components.espressif.com
-      type: service
-    version: 1.0.11
-  espp/neopixel:
-    component_hash: 963c0a88741b960b5904a9d2dd7ddd1a8da510bebf146cfa7d5c11527d6324d7
-    dependencies:
-    - name: espp/base_component
-      registry_url: https://components.espressif.com
-      require: private
-      version: '>=1.0'
-    - name: espp/color
-      registry_url: https://components.espressif.com
-      require: private
-      version: '>=1.0'
-    - name: espp/rmt
-      registry_url: https://components.espressif.com
-      require: private
-      version: '>=1.0'
     - name: idf
       require: private
       version: '>=5.0'
     source:
       registry_url: https://components.espressif.com/
       type: service
-    version: 1.0.11
-  espp/rmt:
-    component_hash: fcb731ecd9c20cb1b66cbf2fff7e4b0195a7eef66a623bc1c3b6310d3c151271
+    version: 1.4.0
+  espressif/jsmn:
+    component_hash: d80350c41bbaa827c98a25b6072df00884e72f54885996fab4a4f0aebce6b6c3
     dependencies:
-    - name: espp/base_component
+    - name: idf
+      require: private
+      version: '>=4.3'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    version: 1.1.0
+  espressif/json_generator:
+    component_hash: 45033e1c199b13f1c8c1b544fb7d4e2df6a8e3071ebdcb1b22582b61a7974ff2
+    dependencies: []
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.1.2
+  espressif/json_parser:
+    component_hash: d74b81729ad06ec11ff5eb5b1b0d7df1d00e6027fc11471f4b139c70dcf1b1e4
+    dependencies:
+    - name: espressif/jsmn
       registry_url: https://components.espressif.com
       require: private
-      version: '>=1.0'
+      rules:
+      - if: idf_version >=5.0
+      version: ~1.1
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.0.3
+  espressif/tinyusb:
+    component_hash: 10703da2c3cd39a944711ee3d320c6dda54debabf13b4b933a7c90daf102372b
+    dependencies:
     - name: idf
       require: private
       version: '>=5.0'
     source:
       registry_url: https://components.espressif.com
       type: service
-    version: 1.0.11
+    targets:
+    - esp32s2
+    - esp32s3
+    - esp32p4
+    version: 0.18.0~2
   idf:
     source:
       type: idf
@@ -99,8 +82,12 @@ dependencies:
       type: service
     version: 1.0.10
 direct_dependencies:
-- espp/neopixel
+- espressif/esp_tinyusb
+- espressif/esp_websocket_client
+- espressif/json_generator
+- espressif/json_parser
 - idf
-manifest_hash: 7381c3a4d08bb82fda816f86cb2c97d413f50db65315b9446dfd004b7518a12b
+- zorxx/neopixel
+manifest_hash: 164640c90861c709de9b1d9dd170155da001633467d4c559abf625b91df25877
 target: esp32s2
 version: 2.0.0

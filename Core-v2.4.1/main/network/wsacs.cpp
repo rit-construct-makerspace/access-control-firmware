@@ -5,54 +5,68 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
 #include <freertos/task.h>
+#include "network/network.hpp"
+#include "cJSON.h"
 
 static const char* TAG = "wsacs";
 
 QueueHandle_t wsacs_queue;
 TaskHandle_t wsacs_thread;
 
+
+bool opening_sent = false;
 esp_websocket_client_handle_t ws_handle = NULL;
 esp_websocket_client_config_t cfg{0};
+
+void handle_incoming_ws_data(const char *data, size_t len){
+
+}
+
+void send_opening_message(){
+    if (ws_handle == NULL){
+        ESP_LOGE(TAG, "Programming error");
+        return;
+    }
+    cJSON *msg = cJSON_CreateObject();
+    cJSON_AddStringToObject(msg, "HWType", "Core");
+    cJSON_AddStringToObject(msg, "HWVersion", "2.4.1");
+
+}
 
 static void websocket_event_handler(void* handler_args, esp_event_base_t base,
                                     int32_t event_id, void* event_data) {
     esp_websocket_event_data_t* data = (esp_websocket_event_data_t*)event_data;
     switch (event_id) {
     case WEBSOCKET_EVENT_BEGIN:
-        ESP_LOGI(TAG, "WEBSOCKET_EVENT_BEGIN");
         break;
     case WEBSOCKET_EVENT_CONNECTED:
         ESP_LOGI(TAG, "WEBSOCKET_EVENT_CONNECTED");
+        send_opening_message();
         break;
     case WEBSOCKET_EVENT_DISCONNECTED:
         ESP_LOGI(TAG, "WEBSOCKET_EVENT_DISCONNECTED");
+        Network::Event ev{.type = Network::EventType::ServerConnectionDown};
+
         if (data->error_handle.esp_ws_handshake_status_code != 0) {
             ESP_LOGE(TAG, "HTTP STATUS CODE: %d",
                      data->error_handle.esp_ws_handshake_status_code);
         }
         if (data->error_handle.error_type ==
             WEBSOCKET_ERROR_TYPE_TCP_TRANSPORT) {
-            ESP_LOGE(TAG, "TLS ERR");
-            // log_error_if_nonzero("reported from esp-tls",
-            // data->error_handle.esp_tls_last_esp_err);
-            // log_error_if_nonzero("reported from tls stack",
-            // data->error_handle.esp_tls_stack_err);
-            // log_error_if_nonzero("captured as transport's socket errno",
-            // data->error_handle.esp_transport_sock_errno);
+            ESP_LOGE(TAG, "TCP ERR");
+            ESP_LOGE(TAG, "reported from esp-tls: %s", esp_err_to_name(data->error_handle.esp_tls_last_esp_err));
+            ESP_LOGE(TAG, "reported from tls stack: %d",
+                                 data->error_handle.esp_tls_stack_err);
+            ESP_LOGE(TAG, "captured as transport's socket errno: %d",
+                                 data->error_handle.esp_transport_sock_errno);
         }
         break;
     case WEBSOCKET_EVENT_DATA:
         ESP_LOGI(TAG, "WEBSOCKET_EVENT_DATA");
-        ESP_LOGI(TAG, "Received opcode=%d", data->op_code);
         if (data->op_code == 0x2) { // Opcode 0x2 indicates binary data
-            ESP_LOG_BUFFER_HEX("Received binary data", data->data_ptr,
-                               data->data_len);
-        } else if (data->op_code == 0x08 && data->data_len == 2) {
-            ESP_LOGW(TAG, "Received closed message with code=%d",
-                     256 * data->data_ptr[0] + data->data_ptr[1]);
+            ESP_LOGW("Received binary data, DROPPING");
         } else {
-            ESP_LOGW(TAG, "Received=%.*s\n\n", data->data_len,
-                     (char*)data->data_ptr);
+            handle_incoming_ws_data(data->data_ptr, data->data_len)
         }
 
         ESP_LOGW(TAG,
@@ -60,21 +74,21 @@ static void websocket_event_handler(void* handler_args, esp_event_base_t base,
                  "offset=%d\r\n",
                  data->payload_len, data->data_len, data->payload_offset);
 
+        handle_message(data->data_len, data->);
         break;
     case WEBSOCKET_EVENT_ERROR:
         ESP_LOGI(TAG, "WEBSOCKET_EVENT_ERROR");
         if (data->error_handle.esp_ws_handshake_status_code != 0) {
             ESP_LOGE(TAG, "HTTP STATUS CODE: %d",
-                     data->error_handle.esp_ws_handshake_status_code); 
+                     data->error_handle.esp_ws_handshake_status_code);
         }
         if (data->error_handle.error_type ==
             WEBSOCKET_ERROR_TYPE_TCP_TRANSPORT) {
-            // log_error_if_nonzero("reported from esp-tls",
-            // data->error_handle.esp_tls_last_esp_err);
-            // log_error_if_nonzero("reported from tls stack",
-            // data->error_handle.esp_tls_stack_err);
-            // log_error_if_nonzero("captured as transport's socket errno",
-            // data->error_handle.esp_transport_sock_errno);
+            ESP_LOGE(TAG, "reported from esp-tls: %s", esp_err_to_name(data->error_handle.esp_tls_last_esp_err));
+            ESP_LOGE(TAG, "reported from tls stack: %d",
+                                 data->error_handle.esp_tls_stack_err);
+            ESP_LOGE(TAG, "captured as transport's socket errno: %d",
+                                 data->error_handle.esp_transport_sock_errno);
         }
         break;
     case WEBSOCKET_EVENT_FINISH:
@@ -85,32 +99,31 @@ static void websocket_event_handler(void* handler_args, esp_event_base_t base,
 
 void connect_to_server() {
     if (ws_handle != NULL) {
-        ESP_LOGW(TAG, "Destroying old ws cluent");
+        ESP_LOGW(TAG, "Destroying old ws client");
         esp_websocket_client_destroy(ws_handle);
         ws_handle = NULL;
+        opening_sent = false;
     }
-    cfg.uri                     = "ws://calcarea.student.rit.edu";
-    cfg.port                    = 3001;
-    cfg.network_timeout_ms      = 10000;
-    cfg.reconnect_timeout_ms    = 10000;
-    // cfg.skip_cert_common_name_check = true;
-    // cfg.cert_len = 0;
-    // cfg.cert_pem = NULL;
-    
-    
-    
+    cfg.uri                  = "ws://calcarea.student.rit.edu";
+    cfg.port                 = 80;
+    cfg.network_timeout_ms   = 10000;
+    cfg.reconnect_timeout_ms = 1000;
+
     ws_handle = esp_websocket_client_init(&cfg);
     if (ws_handle == NULL) {
         ESP_LOGE(TAG, "Couldn't init client");
         return;
     }
-    esp_websocket_register_events(ws_handle, WEBSOCKET_EVENT_ANY, websocket_event_handler, (void*)ws_handle);
+    vTaskDelay(pdMS_TO_TICKS(1000));
+
+    esp_websocket_register_events(ws_handle, WEBSOCKET_EVENT_ANY,
+                                  websocket_event_handler, (void*)ws_handle);
     esp_err_t err = esp_websocket_client_start(ws_handle);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Couldnt open ws: %s", esp_err_to_name(err));
         return;
     }
-    vTaskDelay(pdMS_TO_TICKS(1000));
+    vTaskDelay(pdMS_TO_TICKS(100));
     if (esp_websocket_client_is_connected(ws_handle)) {
         ESP_LOGI(TAG, "Connected to ws");
     } else {
