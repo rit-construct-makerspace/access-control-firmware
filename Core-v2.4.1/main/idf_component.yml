@@ -15,4 +15,3 @@ dependencies:
   #   # All dependencies of `main` are public by default.
   #   public: true
   zorxx/neopixel: ^1.0.10
-  espressif/arduino-esp32: ^3.2.0
