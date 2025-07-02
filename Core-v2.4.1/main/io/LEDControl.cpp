@@ -10,6 +10,7 @@
 #include "freertos/semphr.h"
 #include "common/pins.hpp"
 #include "neopixel.h"
+#include "network/network.hpp"
 #include "esp_log.h"
 
 using LEDState = std::array<uint32_t, 4>;
@@ -126,11 +127,6 @@ bool get_led_state(LEDDisplayState &current_state) {
     }
 };
 
-bool get_network_state() {
-    // TODO: Ask the network task
-    return false;
-};
-
 void led_thread_fn(void *) {
     tNeopixelContext strip = neopixel_Init(NUM_LEDS, LED_PIN);
     if (strip == NULL) {
@@ -139,7 +135,7 @@ void led_thread_fn(void *) {
     }
 
     LEDDisplayState loop_state = LEDDisplayState::STARTUP;
-    bool network_good = get_network_state();
+    bool network_good = Network::is_online();
     uint8_t current_frame = 0;
 
     while (true) {
@@ -147,7 +143,7 @@ void led_thread_fn(void *) {
         if (get_led_state(loop_state)) {
             current_frame = 0;
         }
-        network_good = get_network_state();
+        network_good = Network::is_online();
 
         switch (loop_state) {
             case LEDDisplayState::IDLE:

@@ -9,11 +9,16 @@ enum class CardTagType {
 };
 const char* card_tag_type_to_string(CardTagType type);
 
-struct CardTagID  {
+struct CardTagID {
     CardTagType type;
     std::array<uint8_t, 7> value;
 
     std::string to_string() const;
+};
+
+struct OperatorPermissions {
+    bool can_set_state;
+    bool can_operate;
 };
 
 enum class IOState {
@@ -92,3 +97,30 @@ struct IOEvent {
 
 using WifiSSID     = std::array<uint8_t, 32>;
 using WifiPassword = std::array<uint8_t, 64>;
+
+namespace WSACS {
+    // Things to tell wsacs system
+    enum class EventType {
+        StateChange,
+        StateChangeCommand,
+        Message,
+        AuthRequest,
+        AuthResponse,
+        Identify,
+
+        WifiUp,
+    };
+
+    struct StateChange {
+        IOState from;
+        IOState to;
+    };
+    struct Event {
+        EventType type;
+        union {
+            StateChange state_change;
+            IOState state_command;
+        };
+    };
+
+} // namespace WSACS
