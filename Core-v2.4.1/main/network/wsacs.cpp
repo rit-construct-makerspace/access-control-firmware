@@ -15,10 +15,17 @@ TaskHandle_t wsacs_thread;
 
 
 bool opening_sent = false;
+uint64_t seqnum = 0;
 esp_websocket_client_handle_t ws_handle = NULL;
 esp_websocket_client_config_t cfg{0};
 
-void handle_incoming_ws_data(const char *data, size_t len){
+uint64_t get_next_seqnum(){
+    uint64_t i = seqnum;
+    seqnum++;
+    return i;
+}
+
+void handle_incoming_ws_text(const char *data, size_t len){
 
 }
 
@@ -28,8 +35,17 @@ void send_opening_message(){
         return;
     }
     cJSON *msg = cJSON_CreateObject();
+    cJSON_AddStringToObject(msg, "SerialNumber", "1234");
+    cJSON_AddStringToObject(msg, "Key", "abcd");
     cJSON_AddStringToObject(msg, "HWType", "Core");
     cJSON_AddStringToObject(msg, "HWVersion", "2.4.1");
+    cJSON_AddStringToObject(msg, "FWVersion", "testing");
+    cJSON_AddNumberToObject(msg, "Seq", (double)get_next_seqnum());
+
+    char * text = cJSON_Print(msg);
+    ESP_LOGI(TAG, "Sending message %s", text);
+    free((void*)text);
+    cJSON_free(msg);
 
 }
 
@@ -45,7 +61,6 @@ static void websocket_event_handler(void* handler_args, esp_event_base_t base,
         break;
     case WEBSOCKET_EVENT_DISCONNECTED:
         ESP_LOGI(TAG, "WEBSOCKET_EVENT_DISCONNECTED");
-        Network::Event ev{.type = Network::EventType::ServerConnectionDown};
 
         if (data->error_handle.esp_ws_handshake_status_code != 0) {
             ESP_LOGE(TAG, "HTTP STATUS CODE: %d",
@@ -64,17 +79,10 @@ static void websocket_event_handler(void* handler_args, esp_event_base_t base,
     case WEBSOCKET_EVENT_DATA:
         ESP_LOGI(TAG, "WEBSOCKET_EVENT_DATA");
         if (data->op_code == 0x2) { // Opcode 0x2 indicates binary data
-            ESP_LOGW("Received binary data, DROPPING");
+            ESP_LOGW(TAG, "Received binary data, DROPPING");
         } else {
-            handle_incoming_ws_data(data->data_ptr, data->data_len)
+            handle_incoming_ws_text(data->data_ptr, data->data_len);
         }
-
-        ESP_LOGW(TAG,
-                 "Total payload length=%d, data_len=%d, current payload "
-                 "offset=%d\r\n",
-                 data->payload_len, data->data_len, data->payload_offset);
-
-        handle_message(data->data_len, data->);
         break;
     case WEBSOCKET_EVENT_ERROR:
         ESP_LOGI(TAG, "WEBSOCKET_EVENT_ERROR");
@@ -103,6 +111,7 @@ void connect_to_server() {
         esp_websocket_client_destroy(ws_handle);
         ws_handle = NULL;
         opening_sent = false;
+        seqnum = 0;
     }
     cfg.uri                  = "ws://calcarea.student.rit.edu";
     cfg.port                 = 80;

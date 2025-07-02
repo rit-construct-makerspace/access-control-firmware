@@ -1,6 +1,6 @@
 dependencies:
   espressif/esp_tinyusb:
-    component_hash: 5e37c53a10518f40b288a48afec4ab549784be9e6eb74add699a30395543418a
+    component_hash: 8fd9b59f52f89a40a6b63caf72f7c1389bcc5cd09b4c22a7408835c88fd78737
     dependencies:
     - name: idf
       require: private
@@ -8,14 +8,11 @@ dependencies:
     - name: espressif/tinyusb
       registry_url: https://components.espressif.com
       require: public
-      version: 0.*
+      version: '>=0.14.2'
     source:
       registry_url: https://components.espressif.com/
       type: service
-    targets:
-    - esp32s2
-    - esp32s3
-    version: 1.0.3
+    version: 1.7.6
   espressif/esp_websocket_client:
     component_hash: f77326f0e1c38da4e9c97e17c5d649b0dd13027f2645e720e48db269638fd622
     dependencies:
@@ -74,20 +71,12 @@ dependencies:
     source:
       type: idf
     version: 5.4.1
-  zorxx/neopixel:
-    component_hash: eb2457ac2b7fca04be1834cf3af7a901f72969918a30ce68a1c1b0c160306201
-    dependencies: []
-    source:
-      registry_url: https://components.espressif.com/
-      type: service
-    version: 1.0.10
 direct_dependencies:
 - espressif/esp_tinyusb
 - espressif/esp_websocket_client
 - espressif/json_generator
 - espressif/json_parser
 - idf
-- zorxx/neopixel
-manifest_hash: 164640c90861c709de9b1d9dd170155da001633467d4c559abf625b91df25877
+manifest_hash: ec18855a6398b7f44cc1ca7bd603fe1ee10f8536a1250ba4e90cb26cb04ede58
 target: esp32s2
 version: 2.0.0
