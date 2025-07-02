@@ -132,7 +132,7 @@ void timer_refresh() {
 void handle_button_clicked() {
     IOState current_state;
     if (!IO::get_state(current_state)) {
-        ESP_LOGI(TAG, "Failed to get state");
+        ESP_LOGE(TAG, "Failed to get state");
         return;
     }
 
@@ -170,6 +170,50 @@ void handle_button_clicked() {
     }
 }
 
+void handle_card_detected(IOEvent event) {
+    IOState current_state;
+    if (!IO::get_state(current_state)) {
+        ESP_LOGE(TAG, "Failed to get state");
+        return;
+    }
+
+    switch (current_state) {
+        case IOState::IDLE:
+            go_to_state(IOState::UNLOCKED);
+            break;
+        case IOState::LOCKOUT_WAITING:
+            xTimerStop(waiting_timer, pdMS_TO_TICKS(100));
+            go_to_state(IOState::LOCKOUT);
+            break;
+        case IOState::IDLE_WAITING:
+            xTimerStop(waiting_timer, pdMS_TO_TICKS(100));
+            go_to_state(IOState::IDLE);
+            break;
+        case IOState::ALWAYS_ON_WAITING:
+            xTimerStop(waiting_timer, pdMS_TO_TICKS(100));
+            go_to_state(IOState::ALWAYS_ON);
+            break;
+        default:
+            return;
+    }
+}
+
+void handle_card_removed() {
+    IOState current_state;
+    if (!IO::get_state(current_state)) {
+        ESP_LOGE(TAG, "Failed to get state");
+        return;
+    }
+
+    switch (current_state) {
+        case IOState::UNLOCKED:
+            go_to_state(IOState::IDLE);
+            break;
+        default:
+            return;
+    }
+}
+
 void io_thread_fn(void *) {
 
     IOEvent current_event;
@@ -199,11 +243,11 @@ void io_thread_fn(void *) {
             break;
 
             case IOEventType::CARD_DETECTED:
-                go_to_state(IOState::UNLOCKED);
+                handle_card_detected(current_event);
             break;
 
             case IOEventType::CARD_REMOVED:
-                go_to_state(IOState::IDLE);
+                handle_card_removed();
             break;
 
             case IOEventType::NETWORK_COMMAND:
