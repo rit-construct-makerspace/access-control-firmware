@@ -11,7 +11,7 @@ const char* card_tag_type_to_string(CardTagType type);
 
 struct CardTagID  {
     CardTagType type;
-    std::array<uint8_t, 7> value;
+    std::array<uint8_t, 10> value;
 
     std::string to_string() const;
 };

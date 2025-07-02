@@ -115,7 +115,10 @@ void mfrc630_cmd_transceive(const uint8_t* data, uint16_t len) {
   mfrc630_cmd_idle();
   mfrc630_flush_fifo();
   mfrc630_write_fifo(data, len);
+  MFRC630_PRINTF("FIFO Size: %d", mfrc630_fifo_length());
+  MFRC630_PRINTF("Error reg (Before): %x", mfrc630_read_reg(0x0A));
   mfrc630_write_reg(MFRC630_REG_COMMAND, MFRC630_CMD_TRANSCEIVE);
+  MFRC630_PRINTF("Error reg (After): %x", mfrc630_read_reg(0x0A));
 }
 
 void mfrc630_cmd_idle() {
@@ -345,6 +348,7 @@ uint16_t mfrc630_iso14443a_WUPA_REQA(uint8_t instruction) {
   uint8_t irq1_value = 0;
   while (!(irq1_value & (1 << timer_for_timeout))) {
     irq1_value = mfrc630_irq1();
+    //MFRC630_PRINTF("irq1 reg: %x", irq1_value);
     if (irq1_value & MFRC630_IRQ1_GLOBAL_IRQ) {  // either ERR_IRQ or RX_IRQ
       break;  // stop polling irq1 and quit the timeout loop.
     }

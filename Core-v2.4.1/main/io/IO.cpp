@@ -199,11 +199,11 @@ void io_thread_fn(void *) {
             break;
 
             case IOEventType::CARD_DETECTED:
-
+                go_to_state(IOState::UNLOCKED);
             break;
 
             case IOEventType::CARD_REMOVED:
-
+                go_to_state(IOState::IDLE);
             break;
 
             case IOEventType::NETWORK_COMMAND:
