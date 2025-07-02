@@ -9,7 +9,7 @@
 #include <freertos/semphr.h>
 
 #include "common/pins.hpp"
-#include "neopixel.h"
+
 #include "esp_log.h"
 
 using LEDState = std::array<uint32_t, 4>;
@@ -140,7 +140,7 @@ void advance_frame(LEDAnimation animation, tNeopixelContext &strip, uint8_t &cur
         { 3, animation.frames[current_frame][3]},
     };
 
-    neopixel_SetPixel(strip, pixel, 4);
+    //neopixel_SetPixel(strip, pixel, 4);
 }
 
 bool LED::set_state(LED::DisplayState state) {
