@@ -1,5 +1,5 @@
 #pragma once
 
-namespace Speaker {
+namespace Buzzer {
     int init();
 }

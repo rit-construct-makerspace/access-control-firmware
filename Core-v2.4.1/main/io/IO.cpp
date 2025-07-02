@@ -10,7 +10,7 @@
 #include "io/LEDControl.hpp"
 #include "io/Button.hpp"
 #include "io/CardReader.hpp"
-#include "io/Speaker.hpp"
+#include "io/Buzzer.hpp"
 
 static const char* TAG = "io";
 
@@ -282,7 +282,6 @@ int IO::init() {
     }
 
     LED::init();
-    Speaker::init();
     Button::init();
     CardReader::init();
 

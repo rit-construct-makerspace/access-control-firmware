@@ -9,10 +9,12 @@
 #include <freertos/semphr.h>
 
 #include "common/pins.hpp"
-
 #include "esp_log.h"
+#include "led_strip.h"
 
-using LEDState = std::array<uint32_t, 4>;
+using RGB = std::array<uint32_t, 3>;
+
+using LEDState = std::array<RGB, 4>;
 
 struct LEDAnimation {
     uint8_t length;
@@ -29,14 +31,14 @@ static SemaphoreHandle_t state_mutex;
 
 static const char * TAG = "led";
 
-static const uint32_t WHITE = NP_RGB(15, 15, 15);
-static const uint32_t OFF = NP_RGB(0, 0, 0);
-static const uint32_t RED = NP_RGB(15, 0, 0);
-static const uint32_t RED_DIM = NP_RGB(5, 0, 0);
-static const uint32_t GREEN = NP_RGB(0, 15, 0);
-static const uint32_t GREEN_DIM = NP_RGB(0, 5, 0);
-static const uint32_t BLUE = NP_RGB(0, 0, 15);
-static const uint32_t ORANGE = NP_RGB(15, 10, 0);
+static const RGB WHITE = {15, 15, 15};
+static const RGB OFF = {0, 0, 0};
+static const RGB RED = {15, 0, 0};
+static const RGB RED_DIM = {5, 0, 0};
+static const RGB GREEN = {0, 15, 0};
+static const RGB GREEN_DIM = {0, 5, 0};
+static const RGB BLUE = {0, 0, 15};
+static const RGB ORANGE = {15, 10, 0};
 
 const LEDAnimation IDLE_ANIMATION {
     .length = 2,
@@ -126,21 +128,45 @@ const LEDAnimation RESTART_ANIMATION {
     }
 };
 
-void advance_frame(LEDAnimation animation, tNeopixelContext &strip, uint8_t &current_frame) {
+led_strip_handle_t configure_led(void) {
+    // LED strip general initialization, according to your led board design
+    led_strip_config_t strip_config = {
+        .strip_gpio_num = LED_PIN, // The GPIO that connected to the LED strip's data line
+        .max_leds = 4,      // The number of LEDs in the strip,
+        .led_model = LED_MODEL_WS2812,        // LED strip model
+        .color_component_format = LED_STRIP_COLOR_COMPONENT_FMT_GRB, // The color order of the strip: RGB
+        .flags = {
+            .invert_out = false, // don't invert the output signal
+        }
+    };
+
+    // LED strip backend configuration: RMT
+    led_strip_rmt_config_t rmt_config = {
+        .clk_src = RMT_CLK_SRC_DEFAULT,        // different clock source can lead to different power consumption
+        .resolution_hz = 10 * 1000 * 1000, // RMT counter clock frequency
+        .mem_block_symbols = 0, // the memory block size used by the RMT channel
+        .flags = {
+            .with_dma = 0,     // Using DMA can improve performance when driving more LEDs
+        }
+    };
+
+    // LED Strip object handle
+    led_strip_handle_t led_strip;
+    ESP_ERROR_CHECK(led_strip_new_rmt_device(&strip_config, &rmt_config, &led_strip));
+    ESP_LOGI(TAG, "Created LED strip object with RMT backend");
+    return led_strip;
+}
+
+void advance_frame(LEDAnimation animation, led_strip_handle_t &strip, uint8_t &current_frame) {
     if (current_frame + 1 >= animation.length) {
         current_frame = 0;
     } else {
         current_frame++;
     }
 
-    tNeopixel pixel[] = {
-        { 0, animation.frames[current_frame][0]},
-        { 1, animation.frames[current_frame][1]},
-        { 2, animation.frames[current_frame][2]},
-        { 3, animation.frames[current_frame][3]},
-    };
-
-    //neopixel_SetPixel(strip, pixel, 4);
+    for (int i = 0; i < 4; i++) {
+        led_strip_set_pixel(strip, i, animation.frames[current_frame][i][0], animation.frames[current_frame][i][1], animation.frames[current_frame][i][2]);
+    }
 }
 
 bool LED::set_state(LED::DisplayState state) {
@@ -174,7 +200,7 @@ bool get_network_state() {
 };
 
 void led_thread_fn(void *) {
-    tNeopixelContext strip = neopixel_Init(NUM_LEDS, LED_PIN);
+    led_strip_handle_t strip = configure_led();
     if (strip == NULL) {
         ESP_LOGI(TAG, "Failed to intialize LEDs");
         // TODO: Crash out
@@ -225,14 +251,13 @@ void led_thread_fn(void *) {
                 break;
         }
 
-        tNeopixel network_pixels[] = {
-            {0, WHITE},
-            {3, WHITE},
-        };
-
         if (!network_good && (current_frame % 2 == 0)) {
-            neopixel_SetPixel(strip, network_pixels, 2);
+            led_strip_set_pixel(strip, 0, WHITE[0], WHITE[0], WHITE[0]);
+            led_strip_set_pixel(strip, 3, WHITE[0], WHITE[0], WHITE[0]);
         }
+
+        led_strip_refresh(strip);
+
         vTaskDelay(pdMS_TO_TICKS(400));
     };
 };
