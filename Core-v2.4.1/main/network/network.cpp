@@ -61,8 +61,9 @@ static void on_wifi_event(void* arg, esp_event_base_t event_base,
         ip_event_got_ip_t* event = (ip_event_got_ip_t*)event_data;
         ESP_LOGI(TAG, "got ip:" IPSTR, IP2STR(&event->ip_info.ip));
         set_is_online(true);
-        auto ev = Network::Event{.type = Network::EventType::WifiUp};
-        xQueueSend(network_event_queue, &ev, pdMS_TO_TICKS(100));
+        
+        Network::send_internal_event({.type = Network::InternalEventType::NetifUp, .netif_up_ip = event->ip_info.ip});
+
         wifi_retry_count = 0;
     }
 }
@@ -144,35 +145,46 @@ void consider_reset() {
         ESP_LOGE(TAG, "Upload coredump");
     }
 }
-extern void initialize_ping();
 
 void network_thread_fn(void* p) {
     wifi_init_sta();
 
     while (true) {
-        Network::Event event;
-        if (xQueueReceive(network_event_queue, (void*)&event,
-                          portMAX_DELAY) == pdFALSE) {
+        Network::InternalEvent event;
+        if (xQueueReceive(network_event_queue, (void*)&event, portMAX_DELAY) ==
+            pdFALSE) {
             ESP_LOGW(TAG, "Noting for network");
             continue;
         }
 
-        if (event.type == Network::EventType::WifiUp) {
-            ESP_LOGI(TAG, "Wifi up, tell wsacs to connect");
-            WSACS::send_message(WSACS::Event{.type = WSACS::EventType::WifiUp});
-        }
+        // if (event.type == Internal::NetifUp) {
+        // ESP_LOGI(TAG, "Wifi up, tell wsacs to connect");
+        // WSACS::send_message(WSACS::Event{.type = WSACS::EventType::WifiUp});
+        // }
     }
     return;
 }
 
 namespace Network {
+    int send_internal_event(InternalEvent ev) {
+        xQueueSend(network_event_queue, &ev, pdMS_TO_TICKS(100));
+        return 0;
+    }
+
+    int send_event(NetworkEvent ev) {
+        return send_internal_event(InternalEvent{
+            .type           = InternalEventType::ExternalEvent,
+            .external_event = ev,
+        });
+    }
+
     int init() {
         esp_log_level_set("esp-tls",
                           ESP_LOG_DEBUG); // enable INFO logs from DHCP client
         esp_log_level_set("transport_ws",
                           ESP_LOG_DEBUG); // enable INFO logs from DHCP client
 
-        network_event_queue = xQueueCreate(5, sizeof(Network::Event));
+        network_event_queue = xQueueCreate(5, sizeof(Network::InternalEvent));
         consider_reset();
 
         ESP_LOGI(TAG, "Network Side Start");

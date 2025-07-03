@@ -79,7 +79,6 @@ struct ButtonEvent {
     ButtonEventType type;
 };
 
-
 enum class NetworkCommandEventType {
     IDENTIFY,
     COMMAND_STATE,
@@ -92,6 +91,7 @@ struct NetworkCommandEvent {
     std::string to_string() const;
 };
 
+// From other things, to IO
 struct IOEvent {
     IOEventType type;
     union {
@@ -106,29 +106,27 @@ struct IOEvent {
 using WifiSSID     = std::array<uint8_t, 32>;
 using WifiPassword = std::array<uint8_t, 64>;
 
-namespace WSACS {
-    // Things to tell wsacs system
-    enum class EventType {
-        StateChange,
-        StateChangeCommand,
-        Message,
-        AuthRequest,
-        AuthResponse,
-        Identify,
+struct StateChange {
+    IOState from;
+    IOState to;
+};
 
-        WifiUp,
-    };
+struct AuthRequest {
+    CardTagID requester;
+    IOState to_state;
+};
 
-    struct StateChange {
-        IOState from;
-        IOState to;
-    };
-    struct Event {
-        EventType type;
-        union {
-            StateChange state_change;
-            IOState state_command;
-        };
-    };
+// Things to tell network task
+enum class NetworkEventType {
+    AuthRequest,
+    StateChange,
+    PleaseRestart,
+};
 
-} // namespace WSACS
+struct NetworkEvent {
+    NetworkEventType type;
+    union {
+        AuthRequest auth_request;
+        StateChange state_change;
+    };
+};

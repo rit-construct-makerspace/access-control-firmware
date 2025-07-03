@@ -4,35 +4,23 @@
 #include "esp_netif_types.h"
 
 namespace Network {
-
-    enum class EventType {
-        // Connection Management
-        WifiUp,
-        WifiDown,
-
-        ServerConnectionUp,
-        ServerConnectionDown,
-
-        // Doing the job management
-        WSACSEvent,
-        GetFile,
-
-        // Debug Stuff
-        UploadCoredump,
-    };
-
-
-    struct Event {
-        EventType type;
-        union {
-            esp_ip_addr_t wifi_up_ip;
-            WSACS::Event wsacs_event;
-        };
-    };
-
     int init();
 
-    void report_state_transition(IOState from, IOState to);
+    int send_event(NetworkEvent ev);
     bool is_online();
+
+    enum class InternalEventType{
+        ExternalEvent,
+        NetifUp,
+        NetifDown,
+    };
+    struct InternalEvent{
+        InternalEventType type;
+        union {
+            NetworkEvent external_event;
+            esp_ip4_addr_t netif_up_ip;
+        };
+    };
+    int send_internal_event(InternalEvent ev);
 
 } // namespace Network

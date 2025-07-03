@@ -3,6 +3,7 @@
 #include "common/types.hpp"
 
 namespace WSACS {
+
     int init();
-    esp_err_t send_message(WSACS::Event);
+    // esp_err_t send_message(WSACS::Event);
 } // namespace WSACS

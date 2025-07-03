@@ -1,52 +1,66 @@
 #include "wsacs.hpp"
 
+#include "cJSON.h"
 #include "esp_log.h"
 #include "esp_websocket_client.h"
+#include "network/network.hpp"
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
 #include <freertos/task.h>
-#include "network/network.hpp"
-#include "cJSON.h"
 
 static const char* TAG = "wsacs";
 
 QueueHandle_t wsacs_queue;
 TaskHandle_t wsacs_thread;
 
-
-bool opening_sent = false;
-uint64_t seqnum = 0;
+bool opening_sent                       = false;
+uint64_t seqnum                         = 0;
 esp_websocket_client_handle_t ws_handle = NULL;
-esp_websocket_client_config_t cfg{0};
+esp_websocket_client_config_t cfg{};
 
-uint64_t get_next_seqnum(){
+uint64_t get_next_seqnum() {
     uint64_t i = seqnum;
     seqnum++;
     return i;
 }
 
-void handle_incoming_ws_text(const char *data, size_t len){
-
+void handle_incoming_ws_text(const char* data, size_t len) {
+    if (len == 0) {
+        return;
+    }
+    ESP_LOGI(TAG, "Received data (%d): %.*s", len, len, data);
 }
 
-void send_opening_message(){
-    if (ws_handle == NULL){
+void send_opening_message() {
+    if (ws_handle == NULL) {
         ESP_LOGE(TAG, "Programming error");
         return;
     }
-    cJSON *msg = cJSON_CreateObject();
+    cJSON* msg = cJSON_CreateObject();
     cJSON_AddStringToObject(msg, "SerialNumber", "1234");
-    cJSON_AddStringToObject(msg, "Key", "abcd");
+    cJSON_AddStringToObject(msg, "Key", "7abad18c015b8dd016263f3d2866b72e");
     cJSON_AddStringToObject(msg, "HWType", "Core");
     cJSON_AddStringToObject(msg, "HWVersion", "2.4.1");
     cJSON_AddStringToObject(msg, "FWVersion", "testing");
+    cJSON* req_arr = cJSON_AddArrayToObject(msg, "Request");
+    cJSON* req0    = cJSON_CreateString("State");
+    cJSON* req1    = cJSON_CreateString("Time");
+    cJSON_AddItemToArray(req_arr, req0);
+    cJSON_AddItemToArray(req_arr, req1);
+    cJSON_AddStringToObject(msg, "FWVersion", "testing");
     cJSON_AddNumberToObject(msg, "Seq", (double)get_next_seqnum());
 
-    char * text = cJSON_Print(msg);
+    char* text = cJSON_Print(msg);
+    size_t len = strnlen(text, 1000);
     ESP_LOGI(TAG, "Sending message %s", text);
+
+    int err = esp_websocket_client_send_text(ws_handle, text, len,
+                                             pdMS_TO_TICKS(100));
+    if (err != len) {
+        ESP_LOGE(TAG, "Failed to send WS message: %d", err);
+    }
     free((void*)text);
     cJSON_free(msg);
-
 }
 
 static void websocket_event_handler(void* handler_args, esp_event_base_t base,
@@ -69,11 +83,12 @@ static void websocket_event_handler(void* handler_args, esp_event_base_t base,
         if (data->error_handle.error_type ==
             WEBSOCKET_ERROR_TYPE_TCP_TRANSPORT) {
             ESP_LOGE(TAG, "TCP ERR");
-            ESP_LOGE(TAG, "reported from esp-tls: %s", esp_err_to_name(data->error_handle.esp_tls_last_esp_err));
+            ESP_LOGE(TAG, "reported from esp-tls: %s",
+                     esp_err_to_name(data->error_handle.esp_tls_last_esp_err));
             ESP_LOGE(TAG, "reported from tls stack: %d",
-                                 data->error_handle.esp_tls_stack_err);
+                     data->error_handle.esp_tls_stack_err);
             ESP_LOGE(TAG, "captured as transport's socket errno: %d",
-                                 data->error_handle.esp_transport_sock_errno);
+                     data->error_handle.esp_transport_sock_errno);
         }
         break;
     case WEBSOCKET_EVENT_DATA:
@@ -92,11 +107,12 @@ static void websocket_event_handler(void* handler_args, esp_event_base_t base,
         }
         if (data->error_handle.error_type ==
             WEBSOCKET_ERROR_TYPE_TCP_TRANSPORT) {
-            ESP_LOGE(TAG, "reported from esp-tls: %s", esp_err_to_name(data->error_handle.esp_tls_last_esp_err));
+            ESP_LOGE(TAG, "reported from esp-tls: %s",
+                     esp_err_to_name(data->error_handle.esp_tls_last_esp_err));
             ESP_LOGE(TAG, "reported from tls stack: %d",
-                                 data->error_handle.esp_tls_stack_err);
+                     data->error_handle.esp_tls_stack_err);
             ESP_LOGE(TAG, "captured as transport's socket errno: %d",
-                                 data->error_handle.esp_transport_sock_errno);
+                     data->error_handle.esp_transport_sock_errno);
         }
         break;
     case WEBSOCKET_EVENT_FINISH:
@@ -109,12 +125,12 @@ void connect_to_server() {
     if (ws_handle != NULL) {
         ESP_LOGW(TAG, "Destroying old ws client");
         esp_websocket_client_destroy(ws_handle);
-        ws_handle = NULL;
+        ws_handle    = NULL;
         opening_sent = false;
-        seqnum = 0;
+        seqnum       = 0;
     }
-    cfg.uri                  = "ws://calcarea.student.rit.edu";
-    cfg.port                 = 80;
+    cfg.uri                  = "ws://calcarea.student.rit.edu/api/ws";
+    cfg.port                 = 3000;
     cfg.network_timeout_ms   = 10000;
     cfg.reconnect_timeout_ms = 1000;
 
@@ -139,25 +155,19 @@ void connect_to_server() {
         ESP_LOGE(TAG, "Couldn't connect");
         return;
     }
-
-    err = esp_websocket_client_send_text(ws_handle, "hello im a shlug ", 16,
-                                         pdMS_TO_TICKS(1000));
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Couldnt send text on ws: %s", esp_err_to_name(err));
-        return;
-    }
 }
 
 void wsacs_thread_fn(void*) {
-    WSACS::Event event;
+    // WSACS::Event event;
     while (true) {
-        if (xQueueReceive(wsacs_queue, (void*)&event, portMAX_DELAY) ==
-            pdFALSE) {
-            continue;
-        }
-        if (event.type == WSACS::EventType::WifiUp) {
-            connect_to_server();
-        }
+    //     if (xQueueReceive(wsacs_queue, (void*)&event, portMAX_DELAY) ==
+    //         pdFALSE) {
+    //         continue;
+    //     }
+    //     if (event.type == WSACS::EventType::WifiUp) {
+    //         connect_to_server();
+    //     }
+    vTaskDelay(pdMS_TO_TICKS(100000));
     }
 }
 
@@ -166,7 +176,7 @@ namespace WSACS {
     int init() {
         esp_log_level_set("TRANS_TCP", ESP_LOG_DEBUG);
 
-        wsacs_queue = xQueueCreate(5, sizeof(WSACS::Event));
+        wsacs_queue = xQueueCreate(5, sizeof(int));
         if (wsacs_queue == NULL) {
             ESP_LOGE(TAG, "Fail and die");
             // todo crash
@@ -181,7 +191,7 @@ namespace WSACS {
         return 0;
     }
 
-    esp_err_t send_message(WSACS::Event event) {
+    esp_err_t send_message(int event) {
         xQueueSend(wsacs_queue, &event, pdMS_TO_TICKS(100));
         return ESP_OK; // todo real code
     }
