@@ -61,8 +61,10 @@ static void on_wifi_event(void* arg, esp_event_base_t event_base,
         ip_event_got_ip_t* event = (ip_event_got_ip_t*)event_data;
         ESP_LOGI(TAG, "got ip:" IPSTR, IP2STR(&event->ip_info.ip));
         set_is_online(true);
-        
-        Network::send_internal_event({.type = Network::InternalEventType::NetifUp, .netif_up_ip = event->ip_info.ip});
+
+        Network::send_internal_event(
+            {.type        = Network::InternalEventType::NetifUp,
+             .netif_up_ip = event->ip_info.ip});
 
         wifi_retry_count = 0;
     }
@@ -146,26 +148,27 @@ void consider_reset() {
     }
 }
 
-void network_thread_fn(void* p) {
-    wifi_init_sta();
-
-    while (true) {
-        Network::InternalEvent event;
-        if (xQueueReceive(network_event_queue, (void*)&event, portMAX_DELAY) ==
-            pdFALSE) {
-            ESP_LOGW(TAG, "Noting for network");
-            continue;
-        }
-
-        // if (event.type == Internal::NetifUp) {
-        // ESP_LOGI(TAG, "Wifi up, tell wsacs to connect");
-        // WSACS::send_message(WSACS::Event{.type = WSACS::EventType::WifiUp});
-        // }
-    }
-    return;
-}
-
 namespace Network {
+    void network_thread_fn(void* p) {
+        wifi_init_sta();
+
+        while (true) {
+            Network::InternalEvent event;
+            if (xQueueReceive(network_event_queue, (void*)&event,
+                              portMAX_DELAY) == pdFALSE) {
+                ESP_LOGW(TAG, "Noting for network");
+                continue;
+            }
+
+            if (event.type == InternalEventType::NetifUp) {
+                ESP_LOGI(TAG, "Wifi up, tell wsacs to connect");
+                WSACS::send_message(
+                    WSACS::Event{.type = WSACS::EventType::TryConnect});
+            }
+        }
+        return;
+    }
+
     int send_internal_event(InternalEvent ev) {
         xQueueSend(network_event_queue, &ev, pdMS_TO_TICKS(100));
         return 0;

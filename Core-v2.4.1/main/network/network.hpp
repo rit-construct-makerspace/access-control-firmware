@@ -10,15 +10,15 @@ namespace Network {
     bool is_online();
 
     enum class InternalEventType{
-        ExternalEvent,
         NetifUp,
         NetifDown,
+        ExternalEvent,
     };
     struct InternalEvent{
         InternalEventType type;
         union {
+            esp_ip4_addr_t netif_up_ip = {0};
             NetworkEvent external_event;
-            esp_ip4_addr_t netif_up_ip;
         };
     };
     int send_internal_event(InternalEvent ev);

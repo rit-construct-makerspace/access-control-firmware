@@ -88,6 +88,7 @@ const char* network_command_event_type_to_string(NetworkCommandEventType type);
 struct NetworkCommandEvent {
     NetworkCommandEventType type;
     IOState commanded_state; // Only valid if type is COMMAND_STATE
+    bool requested; // true if we asked to auth. false if command came from on high
     std::string to_string() const;
 };
 
@@ -106,9 +107,19 @@ struct IOEvent {
 using WifiSSID     = std::array<uint8_t, 32>;
 using WifiPassword = std::array<uint8_t, 64>;
 
+enum class StateChangeReason{
+    ButtonPress,
+    OverTermperature,
+    CardRemoved,
+    CardActivated,
+    ServerCommanded,
+};  
+
 struct StateChange {
     IOState from;
     IOState to;
+    StateChangeReason reason;
+    CardTagID who;
 };
 
 struct AuthRequest {

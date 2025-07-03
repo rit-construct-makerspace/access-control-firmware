@@ -1,25 +1,27 @@
 dependencies:
   espressif/esp_tinyusb:
-    component_hash: 8fd9b59f52f89a40a6b63caf72f7c1389bcc5cd09b4c22a7408835c88fd78737
+    component_hash: 5e37c53a10518f40b288a48afec4ab549784be9e6eb74add699a30395543418a
     dependencies:
     - name: idf
       require: private
       version: '>=5.0'
     - name: espressif/tinyusb
-    - name: espressif/tinyusb
       registry_url: https://components.espressif.com
       require: public
-      version: '>=0.14.2'
+      version: 0.*
     source:
       registry_url: https://components.espressif.com/
       type: service
-    version: 1.7.6
+    targets:
+    - esp32s2
+    - esp32s3
+    version: 1.0.3
   espressif/esp_websocket_client:
     component_hash: f77326f0e1c38da4e9c97e17c5d649b0dd13027f2645e720e48db269638fd622
     dependencies:
     - name: idf
       require: private
-      version: '>=4.3'
+      version: '>=5.0'
     source:
       registry_url: https://components.espressif.com/
       type: service
@@ -31,14 +33,13 @@ dependencies:
       require: private
       version: '>=4.3'
     source:
-      registry_url: https://components.espressif.com/
+      registry_url: https://components.espressif.com
       type: service
     version: 1.1.0
   espressif/json_generator:
     component_hash: 45033e1c199b13f1c8c1b544fb7d4e2df6a8e3071ebdcb1b22582b61a7974ff2
     dependencies: []
     source:
-      registry_url: https://components.espressif.com/
       registry_url: https://components.espressif.com/
       type: service
     version: 1.1.2
@@ -55,6 +56,16 @@ dependencies:
       registry_url: https://components.espressif.com/
       type: service
     version: 1.0.3
+  espressif/led_strip:
+    component_hash: 223998f10cae6d81f2ad2dd3c1103c2221be298c708e37917482b0153f3ec64e
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.0'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 3.0.1~1
   espressif/tinyusb:
     component_hash: 10703da2c3cd39a944711ee3d320c6dda54debabf13b4b933a7c90daf102372b
     dependencies:
@@ -69,11 +80,6 @@ dependencies:
     - esp32s3
     - esp32p4
     version: 0.18.0~2
-    targets:
-    - esp32s2
-    - esp32s3
-    - esp32p4
-    version: 0.18.0~2
   idf:
     source:
       type: idf
@@ -83,7 +89,8 @@ direct_dependencies:
 - espressif/esp_websocket_client
 - espressif/json_generator
 - espressif/json_parser
+- espressif/led_strip
 - idf
-manifest_hash: ec18855a6398b7f44cc1ca7bd603fe1ee10f8536a1250ba4e90cb26cb04ede58
+manifest_hash: fe8984469d9cf4ff1e816898c69e203602dda4a4484d89046de26e19e58a35f7
 target: esp32s2
 version: 2.0.0
