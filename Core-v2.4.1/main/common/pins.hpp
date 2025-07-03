@@ -11,3 +11,4 @@ constexpr gpio_num_t SPI_MISO = GPIO_NUM_11;
 constexpr gpio_num_t I2SLRCLK = GPIO_NUM_12;
 constexpr gpio_num_t BUZZER_PIN = GPIO_NUM_13;
 constexpr gpio_num_t I2SDIN = GPIO_NUM_14;
+constexpr gpio_num_t MODE = GPIO_NUM_38;

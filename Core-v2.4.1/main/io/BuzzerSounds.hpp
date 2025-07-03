@@ -17,27 +17,57 @@ namespace SoundEffect {
      * BEGIN NOTE DEFS
      ******************************/
 
-    const Note LOW_TONE = {
-        .frequency = 2000,
-        .duration = 250,
+    const Note OFF = {
+        .frequency = 0,
+        .duration = 100,
     };
 
-    const Note HIGH_TONE = {
-        .frequency = 4000,
-        .duration = 250,
+    const Note A2 = {
+        .frequency = 110,
+        .duration = 200,
+    };
+
+    const Note A3 = {
+        .frequency = 220,
+        .duration = 200,
+    };
+
+    const Note A4 = {
+        .frequency = 440,
+        .duration = 200,
+    };
+
+    const Note A5 = {
+        .frequency = 880,
+        .duration = 200,
+    };
+
+    const Note DS7 = {
+        .frequency = 2489,
+        .duration = 200,
     };
 
     /********************************
      * BEGIN EFFECTS
      *******************************/
-
-    const Note ACCEPTED_NOTES[2] = {
-        LOW_TONE,
-        HIGH_TONE
+    namespace detail {
+        const Note ACCEPTED_NOTES[2] = { A4, A5 };
+        const Note DENIED_NOTES[2] = { A4, A2 };
+        const Note LOCKOUT_NOTES[3] = { A3, OFF, A3 };
     };
 
     const Effect ACCEPTED_EFFECT = {
         .length = 2,
-        .notes = ACCEPTED_NOTES,
+        .notes = detail::ACCEPTED_NOTES,
+    };
+
+    const Effect DENIED_EFFECT = {
+        .length = 2,
+        .notes = detail::DENIED_NOTES,
+    };
+
+    const Effect LOCKOUT_EFFECT = {
+        .length = 3,
+        .notes = detail::LOCKOUT_NOTES,
     };
 }

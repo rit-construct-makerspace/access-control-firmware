@@ -2,15 +2,16 @@
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#include <freertos/queue.h>
 
 #include "driver/gpio.h"
 #include "driver/ledc.h"
 #include "common/pins.hpp"
 #include "esp_log.h"
-#include "BuzzerSounds.hpp"
 
 TaskHandle_t buzzer_thread;
 #define BUZZER_TASK_STACK_SIZE 2000
+QueueHandle_t effect_queue;
 
 static const char * TAG = "buzzer";
 
@@ -56,13 +57,30 @@ void stop() {
     }
 }
 
+void play_effect(SoundEffect::Effect effect) {
+    stop();
+    for (int i = 0; i < effect.length; i++) {
+        if (effect.notes[i].frequency == 0) {
+            stop();
+        } else {
+            start(effect.notes[i].frequency);
+        }
+        vTaskDelay(pdMS_TO_TICKS(effect.notes[i].duration));
+        stop();
+    }
+    stop();
+}
+
 void buzzer_task_fn(void *) {
     stop();
+
+    SoundEffect::Effect current_effect;
+
     while (true) {
-        start(4000);
-        vTaskDelay(pdMS_TO_TICKS(500));
-        stop();
-        vTaskDelay(pdMS_TO_TICKS(500));
+        if (xQueueReceive(effect_queue, &current_effect, portMAX_DELAY) != pdTRUE) {
+            continue;
+        }
+        play_effect(current_effect);
     }
 }
 
@@ -92,6 +110,10 @@ void setup() {
 }
 
 int Buzzer::init() {
+
+    effect_queue = xQueueCreate(8, sizeof(SoundEffect::Effect));
+
+
     gpio_config_t conf = {
         .pin_bit_mask = 1ULL << BUZZER_PIN,
         .mode = GPIO_MODE_OUTPUT,
@@ -106,4 +128,8 @@ int Buzzer::init() {
     
     xTaskCreate(buzzer_task_fn, "buzzer", BUZZER_TASK_STACK_SIZE, NULL, 0, &buzzer_thread);
     return 0;
+}
+
+bool Buzzer::send_effect(SoundEffect::Effect effect) {
+    return xQueueSend(effect_queue, &effect, pdTICKS_TO_MS(100));
 }
