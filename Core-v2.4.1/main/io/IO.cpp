@@ -287,7 +287,7 @@ int IO::init() {
     waiting_timer = xTimerCreate("waiting", pdMS_TO_TICKS(5000), pdFALSE, (void *) 0, waiting_timer_callback);
 
     if (event_queue == 0 || animation_mutex == NULL) {
-        // TODO: Crash here
+        // TODO: Restart here
     }
 
     LED::init();
@@ -296,12 +296,10 @@ int IO::init() {
     Buzzer::init();
 
     xTaskCreate(io_thread_fn, "io", IO_TASK_STACK_SIZE, NULL, 0, &io_thread);
-
-    go_to_state(IOState::IDLE);
-
     return 0;
 }
 
-void IO::fault() {
+void IO::fault(FaultReason reason) {
     go_to_state(IOState::FAULT);
+    // TODO: Log fault reason
 };
