@@ -12,12 +12,18 @@ namespace Network {
     enum class InternalEventType{
         NetifUp,
         NetifDown,
+        
+        ServerSetTime,
+        ServerSetState,
+
         ExternalEvent,
     };
     struct InternalEvent{
         InternalEventType type;
         union {
             esp_ip4_addr_t netif_up_ip = {0};
+            IOState server_set_state;
+            uint64_t server_set_time;
             NetworkEvent external_event;
         };
     };

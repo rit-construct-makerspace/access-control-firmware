@@ -30,7 +30,16 @@ void handle_incoming_ws_text(const char* data, size_t len) {
     if (len == 0) {
         return;
     }
-    ESP_LOGI(TAG, "Received data (%d): %.*s", len, len, data);
+    ESP_LOGD(TAG, "Received msg size %d: %.*s", len, len, data);
+
+    cJSON *obj = cJSON_ParseWithLength(data, len);
+    if (obj == NULL){
+        ESP_LOGE(TAG, "Failed to parse json: %.*s", len, data);
+        return;
+    }
+    if (cJSON_HasObjectItem(obj, "State")){
+        
+    }
 }
 
 void send_keep_alive_message() {

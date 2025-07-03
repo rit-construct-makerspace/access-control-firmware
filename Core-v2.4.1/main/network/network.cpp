@@ -161,10 +161,10 @@ namespace Network {
             }
 
             if (event.type == InternalEventType::NetifUp) {
-                ESP_LOGI(TAG, "Wifi up, tell wsacs to connect");
+                ESP_LOGD(TAG, "Wifi up, tell wsacs to connect");
                 WSACS::send_message(
                     WSACS::Event{.type = WSACS::EventType::TryConnect});
-            }
+            } else if (event.type == )
         }
         return;
     }
