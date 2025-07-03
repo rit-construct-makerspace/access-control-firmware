@@ -135,3 +135,18 @@ std::string IOEvent::to_string() const {
         return "INVALID IOEVENT";
     }
 }
+
+const char* fault_reason_to_string(FaultReason reason) {
+    switch (reason) {
+        case FaultReason::CARD_SWITCH:
+            return "Card Switch";
+        case FaultReason::OVER_TEMP:
+            return "Over Temperature";
+        case FaultReason::SERVER_COMMANDED:
+            return "Server Commanded";
+        case FaultReason::START_FAIL:
+            return "Startup Failure";
+        default:
+            return "INVALID FAULT REASON";
+    }
+}
