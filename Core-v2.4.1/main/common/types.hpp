@@ -141,3 +141,11 @@ struct NetworkEvent {
         StateChange state_change;
     };
 };
+enum class HardwareEdition {
+    LITE,
+    STANDARD,
+};
+
+HardwareEdition get_hardware_edition();
+
+HardwareEdition get_hardware_edition();

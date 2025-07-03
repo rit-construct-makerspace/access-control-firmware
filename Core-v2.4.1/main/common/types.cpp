@@ -1,6 +1,9 @@
 #include "common/types.hpp"
+
 #include <iomanip>
 #include <sstream>
+
+#include "driver/gpio.h"
 
 const char* card_tag_type_to_string(CardTagType type) {
     switch (type) {

@@ -65,12 +65,14 @@ void go_to_state(IOState next_state) {
             LED::set_state(LED::DisplayState::IDLE);
             break;
         case IOState::UNLOCKED:
+            Buzzer::send_effect(SoundEffect::ACCEPTED_EFFECT);
             LED::set_state(LED::DisplayState::UNLOCKED);
             break;
         case IOState::ALWAYS_ON:
             LED::set_state(LED::DisplayState::ALWAYS_ON);
             break;
         case IOState::LOCKOUT:
+            Buzzer::send_effect(SoundEffect::LOCKOUT_EFFECT);
             LED::set_state(LED::DisplayState::LOCKOUT);
             break;
         case IOState::NEXT_CARD:
@@ -80,6 +82,7 @@ void go_to_state(IOState next_state) {
             LED::set_state(LED::DisplayState::WELCOMING);
             break;
         case IOState::WELCOMED:
+            Buzzer::send_effect(SoundEffect::ACCEPTED_EFFECT);
             LED::set_state(LED::DisplayState::WELCOMED);
             break;
         case IOState::ALWAYS_ON_WAITING:
@@ -95,6 +98,7 @@ void go_to_state(IOState next_state) {
             LED::set_state(LED::DisplayState::AWAIT_AUTH);
             break;
         case IOState::DENIED:
+            Buzzer::send_effect(SoundEffect::DENIED_EFFECT);
             LED::set_state(LED::DisplayState::DENIED);
             break;
         case IOState::FAULT:
@@ -194,6 +198,9 @@ void handle_card_detected(IOEvent event) {
             xTimerStop(waiting_timer, pdMS_TO_TICKS(100));
             go_to_state(IOState::ALWAYS_ON);
             break;
+        case IOState::LOCKOUT:
+            Buzzer::send_effect(SoundEffect::LOCKOUT_EFFECT);
+            break;
         default:
             return;
     }
@@ -284,6 +291,7 @@ int IO::init() {
     LED::init();
     Button::init();
     CardReader::init();
+    Buzzer::init();
 
     xTaskCreate(io_thread_fn, "io", IO_TASK_STACK_SIZE, NULL, 0, &io_thread);
 

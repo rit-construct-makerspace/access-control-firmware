@@ -11,7 +11,7 @@
 #include "common/pins.hpp"
 #include "io/IO.hpp"
 
-const char * TAG = "card";
+static const char * TAG = "card";
 
 #define CARD_TASK_STACK_SIZE 4000
 TaskHandle_t card_thread;
@@ -42,6 +42,7 @@ void mfrc630_SPI_unselect() {
 
 void card_reader_thread_fn(void *) {
     bool card_detected = false;
+    uint8_t detect_allowed = 0;
     while (true) {
         uint16_t atqa = mfrc630_iso14443a_REQA();
         if (atqa != 0) {  // Are there any cards that answered?
@@ -55,7 +56,7 @@ void card_reader_thread_fn(void *) {
 
             if (uid_len != 0) {  // did we get an UID?
 
-                if (!card_detected) {
+                if (!card_detected && detect_allowed <= 0) {
                     IO::send_event({
                         .type = IOEventType::CARD_DETECTED,
                         .card_detected = {
@@ -66,6 +67,7 @@ void card_reader_thread_fn(void *) {
                         },
                     });
                     card_detected = true;
+                    detect_allowed = 6;
                 }
 
                 // Use the manufacturer default key...
@@ -105,6 +107,9 @@ void card_reader_thread_fn(void *) {
                 card_detected = false;
             }
         }
+
+        if (detect_allowed > 0) {detect_allowed--;}
+
         vTaskDelay(pdMS_TO_TICKS(50));
     }
 };
