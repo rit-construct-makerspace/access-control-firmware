@@ -6,6 +6,7 @@ dependencies:
       require: private
       version: '>=5.0'
     - name: espressif/tinyusb
+    - name: espressif/tinyusb
       registry_url: https://components.espressif.com
       require: public
       version: '>=0.14.2'
@@ -18,7 +19,7 @@ dependencies:
     dependencies:
     - name: idf
       require: private
-      version: '>=5.0'
+      version: '>=4.3'
     source:
       registry_url: https://components.espressif.com/
       type: service
@@ -30,13 +31,14 @@ dependencies:
       require: private
       version: '>=4.3'
     source:
-      registry_url: https://components.espressif.com
+      registry_url: https://components.espressif.com/
       type: service
     version: 1.1.0
   espressif/json_generator:
     component_hash: 45033e1c199b13f1c8c1b544fb7d4e2df6a8e3071ebdcb1b22582b61a7974ff2
     dependencies: []
     source:
+      registry_url: https://components.espressif.com/
       registry_url: https://components.espressif.com/
       type: service
     version: 1.1.2
@@ -62,6 +64,11 @@ dependencies:
     source:
       registry_url: https://components.espressif.com
       type: service
+    targets:
+    - esp32s2
+    - esp32s3
+    - esp32p4
+    version: 0.18.0~2
     targets:
     - esp32s2
     - esp32s3
