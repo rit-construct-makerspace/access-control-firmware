@@ -284,6 +284,7 @@ int IO::init() {
     LED::init();
     Button::init();
     CardReader::init();
+    Buzzer::init();
 
     xTaskCreate(io_thread_fn, "io", IO_TASK_STACK_SIZE, NULL, 0, &io_thread);
 

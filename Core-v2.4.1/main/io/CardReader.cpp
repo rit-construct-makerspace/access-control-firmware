@@ -11,7 +11,7 @@
 #include "common/pins.hpp"
 #include "io/IO.hpp"
 
-const char * TAG = "card";
+static const char * TAG = "card";
 
 #define CARD_TASK_STACK_SIZE 4000
 TaskHandle_t card_thread;
