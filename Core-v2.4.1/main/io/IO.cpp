@@ -102,6 +102,7 @@ void go_to_state(IOState next_state) {
             LED::set_state(LED::DisplayState::DENIED);
             break;
         case IOState::FAULT:
+            Buzzer::send_effect(SoundEffect::FAULT_EFFECT);
             LED::set_state(LED::DisplayState::FAULT);
             break;
         default:
@@ -296,5 +297,12 @@ int IO::init() {
     xTaskCreate(io_thread_fn, "io", IO_TASK_STACK_SIZE, NULL, 0, &io_thread);
 
     go_to_state(IOState::IDLE);
+
+    vTaskDelay(pdMS_TO_TICKS(10000));
+    fault();
     return 0;
 }
+
+void IO::fault() {
+    go_to_state(IOState::FAULT);
+};

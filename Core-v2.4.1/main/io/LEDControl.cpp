@@ -129,6 +129,14 @@ const LEDAnimation RESTART_ANIMATION {
     }
 };
 
+const LEDAnimation FAULT_ANIMATION {
+    .length = 2,
+    .frames = {
+        LEDState {RED, RED, RED, RED},
+        LEDState {OFF, OFF, OFF, OFF},
+    }
+};
+
 led_strip_handle_t configure_led(void) {
     led_color_component_format_t strip_color_format;
     HardwareEdition edition = get_hardware_edition();
@@ -258,6 +266,9 @@ void led_thread_fn(void *) {
             case LED::DisplayState::RESTART:
                 advance_frame(RESTART_ANIMATION, strip, current_frame);
                 break;
+            case LED::DisplayState::FAULT:
+                advance_frame(FAULT_ANIMATION, strip, current_frame);
+                break;
             default:
                 break;
         }
@@ -268,7 +279,7 @@ void led_thread_fn(void *) {
         }
 
         led_strip_refresh(strip);
-        vTaskDelay(pdMS_TO_TICKS(400));
+        vTaskDelay(pdMS_TO_TICKS(350));
     };
 };
 
