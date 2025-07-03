@@ -54,6 +54,7 @@ namespace SoundEffect {
         const Note ACCEPTED_NOTES[2] = { A4, A5 };
         const Note DENIED_NOTES[2] = { A4, A2 };
         const Note LOCKOUT_NOTES[3] = { A3, OFF, A3 };
+        const Note FAULT_NOTES[6] = {A4, A2, A4, A2, A4, A2};
     };
 
     const Effect ACCEPTED_EFFECT = {
@@ -69,5 +70,10 @@ namespace SoundEffect {
     const Effect LOCKOUT_EFFECT = {
         .length = 3,
         .notes = detail::LOCKOUT_NOTES,
+    };
+
+    const Effect FAULT_EFFECT = {
+        .length = 6,
+        .notes = detail::FAULT_NOTES,
     };
 }

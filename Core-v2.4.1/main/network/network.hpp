@@ -7,6 +7,8 @@ namespace Network {
 
     int init();
 
+    int init();
+
 
     int send_event(NetworkEvent ev);
     bool is_online();

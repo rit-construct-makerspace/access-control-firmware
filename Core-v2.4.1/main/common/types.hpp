@@ -148,4 +148,10 @@ enum class HardwareEdition {
 
 HardwareEdition get_hardware_edition();
 
-HardwareEdition get_hardware_edition();
+enum class FaultReason {
+    SERVER_COMMANDED,
+    OVER_TEMP,
+    START_FAIL,
+    CARD_SWITCH,
+};
+const char* fault_reason_to_string(FaultReason type);
