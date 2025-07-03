@@ -9,6 +9,7 @@
 #include <freertos/semphr.h>
 
 #include "common/pins.hpp"
+#include "common/types.hpp"
 #include "esp_log.h"
 #include "led_strip.h"
 
@@ -129,12 +130,22 @@ const LEDAnimation RESTART_ANIMATION {
 };
 
 led_strip_handle_t configure_led(void) {
+    led_color_component_format_t strip_color_format;
+    HardwareEdition edition = get_hardware_edition();
+    switch (edition) {
+        case HardwareEdition::LITE:
+            strip_color_format = LED_STRIP_COLOR_COMPONENT_FMT_RGB;
+            break;
+        case HardwareEdition::STANDARD:
+            strip_color_format = LED_STRIP_COLOR_COMPONENT_FMT_GRB;
+            break;
+    }
     // LED strip general initialization, according to your led board design
     led_strip_config_t strip_config = {
         .strip_gpio_num = LED_PIN, // The GPIO that connected to the LED strip's data line
         .max_leds = 4,      // The number of LEDs in the strip,
         .led_model = LED_MODEL_WS2812,        // LED strip model
-        .color_component_format = LED_STRIP_COLOR_COMPONENT_FMT_GRB, // The color order of the strip: RGB
+        .color_component_format = strip_color_format, // The color order of the strip: RGB
         .flags = {
             .invert_out = false, // don't invert the output signal
         }

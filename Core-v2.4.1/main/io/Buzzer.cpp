@@ -111,7 +111,7 @@ void setup() {
 
 int Buzzer::init() {
 
-    effect_queue = xQueueCreate(8, sizeof(SoundEffect::Effect));
+    effect_queue = xQueueCreate(1, sizeof(SoundEffect::Effect));
 
 
     gpio_config_t conf = {
