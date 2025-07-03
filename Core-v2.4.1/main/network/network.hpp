@@ -4,11 +4,15 @@
 #include "esp_netif_types.h"
 
 namespace Network {
+
     int init();
+
 
     int send_event(NetworkEvent ev);
     bool is_online();
 
+    // Used only by tasks on the network side of things to
+    // communicate with the main network handler 
     enum class InternalEventType{
         NetifUp,
         NetifDown,
