@@ -19,7 +19,6 @@ static const char* TAG = "network";
 
 static TaskHandle_t network_task;
 
-
 /* The event group allows multiple bits for each event, but we only care about
  * two events:
  * - we are connected to the AP with an IP
@@ -149,7 +148,7 @@ const char* reset_reason_to_str(esp_reset_reason_t res) {
 void consider_reset() {
     esp_reset_reason_t reason = esp_reset_reason();
     ESP_LOGI(TAG, "Reset cause: %s", reset_reason_to_str(reason));
-    if (reason == ESP_RST_PANIC){
+    if (reason == ESP_RST_PANIC) {
         ESP_LOGE(TAG, "Upload coredump");
     }
 }
@@ -179,13 +178,21 @@ namespace Network {
 
         return 0;
     }
+    bool is_online() { return true; }
 
-    void report_state_transition(IOState from, IOState to) {
-        ESP_LOGI(TAG, "Transition %s -> %s", io_state_to_string(from),
-                 io_state_to_string(to));
+    bool send_event(NetworkEvent ev) {
+        if (ev.type == NetworkEventType::AuthRequest) {
+            ESP_LOGI(TAG, "Auth request");
+        } else if (ev.type == NetworkEventType::StateChange) {
+            ESP_LOGI(TAG, "state change from %s to %s",
+                     io_state_to_string(ev.state_change.from),
+                     io_state_to_string(ev.state_change.to));
+        } else if (ev.type == NetworkEventType::PleaseRestart) {
+            ESP_LOGI(TAG, "sohuld restart");
+        }
+        return true;
     }
 
-    bool is_online() { return true; }
 } // namespace Network
 
 namespace bad {}

@@ -9,11 +9,16 @@ enum class CardTagType {
 };
 const char* card_tag_type_to_string(CardTagType type);
 
-struct CardTagID  {
+struct CardTagID {
     CardTagType type;
     std::array<uint8_t, 10> value;
 
     std::string to_string() const;
+};
+
+struct OperatorPermissions {
+    bool can_set_state;
+    bool can_operate;
 };
 
 enum class IOState {
@@ -74,7 +79,6 @@ struct ButtonEvent {
     ButtonEventType type;
 };
 
-
 enum class NetworkCommandEventType {
     IDENTIFY,
     COMMAND_STATE,
@@ -84,9 +88,11 @@ const char* network_command_event_type_to_string(NetworkCommandEventType type);
 struct NetworkCommandEvent {
     NetworkCommandEventType type;
     IOState commanded_state; // Only valid if type is COMMAND_STATE
+    bool requested; // true if we asked to auth. false if command came from on high
     std::string to_string() const;
 };
 
+// From other things, to IO
 struct IOEvent {
     IOEventType type;
     union {
@@ -101,6 +107,40 @@ struct IOEvent {
 using WifiSSID     = std::array<uint8_t, 32>;
 using WifiPassword = std::array<uint8_t, 64>;
 
+enum class StateChangeReason{
+    ButtonPress,
+    OverTermperature,
+    CardRemoved,
+    CardActivated,
+    ServerCommanded,
+};  
+
+struct StateChange {
+    IOState from;
+    IOState to;
+    StateChangeReason reason;
+    CardTagID who;
+};
+
+struct AuthRequest {
+    CardTagID requester;
+    IOState to_state;
+};
+
+// Things to tell network task
+enum class NetworkEventType {
+    AuthRequest,
+    StateChange,
+    PleaseRestart,
+};
+
+struct NetworkEvent {
+    NetworkEventType type;
+    union {
+        AuthRequest auth_request;
+        StateChange state_change;
+    };
+};
 enum class HardwareEdition {
     LITE,
     STANDARD,
