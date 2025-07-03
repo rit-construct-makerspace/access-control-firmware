@@ -134,7 +134,7 @@ esp_err_t USB::init() {
         .external_phy             = false,
         .configuration_descriptor = NULL,
         .self_powered             = true,
-        .vbus_monitor_io          = false,
+        .vbus_monitor_io          = -1,
     };
 
     ESP_ERROR_CHECK(tinyusb_driver_install(&tusb_cfg));

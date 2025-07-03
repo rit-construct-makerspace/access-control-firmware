@@ -101,3 +101,9 @@ struct IOEvent {
 using WifiSSID     = std::array<uint8_t, 32>;
 using WifiPassword = std::array<uint8_t, 64>;
 
+enum class HardwareEdition {
+    LITE,
+    STANDARD,
+};
+
+HardwareEdition get_hardware_edition();
