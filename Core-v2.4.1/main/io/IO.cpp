@@ -11,6 +11,7 @@
 #include "io/Button.hpp"
 #include "io/CardReader.hpp"
 #include "io/Buzzer.hpp"
+#include "network/network.hpp"
 
 static const char* TAG = "io";
 
@@ -96,7 +97,7 @@ void go_to_state(IOState next_state) {
             LED::set_animation(Animation::IDLE_WAITING_ANIMATION);
             break;
         case IOState::AWAIT_AUTH:
-            //LED::set_animation(Animation::AWAIT_AUTH_ANIMATION);
+            LED::set_animation(Animation::AWAIT_AUTH_ANIMATION);
             break;
         case IOState::DENIED:
             Buzzer::send_effect(SoundEffect::DENIED_EFFECT);
@@ -186,19 +187,47 @@ void handle_card_detected(IOEvent event) {
 
     switch (current_state) {
         case IOState::IDLE:
-            go_to_state(IOState::UNLOCKED);
+            go_to_state(IOState::AWAIT_AUTH);
+            Network::send_event({
+                .type = NetworkEventType::AuthRequest,
+                .auth_request = {
+                    .requester = event.card_detected.card_tag_id,
+                    .to_state = IOState::UNLOCKED,
+                },
+            });
             break;
         case IOState::LOCKOUT_WAITING:
             xTimerStop(waiting_timer, pdMS_TO_TICKS(100));
-            go_to_state(IOState::LOCKOUT);
+            go_to_state(IOState::AWAIT_AUTH);
+            Network::send_event({
+                .type = NetworkEventType::AuthRequest,
+                .auth_request = {
+                    .requester = event.card_detected.card_tag_id,
+                    .to_state = IOState::LOCKOUT,
+                },
+            });
             break;
         case IOState::IDLE_WAITING:
             xTimerStop(waiting_timer, pdMS_TO_TICKS(100));
-            go_to_state(IOState::IDLE);
+            go_to_state(IOState::AWAIT_AUTH);
+            Network::send_event({
+                .type = NetworkEventType::AuthRequest,
+                .auth_request = {
+                    .requester = event.card_detected.card_tag_id,
+                    .to_state = IOState::IDLE,
+                }
+            });
             break;
         case IOState::ALWAYS_ON_WAITING:
             xTimerStop(waiting_timer, pdMS_TO_TICKS(100));
-            go_to_state(IOState::ALWAYS_ON);
+            go_to_state(IOState::AWAIT_AUTH);
+            Network::send_event({
+                .type = NetworkEventType::AuthRequest,
+                .auth_request = {
+                    .requester = event.card_detected.card_tag_id,
+                    .to_state = IOState::ALWAYS_ON,
+                }
+            });
             break;
         case IOState::LOCKOUT:
             Buzzer::send_effect(SoundEffect::LOCKOUT_EFFECT);

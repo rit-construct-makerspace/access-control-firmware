@@ -39,6 +39,7 @@ namespace Animation {
     static const RGB GREEN_DIM = {0, 5, 0};
     static const RGB BLUE = {0, 0, 15};
     static const RGB ORANGE = {15, 10, 0};
+    static const RGB ORANGE_DIM = {5, 4, 0};
 
     // *********************************
     // ANIMATIONS
@@ -137,6 +138,18 @@ namespace Animation {
         .frames = {
             Frame {RED, RED, RED, RED},
             Frame {OFF, OFF, OFF, OFF},
+        }
+    };
+
+    const Animation AWAIT_AUTH_ANIMATION {
+        .length = 6,
+        .frames = {
+            Frame {ORANGE, ORANGE_DIM, ORANGE_DIM, ORANGE_DIM},
+            Frame {ORANGE_DIM, ORANGE, ORANGE_DIM, ORANGE_DIM},
+            Frame {ORANGE_DIM, ORANGE_DIM, ORANGE, ORANGE_DIM},
+            Frame {ORANGE_DIM, ORANGE_DIM, ORANGE_DIM, ORANGE},
+            Frame {ORANGE_DIM, ORANGE_DIM, ORANGE, ORANGE_DIM},
+            Frame {ORANGE_DIM, ORANGE, ORANGE_DIM, ORANGE_DIM},
         }
     };
 }
