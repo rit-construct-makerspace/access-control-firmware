@@ -148,6 +148,7 @@ enum class NetworkEventType {
 struct NetworkEvent {
     NetworkEventType type;
     union {
+        int _ = 0;
         AuthRequest auth_request;
         StateChange state_change;
     };

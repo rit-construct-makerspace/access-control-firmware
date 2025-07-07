@@ -5,6 +5,7 @@
 #include "esp_websocket_client.h"
 #include "io/IO.hpp"
 #include "network/network.hpp"
+#include "storage.hpp"
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
 #include <freertos/task.h>
@@ -95,26 +96,27 @@ void handle_server_state_change(const char* state) {
     });
 }
 
-IOState outstanding_tostate = IOState::IDLE; // todo, should be sent by the server
+IOState outstanding_tostate =
+    IOState::IDLE; // todo, should be sent by the server
 
-void handle_auth_response(const char *auth, int verified){
+void handle_auth_response(const char* auth, int verified) {
     std::optional<CardTagID> requester = CardTagID::from_string(auth);
-    if (!requester.has_value()){
+    if (!requester.has_value()) {
         ESP_LOGE(TAG, "Can't auth bc bad UID: %.14s", auth);
-        return;
+        verified = 0;
     }
     ESP_LOGI(TAG, "Handling auth response: %s - %d", auth, verified);
 
     Network::send_internal_event(Network::InternalEvent{
         .type = Network::InternalEventType::WSACSAuthResponse,
-        .wsacs_auth_response = {   
-            .user = requester.value(),
-            .to_state = outstanding_tostate,
-            .verified = (bool)verified,
-        },
+        .wsacs_auth_response =
+            {
+                .user     = requester.value(),
+                .to_state = outstanding_tostate,
+                .verified = (bool)verified,
+            },
     });
 }
-
 
 void handle_incoming_ws_text(const char* data, size_t len) {
     if (len == 0) {
@@ -134,12 +136,16 @@ void handle_incoming_ws_text(const char* data, size_t len) {
         handle_server_state_change(
             cJSON_GetStringValue(cJSON_GetObjectItem(obj, "State")));
     }
-    if (cJSON_HasObjectItem(obj, "Auth") && cJSON_HasObjectItem(obj, "Verified")) {
-        const char * auth = cJSON_GetStringValue(cJSON_GetObjectItem(obj, "Auth"));
-        int verified = cJSON_GetNumberValue(cJSON_GetObjectItem(obj, "Verified"));        
+    if (cJSON_HasObjectItem(obj, "Auth")) {
+        int verified = 0;
+        if (cJSON_HasObjectItem(obj, "Verified")) {
+            verified =
+                cJSON_GetNumberValue(cJSON_GetObjectItem(obj, "Verified"));
+        }
+        const char* auth =
+            cJSON_GetStringValue(cJSON_GetObjectItem(obj, "Auth"));
         handle_auth_response(auth, verified);
     }
-
 
     cJSON_free(obj);
 }
@@ -149,7 +155,7 @@ void send_cjson(cJSON* obj) {
     cJSON_AddNumberToObject(obj, "Seq", (double)get_next_seqnum());
 
     char* text = cJSON_Print(obj);
-    size_t len = strnlen(text, 1000);
+    size_t len = strnlen(text, 5000);
     ESP_LOGI(TAG, "Sending message %s", text);
 
     int err = esp_websocket_client_send_text(ws_handle, text, len,
@@ -186,8 +192,9 @@ void send_opening_message() {
         return;
     }
     cJSON* msg = cJSON_CreateObject();
-    cJSON_AddStringToObject(msg, "SerialNumber", "1234");
-    cJSON_AddStringToObject(msg, "Key", "01bec4377c4906fb5264841a42532883");
+    cJSON_AddStringToObject(msg, "SerialNumber",
+                            Storage::get_serial_number().c_str());
+    cJSON_AddStringToObject(msg, "Key", Storage::get_key().c_str());
     cJSON_AddStringToObject(msg, "HWType", "Core");
     cJSON_AddStringToObject(msg, "HWVersion", "2.4.1");
     cJSON_AddStringToObject(msg, "FWVersion", "testing");
@@ -207,8 +214,8 @@ void send_auth_request(AuthRequest request) {
         return;
     }
     outstanding_tostate = request.to_state;
-    cJSON* msg      = cJSON_CreateObject();
-    std::string uid = request.requester.to_string();
+    cJSON* msg          = cJSON_CreateObject();
+    std::string uid     = request.requester.to_string();
     cJSON_AddStringToObject(msg, "Auth", uid.c_str());
     cJSON_AddStringToObject(msg, "AuthTo",
                             io_state_to_string(request.to_state));
@@ -286,8 +293,9 @@ void connect_to_server() {
         seqnum    = 0;
         xTimerStop(keep_alive_timer, pdMS_TO_TICKS(100));
     }
-    cfg.uri                  = "ws://calcarea.student.rit.edu/api/ws";
-    cfg.port                 = 3000;
+    // cfg.uri                  = "ws://calcarea.student.rit.edu/api/ws";
+    cfg.uri = "ws://make.rit.edu/api/ws";
+    // cfg.port                 = 3000;
     cfg.network_timeout_ms   = 10000;
     cfg.reconnect_timeout_ms = 1000;
 
@@ -319,7 +327,7 @@ void wsacs_thread_fn(void*) {
             seqnum = 0;
             send_opening_message();
             if (xTimerStart(keep_alive_timer, pdMS_TO_TICKS(100)) == pdFAIL) {
-                ESP_LOGE(TAG, "Cpi;dnt srtart timer");
+                ESP_LOGE(TAG, "Couldnt start keepalive timer");
             }
         } else if (event.type == WSACS::EventType::ServerConnect) {
         } else if (event.type == WSACS::EventType::KeepAliveTimer) {

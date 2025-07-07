@@ -247,9 +247,9 @@ namespace Network {
 
     int init() {
         esp_log_level_set("esp-tls",
-                          ESP_LOG_DEBUG); // enable INFO logs from DHCP client
+                          ESP_LOG_INFO); // enable INFO logs from DHCP client
         esp_log_level_set("transport_ws",
-                          ESP_LOG_DEBUG); // enable INFO logs from DHCP client
+                          ESP_LOG_INFO); // enable INFO logs from DHCP client
 
         network_event_queue = xQueueCreate(5, sizeof(Network::InternalEvent));
         consider_reset();

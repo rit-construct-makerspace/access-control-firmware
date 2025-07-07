@@ -67,7 +67,7 @@ namespace Storage {
     }
 
     std::string get_server() {
-        std::string returnValue = "calcarea.student.rit.edu";
+        std::string returnValue = "make.rit.edu";
         return returnValue;
     }
 
@@ -77,12 +77,12 @@ namespace Storage {
     }
 
     std::string get_serial_number() {
-        std::string returnValue = "1234567890";
+        std::string returnValue = "1234";
         return returnValue;
     }
 
     std::string get_key() {
-        std::string returnValue = "ABCDEFGHIJ";
+        std::string returnValue = "8846c500a8b229aa1b5de8878dfd400b";
         return returnValue;
     }
 

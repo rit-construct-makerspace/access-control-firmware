@@ -27,7 +27,8 @@ namespace Network {
     struct InternalEvent{
         InternalEventType type;
         union {
-            esp_ip4_addr_t netif_up_ip = {0};
+            int _ = 0;
+            esp_ip4_addr_t netif_up_ip;
             IOState server_set_state;
             uint64_t server_set_time;
             WSACS::AuthResponse wsacs_auth_response;

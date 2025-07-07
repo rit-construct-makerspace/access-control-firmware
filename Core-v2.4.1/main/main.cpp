@@ -17,6 +17,7 @@ void set_log_levels(){
     esp_log_level_set("wifi_init", ESP_LOG_NONE); 
     esp_log_level_set("phy_init", ESP_LOG_NONE); 
     esp_log_level_set("wifi", ESP_LOG_NONE);
+    esp_log_level_set("lwIP", ESP_LOG_DEBUG);
 
     
     // ESP_LOGI("lhuinsdvv", "Logs turned off");
