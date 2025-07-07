@@ -101,6 +101,9 @@ const char* io_event_type_to_string(IOEventType type) {
 std::string CardDetectedEvent::to_string() const {
     return "detected:" + card_tag_id.to_string();
 }
+std::string CardRemovedEvent::to_string() const {
+    return "removed:" + card_tag_id.to_string();
+}
 
 const char* network_command_event_type_to_string(NetworkCommandEventType type) {
     switch (type) {
