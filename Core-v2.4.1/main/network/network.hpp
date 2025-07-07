@@ -20,6 +20,8 @@ namespace Network {
         ServerSetTime,
         ServerSetState,
 
+        WSACSAuthResponse,
+
         ExternalEvent,
     };
     struct InternalEvent{
@@ -28,6 +30,7 @@ namespace Network {
             esp_ip4_addr_t netif_up_ip = {0};
             IOState server_set_state;
             uint64_t server_set_time;
+            WSACS::AuthResponse wsacs_auth_response;
             NetworkEvent external_event;
         };
     };

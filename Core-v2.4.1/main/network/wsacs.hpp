@@ -3,6 +3,11 @@
 #include "esp_err.h"
 
 namespace WSACS {
+    struct AuthResponse{
+        CardTagID user;
+        IOState to_state;
+        bool verified;
+    };
     // Network -> Websocket
     enum class EventType {
         TryConnect,     // sent when we're online
@@ -21,6 +26,10 @@ namespace WSACS {
        // always included in messages to server, unused for internal events
         IOState current_state = IOState::IDLE;
         // if try connect
+        union{ 
+            int _ = 0;
+            AuthRequest auth_request;
+        };
     };
 
     int init();

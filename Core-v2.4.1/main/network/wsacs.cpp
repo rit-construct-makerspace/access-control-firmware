@@ -95,6 +95,27 @@ void handle_server_state_change(const char* state) {
     });
 }
 
+IOState outstanding_tostate = IOState::IDLE; // todo, should be sent by the server
+
+void handle_auth_response(const char *auth, int verified){
+    std::optional<CardTagID> requester = CardTagID::from_string(auth);
+    if (!requester.has_value()){
+        ESP_LOGE(TAG, "Can't auth bc bad UID: %.14s", auth);
+        return;
+    }
+    ESP_LOGI(TAG, "Handling auth response: %s - %d", auth, verified);
+
+    Network::send_internal_event(Network::InternalEvent{
+        .type = Network::InternalEventType::WSACSAuthResponse,
+        .wsacs_auth_response = {   
+            .user = requester.value(),
+            .to_state = outstanding_tostate,
+            .verified = (bool)verified,
+        },
+    });
+}
+
+
 void handle_incoming_ws_text(const char* data, size_t len) {
     if (len == 0) {
         ESP_LOGE(TAG, "ws message with 0 length???");
@@ -108,12 +129,35 @@ void handle_incoming_ws_text(const char* data, size_t len) {
         return;
     }
     if (cJSON_HasObjectItem(obj, "State")) {
-        ESP_LOGI(TAG, "handle state change: %s", cJSON_GetStringValue(cJSON_GetObjectItem(obj, "State")));
+        ESP_LOGI(TAG, "handle state change: %s",
+                 cJSON_GetStringValue(cJSON_GetObjectItem(obj, "State")));
         handle_server_state_change(
             cJSON_GetStringValue(cJSON_GetObjectItem(obj, "State")));
     }
+    if (cJSON_HasObjectItem(obj, "Auth") && cJSON_HasObjectItem(obj, "Verified")) {
+        const char * auth = cJSON_GetStringValue(cJSON_GetObjectItem(obj, "Auth"));
+        int verified = cJSON_GetNumberValue(cJSON_GetObjectItem(obj, "Verified"));        
+        handle_auth_response(auth, verified);
+    }
+
 
     cJSON_free(obj);
+}
+
+// will add sequence number and to string it (ONLY CALL ON WEBSOCKET THREAD)
+void send_cjson(cJSON* obj) {
+    cJSON_AddNumberToObject(obj, "Seq", (double)get_next_seqnum());
+
+    char* text = cJSON_Print(obj);
+    size_t len = strnlen(text, 1000);
+    ESP_LOGI(TAG, "Sending message %s", text);
+
+    int err = esp_websocket_client_send_text(ws_handle, text, len,
+                                             pdMS_TO_TICKS(100));
+    if (err != len) {
+        ESP_LOGE(TAG, "Failed to send WS message: %d", err);
+    }
+    free((void*)text);
 }
 
 void send_keep_alive_message() {
@@ -131,17 +175,8 @@ void send_keep_alive_message() {
     cJSON* msg = cJSON_CreateObject();
     cJSON_AddStringToObject(msg, "State", io_state_to_string(state));
     cJSON_AddNumberToObject(msg, "Temp", (double)temp);
-    cJSON_AddNumberToObject(msg, "Seq", (double)get_next_seqnum());
 
-    char* text = cJSON_Print(msg);
-    size_t len = strnlen(text, 1000);
-
-    int err = esp_websocket_client_send_text(ws_handle, text, len,
-                                             pdMS_TO_TICKS(100));
-    if (err != len) {
-        ESP_LOGE(TAG, "Failed to send WS message: %d", err);
-    }
-    free((void*)text);
+    send_cjson(msg);
     cJSON_free(msg);
 }
 
@@ -152,7 +187,7 @@ void send_opening_message() {
     }
     cJSON* msg = cJSON_CreateObject();
     cJSON_AddStringToObject(msg, "SerialNumber", "1234");
-    cJSON_AddStringToObject(msg, "Key", "7abad18c015b8dd016263f3d2866b72e");
+    cJSON_AddStringToObject(msg, "Key", "01bec4377c4906fb5264841a42532883");
     cJSON_AddStringToObject(msg, "HWType", "Core");
     cJSON_AddStringToObject(msg, "HWVersion", "2.4.1");
     cJSON_AddStringToObject(msg, "FWVersion", "testing");
@@ -162,18 +197,24 @@ void send_opening_message() {
     cJSON_AddItemToArray(req_arr, req0);
     cJSON_AddItemToArray(req_arr, req1);
     cJSON_AddStringToObject(msg, "FWVersion", "testing");
-    cJSON_AddNumberToObject(msg, "Seq", (double)get_next_seqnum());
 
-    char* text = cJSON_Print(msg);
-    size_t len = strnlen(text, 1000);
-    ESP_LOGI(TAG, "Sending message %s", text);
-
-    int err = esp_websocket_client_send_text(ws_handle, text, len,
-                                             pdMS_TO_TICKS(100));
-    if (err != len) {
-        ESP_LOGE(TAG, "Failed to send WS message: %d", err);
+    send_cjson(msg);
+    cJSON_free(msg);
+}
+void send_auth_request(AuthRequest request) {
+    if (ws_handle == NULL) {
+        ESP_LOGE(TAG, "Programming error");
+        return;
     }
-    free((void*)text);
+    outstanding_tostate = request.to_state;
+    cJSON* msg      = cJSON_CreateObject();
+    std::string uid = request.requester.to_string();
+    cJSON_AddStringToObject(msg, "Auth", uid.c_str());
+    cJSON_AddStringToObject(msg, "AuthTo",
+                            io_state_to_string(request.to_state));
+
+    send_cjson(msg);
+
     cJSON_free(msg);
 }
 
@@ -187,7 +228,7 @@ static void websocket_event_handler(void* handler_args, esp_event_base_t base,
     case WEBSOCKET_EVENT_CONNECTED:
         ESP_LOGI(TAG, "WEBSOCKET_EVENT_CONNECTED");
         WSACS::send_message(
-            WSACS::Event{.type = WSACS::EventType::ServerConnect});
+            WSACS::Event{.type = WSACS::EventType::ServerConnect, ._ = {0}});
         break;
     case WEBSOCKET_EVENT_DISCONNECTED:
         ESP_LOGI(TAG, "WEBSOCKET_EVENT_DISCONNECTED");
@@ -210,10 +251,8 @@ static void websocket_event_handler(void* handler_args, esp_event_base_t base,
         }
         break;
     case WEBSOCKET_EVENT_DATA:
-        if (data->op_code == 0x2) { // Opcode 0x2 indicates binary data
-            ESP_LOGW(TAG, "Received binary data, DROPPING");
-        } else {
-            ESP_LOGI(TAG, "WEBSOCKET_EVENT_DATA");
+        // network watchdog feed
+        if (data->op_code == 0x1) { // Opcode 0x1 indicates text data
             handle_incoming_ws_text(data->data_ptr, data->data_len);
         }
         break;
@@ -285,6 +324,11 @@ void wsacs_thread_fn(void*) {
         } else if (event.type == WSACS::EventType::ServerConnect) {
         } else if (event.type == WSACS::EventType::KeepAliveTimer) {
             send_keep_alive_message();
+        } else if (event.type == WSACS::EventType::AuthRequest) {
+            send_auth_request(event.auth_request);
+        } else {
+
+            ESP_LOGW(TAG, "Not handling message with type %d", (int)event.type);
         }
     }
 }

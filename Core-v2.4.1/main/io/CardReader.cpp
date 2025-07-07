@@ -62,7 +62,7 @@ void card_reader_thread_fn(void *) {
                         .card_detected = {
                             .card_tag_id = {
                                 .type = CardTagType::SEVEN,
-                                .value = {0},
+                                .value = {uid[0],uid[1],uid[2],uid[3],uid[4],uid[5],uid[6]},
                             },
                         },
                     });

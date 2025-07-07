@@ -2,6 +2,7 @@
 #include <array>
 #include <cstdint>
 #include <string>
+#include <optional>
 
 enum class CardTagType {
     SEVEN,
@@ -10,9 +11,10 @@ enum class CardTagType {
 const char* card_tag_type_to_string(CardTagType type);
 
 struct CardTagID {
-    CardTagType type;
-    std::array<uint8_t, 10> value;
+    CardTagType type = CardTagType::SEVEN;
+    std::array<uint8_t, 10> value = {0};
 
+    static std::optional<CardTagID> from_string(const char *);
     std::string to_string() const;
 };
 
@@ -89,7 +91,8 @@ const char* network_command_event_type_to_string(NetworkCommandEventType type);
 struct NetworkCommandEvent {
     NetworkCommandEventType type;
     IOState commanded_state; // Only valid if type is COMMAND_STATE
-    bool requested; // true if we asked to auth. false if command came from on high
+    bool requested; // true if we asked to auth. false if command came from on
+                    // high
     CardTagID for_user;
     std::string to_string() const;
 };
@@ -98,6 +101,7 @@ struct NetworkCommandEvent {
 struct IOEvent {
     IOEventType type;
     union {
+        int _ = 0;
         ButtonEvent button;
         CardDetectedEvent card_detected;
         CardRemovedEvent card_removed;
@@ -109,13 +113,13 @@ struct IOEvent {
 using WifiSSID     = std::array<uint8_t, 32>;
 using WifiPassword = std::array<uint8_t, 64>;
 
-enum class StateChangeReason{
+enum class StateChangeReason {
     ButtonPress,
     OverTermperature,
     CardRemoved,
     CardActivated,
     ServerCommanded,
-};  
+};
 
 struct StateChange {
     IOState from;
@@ -127,6 +131,10 @@ struct StateChange {
 struct AuthRequest {
     CardTagID requester;
     IOState to_state;
+};
+struct AuthResponse{
+    CardTagID requester;
+    bool verified;
 };
 
 // Things to tell network task

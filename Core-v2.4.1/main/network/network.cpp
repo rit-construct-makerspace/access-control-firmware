@@ -150,7 +150,31 @@ void consider_reset() {
     }
 }
 
+static const AuthRequest invalid_auth = {.requester = CardTagID{},
+                                         .to_state  = IOState::RESTART};
+static AuthRequest outstanding_auth   = invalid_auth;
+
 namespace Network {
+    void handle_external_event(NetworkEvent event) {
+        if (event.type == NetworkEventType::AuthRequest) {
+            outstanding_auth = event.auth_request;
+            // do fancier things in case this fails (ask storage)
+            WSACS::send_message(WSACS::Event{
+                .type         = WSACS::EventType::AuthRequest,
+                .auth_request = event.auth_request,
+            });
+        } else if (event.type == NetworkEventType::PleaseRestart) {
+            ESP_LOGE(TAG, "going kaboom");
+            vTaskDelay(pdMS_TO_TICKS(1000));
+            esp_restart();
+        } else if (event.type == NetworkEventType::StateChange) {
+            // WSACS::send_message(WSACS::Event{
+            // .type = WSACS::EventType::
+            // })
+            ESP_LOGI(TAG, "need to state change report to wsacs (maybe)");
+        }
+    }
+
     void network_thread_fn(void* p) {
         wifi_init_sta();
 
@@ -162,7 +186,9 @@ namespace Network {
                 continue;
             }
 
-            if (event.type == InternalEventType::NetifUp) {
+            if (event.type == InternalEventType::ExternalEvent) {
+                handle_external_event(event.external_event);
+            } else if (event.type == InternalEventType::NetifUp) {
                 ESP_LOGD(TAG, "Wifi up, tell wsacs to connect");
                 WSACS::send_message(
                     WSACS::Event{.type = WSACS::EventType::TryConnect});
@@ -173,8 +199,35 @@ namespace Network {
                         {
                             .type = NetworkCommandEventType::COMMAND_STATE,
                             .commanded_state = event.server_set_state,
+                            .requested       = false,
+                            .for_user        = CardTagID{},
                         },
                 });
+            } else if (event.type == InternalEventType::WSACSAuthResponse) {
+                if (event.wsacs_auth_response.verified) {
+                    IO::send_event({
+                        .type = IOEventType::NETWORK_COMMAND,
+                        .network_command =
+                            {
+                                .type = NetworkCommandEventType::COMMAND_STATE,
+                                .commanded_state =
+                                    event.wsacs_auth_response.to_state,
+                                .requested = true,
+                                .for_user  = event.wsacs_auth_response.user,
+                            },
+                    });
+                } else {
+                    IO::send_event({
+                        .type = IOEventType::NETWORK_COMMAND,
+                        .network_command =
+                            {
+                                .type = NetworkCommandEventType::DENY,
+                                .commanded_state = event.wsacs_auth_response.to_state,
+                                .requested = true,
+                                .for_user = event.wsacs_auth_response.user
+                            },
+                    });
+                }
             }
         }
         return;
@@ -212,5 +265,10 @@ namespace Network {
         return 0;
     }
 
-    bool is_online() { return true; }
+    bool is_online() {
+        // todo, io task inits first before we have a chance to create mutex
+        // check if mutex is null, if it is, return false rather than
+        // dereferencing null ptr
+        return true;
+    }
 } // namespace Network
