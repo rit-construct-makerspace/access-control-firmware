@@ -100,22 +100,22 @@ namespace SoundEffect {
         };
     };
 
-    const Effect ACCEPTED_EFFECT = {
+    const Effect ACCEPTED = {
         .length = 2,
         .notes = detail::ACCEPTED_NOTES,
     };
 
-    const Effect DENIED_EFFECT = {
+    const Effect DENIED = {
         .length = 2,
         .notes = detail::DENIED_NOTES,
     };
 
-    const Effect LOCKOUT_EFFECT = {
+    const Effect LOCKOUT = {
         .length = 3,
         .notes = detail::LOCKOUT_NOTES,
     };
 
-    const Effect FAULT_EFFECT = {
+    const Effect FAULT = {
         .length = 6,
         .notes = detail::FAULT_NOTES,
     };

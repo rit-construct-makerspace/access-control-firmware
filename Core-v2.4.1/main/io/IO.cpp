@@ -69,15 +69,15 @@ void go_to_state(IOState next_state) {
             LED::set_animation(Animation::IDLE);
             break;
         case IOState::UNLOCKED:
-            Buzzer::send_effect(SoundEffect::ACCEPTED_EFFECT);
+            Buzzer::send_effect(SoundEffect::ACCEPTED);
             LED::set_animation(Animation::UNLOCKED);
             break;
         case IOState::ALWAYS_ON:
-            Buzzer::send_effect(SoundEffect::ACCEPTED_EFFECT);
+            Buzzer::send_effect(SoundEffect::ACCEPTED);
             LED::set_animation(Animation::ALWAYS_ON);
             break;
         case IOState::LOCKOUT:
-            Buzzer::send_effect(SoundEffect::LOCKOUT_EFFECT);
+            Buzzer::send_effect(SoundEffect::LOCKOUT);
             LED::set_animation(Animation::LOCKOUT);
             break;
         case IOState::NEXT_CARD:
@@ -87,7 +87,7 @@ void go_to_state(IOState next_state) {
             LED::set_animation(Animation::WELCOMING);
             break;
         case IOState::WELCOMED:
-            Buzzer::send_effect(SoundEffect::ACCEPTED_EFFECT);
+            Buzzer::send_effect(SoundEffect::ACCEPTED);
             LED::set_animation(Animation::WELCOMED);
             break;
         case IOState::ALWAYS_ON_WAITING:
@@ -103,11 +103,11 @@ void go_to_state(IOState next_state) {
             LED::set_animation(Animation::AWAIT_AUTH);
             break;
         case IOState::DENIED:
-            Buzzer::send_effect(SoundEffect::DENIED_EFFECT);
+            Buzzer::send_effect(SoundEffect::DENIED);
             LED::set_animation(Animation::DENIED);
             break;
         case IOState::FAULT:
-            Buzzer::send_effect(SoundEffect::FAULT_EFFECT);
+            Buzzer::send_effect(SoundEffect::FAULT);
             LED::set_animation(Animation::FAULT);
             break;
         default:
@@ -233,7 +233,7 @@ void handle_card_detected(IOEvent event) {
             });
             break;
         case IOState::LOCKOUT:
-            Buzzer::send_effect(SoundEffect::LOCKOUT_EFFECT);
+            Buzzer::send_effect(SoundEffect::LOCKOUT);
             break;
         default:
             return;
