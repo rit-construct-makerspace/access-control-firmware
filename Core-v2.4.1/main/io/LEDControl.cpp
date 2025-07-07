@@ -3,7 +3,7 @@
 #include <chrono>
 #include <thread>
 #include <array>
-
+#include "network/network.hpp"
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <freertos/semphr.h>

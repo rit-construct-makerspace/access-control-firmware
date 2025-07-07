@@ -10,7 +10,7 @@ namespace Storage {
         nvs_handle_t my_handle;
         esp_err_t err = nvs_open("storage", NVS_READWRITE, &my_handle);
         if (err != ESP_OK) {
-            ESP_LOGE(TAG, "(%s) opening NVS handle!\n", esp_err_to_name(err));
+            ESP_LOGE(TAG, "(%s) opening NVS handle!", esp_err_to_name(err));
         }
 
         // Read
@@ -19,12 +19,12 @@ namespace Storage {
         err = nvs_get_i32(my_handle, "restart_counter", &restart_counter);
         switch (err) {
         case ESP_OK:
-            ESP_LOGI(TAG, "Restart counter = %ld\n", restart_counter);
+            ESP_LOGI(TAG, "Restart counter = %ld", restart_counter);
             break;
         case ESP_ERR_NVS_NOT_FOUND:
             break;
         default:
-            ESP_LOGE(TAG, "(%s) reading!\n", esp_err_to_name(err));
+            ESP_LOGE(TAG, "(%s) reading!", esp_err_to_name(err));
         }
 
         // Write

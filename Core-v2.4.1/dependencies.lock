@@ -16,6 +16,16 @@ dependencies:
     - esp32s2
     - esp32s3
     version: 1.0.3
+  espressif/esp_websocket_client:
+    component_hash: f77326f0e1c38da4e9c97e17c5d649b0dd13027f2645e720e48db269638fd622
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.0'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.4.0
   espressif/jsmn:
     component_hash: d80350c41bbaa827c98a25b6072df00884e72f54885996fab4a4f0aebce6b6c3
     dependencies:
@@ -76,10 +86,11 @@ dependencies:
     version: 5.4.1
 direct_dependencies:
 - espressif/esp_tinyusb
+- espressif/esp_websocket_client
 - espressif/json_generator
 - espressif/json_parser
 - espressif/led_strip
 - idf
-manifest_hash: 90ed85823c656313f234cfc5927472dd01f5a49818a606c4b7644b5bcd10be3d
+manifest_hash: fe8984469d9cf4ff1e816898c69e203602dda4a4484d89046de26e19e58a35f7
 target: esp32s2
 version: 2.0.0

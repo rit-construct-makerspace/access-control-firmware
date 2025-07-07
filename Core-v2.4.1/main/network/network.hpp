@@ -1,15 +1,14 @@
 #pragma once
 #include "common/types.hpp"
+#include "network/wsacs.hpp"
 #include "esp_netif_types.h"
 
 namespace Network {
 
     int init();
 
-    /// @return true if the event was sent, false otherwise 
-    bool send_event(NetworkEvent ev);
 
-    /// @return true if the network is online
+    int send_event(NetworkEvent ev);
     bool is_online();
 
     // Used only by tasks on the network side of things to

@@ -18,4 +18,7 @@ namespace Storage {
     bool set_network_password(std::string password);
     bool set_server(std::string server);
 
+    int check_perms(const CardTagID &uid, bool &can_change_state, bool &can_access);
+
+
 } // namespace Storage
