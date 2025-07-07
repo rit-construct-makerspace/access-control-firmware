@@ -118,6 +118,8 @@ const char* io_event_type_to_string(IOEventType type) {
         return "Card Removed";
     case IOEventType::NETWORK_COMMAND:
         return "Network Command";
+    case IOEventType::CARD_READ_ERROR:
+        return "Card Read Error";
     default:
         return "Unknown IOEvent Type";
     }

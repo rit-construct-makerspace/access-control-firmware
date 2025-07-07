@@ -23,6 +23,7 @@ TaskHandle_t io_thread;
 #define IO_TASK_STACK_SIZE 4000
 
 static IOState state = IOState::STARTUP;
+static IOState prior_request_state;
 static SemaphoreHandle_t animation_mutex;
 
 bool IO::get_state(IOState &send_state) {
@@ -54,7 +55,7 @@ void go_to_state(IOState next_state) {
     IO::get_state(current_state);
 
     if (next_state == IOState::RESTART) {
-        LED::set_animation(Animation::RESTART_ANIMATION);
+        LED::set_animation(Animation::RESTART);
         return;
     }
 
@@ -65,48 +66,49 @@ void go_to_state(IOState next_state) {
 
     switch (next_state) {
         case IOState::IDLE:
-            LED::set_animation(Animation::IDLE_ANIMATION);
+            LED::set_animation(Animation::IDLE);
             break;
         case IOState::UNLOCKED:
-            Buzzer::send_effect(SoundEffect::ACCEPTED_EFFECT);
-            LED::set_animation(Animation::UNLOCKED_ANIMATION);
+            Buzzer::send_effect(SoundEffect::ACCEPTED);
+            LED::set_animation(Animation::UNLOCKED);
             break;
         case IOState::ALWAYS_ON:
-            LED::set_animation(Animation::ALWAYS_ON_ANIMATION);
+            Buzzer::send_effect(SoundEffect::ACCEPTED);
+            LED::set_animation(Animation::ALWAYS_ON);
             break;
         case IOState::LOCKOUT:
-            Buzzer::send_effect(SoundEffect::LOCKOUT_EFFECT);
-            LED::set_animation(Animation::LOCKOUT_ANIMATION);
+            Buzzer::send_effect(SoundEffect::LOCKOUT);
+            LED::set_animation(Animation::LOCKOUT);
             break;
         case IOState::NEXT_CARD:
             //LED::set_animation(Animation::NEXT_CARD_ANIMATION);
             break;
         case IOState::WELCOMING:
-            //LED::set_animation(Animation::WELCOMING_ANIMATION);
+            LED::set_animation(Animation::WELCOMING);
             break;
         case IOState::WELCOMED:
-            Buzzer::send_effect(SoundEffect::ACCEPTED_EFFECT);
-            //LED::set_animation(Animation::WELCOMED_ANIMATION);
+            Buzzer::send_effect(SoundEffect::ACCEPTED);
+            LED::set_animation(Animation::WELCOMED);
             break;
         case IOState::ALWAYS_ON_WAITING:
-            LED::set_animation(Animation::ALWAYS_ON_WAITING_ANIMATION);
+            LED::set_animation(Animation::ALWAYS_ON_WAITING);
             break;
         case IOState::LOCKOUT_WAITING:
-            LED::set_animation(Animation::LOCKOUT_WAITING_ANIMATION);
+            LED::set_animation(Animation::LOCKOUT_WAITING);
             break;
         case IOState::IDLE_WAITING:
-            LED::set_animation(Animation::IDLE_WAITING_ANIMATION);
+            LED::set_animation(Animation::IDLE_WAITING);
             break;
         case IOState::AWAIT_AUTH:
-            LED::set_animation(Animation::AWAIT_AUTH_ANIMATION);
+            LED::set_animation(Animation::AWAIT_AUTH);
             break;
         case IOState::DENIED:
-            Buzzer::send_effect(SoundEffect::DENIED_EFFECT);
-            LED::set_animation(Animation::DENIED_ANIMATION);
+            Buzzer::send_effect(SoundEffect::DENIED);
+            LED::set_animation(Animation::DENIED);
             break;
         case IOState::FAULT:
-            Buzzer::send_effect(SoundEffect::FAULT_EFFECT);
-            LED::set_animation(Animation::FAULT_ANIMATION);
+            Buzzer::send_effect(SoundEffect::FAULT);
+            LED::set_animation(Animation::FAULT);
             break;
         default:
             ESP_LOGI(TAG, "Attempted to go to an unkown state");
@@ -119,11 +121,10 @@ void go_to_state(IOState next_state) {
     }
 }
 
-IOState waiting_prior_state;
 TimerHandle_t waiting_timer;
 
 void waiting_timer_callback(TimerHandle_t timer) {
-    go_to_state(waiting_prior_state);
+    go_to_state(prior_request_state);
 };
 
 void timer_refresh() {
@@ -173,7 +174,7 @@ void handle_button_clicked() {
             go_to_state(IOState::LOCKOUT_WAITING);
             break;
         default:
-            waiting_prior_state = current_state;
+            prior_request_state = current_state;
             go_to_state(IOState::LOCKOUT_WAITING);
             break;
     }
@@ -188,6 +189,7 @@ void handle_card_detected(IOEvent event) {
 
     switch (current_state) {
         case IOState::IDLE:
+            prior_request_state = IOState::IDLE;
             go_to_state(IOState::AWAIT_AUTH);
             Network::send_event({
                 .type = NetworkEventType::AuthRequest,
@@ -231,7 +233,7 @@ void handle_card_detected(IOEvent event) {
             });
             break;
         case IOState::LOCKOUT:
-            Buzzer::send_effect(SoundEffect::LOCKOUT_EFFECT);
+            Buzzer::send_effect(SoundEffect::LOCKOUT);
             break;
         default:
             return;
@@ -252,6 +254,75 @@ void handle_card_removed() {
         default:
             return;
     }
+}
+
+TimerHandle_t identify_timer;
+
+void identify_timer_callback(TimerHandle_t timer) {
+    IOState current_state;
+    IO::get_state(current_state);
+
+    switch (current_state) {
+        case IOState::IDLE:
+            LED::set_animation(Animation::IDLE);
+            break;
+        case IOState::UNLOCKED:
+            LED::set_animation(Animation::UNLOCKED);
+            break;
+        case IOState::ALWAYS_ON:
+            LED::set_animation(Animation::ALWAYS_ON);
+            break;
+        case IOState::LOCKOUT:
+            LED::set_animation(Animation::LOCKOUT);
+            break;
+        case IOState::NEXT_CARD:
+            //LED::set_animation(Animation::NEXT_CARD_ANIMATION);
+            break;
+        case IOState::WELCOMING:
+            LED::set_animation(Animation::WELCOMING);
+            break;
+        case IOState::WELCOMED:
+            LED::set_animation(Animation::WELCOMED);
+            break;
+        case IOState::ALWAYS_ON_WAITING:
+            LED::set_animation(Animation::ALWAYS_ON_WAITING);
+            break;
+        case IOState::LOCKOUT_WAITING:
+            LED::set_animation(Animation::LOCKOUT_WAITING);
+            break;
+        case IOState::IDLE_WAITING:
+            LED::set_animation(Animation::IDLE_WAITING);
+            break;
+        case IOState::AWAIT_AUTH:
+            LED::set_animation(Animation::AWAIT_AUTH);
+            break;
+        case IOState::DENIED:
+            LED::set_animation(Animation::DENIED);
+            break;
+        case IOState::FAULT:
+            LED::set_animation(Animation::FAULT);
+            break;
+        default:
+            ESP_LOGI(TAG, "Failed to set LEDs after identify");
+        return;
+    }
+}
+
+void handle_identify() {
+    LED::set_animation(Animation::IDENTIFY);
+    Buzzer::send_effect(SoundEffect::MARIO_VICTORY);
+    xTimerStart(identify_timer, pdMS_TO_TICKS(100));
+}
+
+TimerHandle_t denied_timer;
+
+void denied_timer_callback(TimerHandle_t timer) {
+    go_to_state(prior_request_state);
+}
+
+void handle_denied() {
+    go_to_state(IOState::DENIED);
+    xTimerStart(denied_timer, pdMS_TO_TICKS(100));
 }
 
 void io_thread_fn(void *) {
@@ -280,15 +351,19 @@ void io_thread_fn(void *) {
                         ESP_LOGI(TAG, "Unknown button event type recieved");
                         break;
                 }
-            break;
+                break;
 
             case IOEventType::CARD_DETECTED:
                 handle_card_detected(current_event);
-            break;
+                break;
 
             case IOEventType::CARD_REMOVED:
                 handle_card_removed();
-            break;
+                break;
+
+            case IOEventType::CARD_READ_ERROR:
+                Buzzer::send_effect(SoundEffect::DENIED);
+                break;
 
             case IOEventType::NETWORK_COMMAND:
                 switch (current_event.network_command.type) {
@@ -296,17 +371,20 @@ void io_thread_fn(void *) {
                         go_to_state(current_event.network_command.commanded_state);
                         break;
                     case NetworkCommandEventType::IDENTIFY:
-
+                        handle_identify();
+                        break;
+                    case NetworkCommandEventType::DENY:
+                        handle_denied();
                         break;
                     default:
                         ESP_LOGI(TAG, "Unkown network command type recieved");
                         break;
                 }
-            break;
+                break;
 
             default:
                 ESP_LOGI(TAG, "Unexpected event type recieved");
-            break;
+                break;
         }
     }
 }
@@ -315,6 +393,8 @@ int IO::init() {
     event_queue = xQueueCreate(8, sizeof(IOEvent));
     animation_mutex = xSemaphoreCreateMutex();
     waiting_timer = xTimerCreate("waiting", pdMS_TO_TICKS(5000), pdFALSE, (void *) 0, waiting_timer_callback);
+    identify_timer = xTimerCreate("identify", pdMS_TO_TICKS(9630), pdFALSE, (void *) 0, identify_timer_callback);
+    denied_timer = xTimerCreate("denied", pdMS_TO_TICKS(1500), pdFALSE, (void *) 0, denied_timer_callback);
 
     if (event_queue == 0 || animation_mutex == NULL) {
         // TODO: Restart here
