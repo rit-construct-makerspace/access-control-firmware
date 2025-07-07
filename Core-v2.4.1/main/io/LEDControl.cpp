@@ -100,11 +100,6 @@ bool get_animation(Animation::Animation &next_animation) {
     }
 };
 
-bool get_network_state() {
-    // TODO: Ask the network task
-    return true;
-};
-
 void led_thread_fn(void *) {
     led_strip_handle_t strip = configure_led();
     if (strip == NULL) {
@@ -113,7 +108,7 @@ void led_thread_fn(void *) {
     }
 
     Animation::Animation thread_animation = Animation::STARTUP;
-    bool network_good = get_network_state();
+    bool network_good = false;
     uint8_t current_frame = 0;
 
     while (true) {
@@ -124,7 +119,7 @@ void led_thread_fn(void *) {
         advance_frame(thread_animation, strip, current_frame);
 
 
-        network_good = get_network_state();
+        network_good = Network::is_online();
 
         if (!network_good && (current_frame % 2 == 0)) {
             led_strip_set_pixel(strip, 0, Animation::WHITE[0], Animation::WHITE[0], Animation::WHITE[0]);
