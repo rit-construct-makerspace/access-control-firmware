@@ -152,7 +152,7 @@ void send_opening_message() {
     }
     cJSON* msg = cJSON_CreateObject();
     cJSON_AddStringToObject(msg, "SerialNumber", "11111111111");
-    cJSON_AddStringToObject(msg, "Key", "ebbfd3e5a160a85e0610cb0185b07a8fd7c5faef34f6dbe4ab3b423f99c9a0c5");
+    cJSON_AddStringToObject(msg, "Key", "206065802a1079f27a676fbbd544b3f570e422942023b268956bfb80bb230a37");
     cJSON_AddStringToObject(msg, "HWType", "Core");
     cJSON_AddStringToObject(msg, "HWVersion", "2.4.1");
     cJSON_AddStringToObject(msg, "FWVersion", "testing");

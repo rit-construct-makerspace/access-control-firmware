@@ -256,7 +256,7 @@ void handle_card_removed() {
 
 TimerHandle_t identify_timer;
 
-void identify_timer_callback() {
+void identify_timer_callback(TimerHandle_t timer) {
     IOState current_state;
     IO::get_state(current_state);
 
@@ -309,6 +309,7 @@ void identify_timer_callback() {
 void handle_identify() {
     LED::set_animation(Animation::IDENTIFY_ANIMATION);
     Buzzer::send_effect(SoundEffect::MARIO_VICTORY);
+    xTimerStart(identify_timer, pdMS_TO_TICKS(100));
 }
 
 void io_thread_fn(void *) {
@@ -375,6 +376,7 @@ int IO::init() {
     event_queue = xQueueCreate(8, sizeof(IOEvent));
     animation_mutex = xSemaphoreCreateMutex();
     waiting_timer = xTimerCreate("waiting", pdMS_TO_TICKS(5000), pdFALSE, (void *) 0, waiting_timer_callback);
+    identify_timer = xTimerCreate("identify", pdMS_TO_TICKS(9630), pdFALSE, (void *) 0, identify_timer_callback);
 
     if (event_queue == 0 || animation_mutex == NULL) {
         // TODO: Restart here

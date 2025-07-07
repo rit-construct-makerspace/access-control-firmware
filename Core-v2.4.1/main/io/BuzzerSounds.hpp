@@ -56,7 +56,7 @@ namespace SoundEffect {
         const Note LOCKOUT_NOTES[3] = { A3, OFF, A3 };
         const Note FAULT_NOTES[6] = {A4, A2, A4, A2, A4, A2};
 
-        // https://musescore.com/balloon12/super-mario-bros-victory-theme-ssbu?srsltid=AfmBOorl_1Uvc2QiYzb5xJksOayISuEMVjFXGOZ1XNuvETrjJuIeRF8c
+        // https://musescore.com/balloon12/super-mario-bros-victory-theme-ssbu
         const Note MARIO_VICTORY[32] = {
             Note {196, 200},
             Note {262, 200},
