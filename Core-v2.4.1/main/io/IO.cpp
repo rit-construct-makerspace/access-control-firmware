@@ -254,6 +254,63 @@ void handle_card_removed() {
     }
 }
 
+TimerHandle_t identify_timer;
+
+void identify_timer_callback() {
+    IOState current_state;
+    IO::get_state(current_state);
+
+    switch (current_state) {
+        case IOState::IDLE:
+            LED::set_animation(Animation::IDLE_ANIMATION);
+            break;
+        case IOState::UNLOCKED:
+            LED::set_animation(Animation::UNLOCKED_ANIMATION);
+            break;
+        case IOState::ALWAYS_ON:
+            LED::set_animation(Animation::ALWAYS_ON_ANIMATION);
+            break;
+        case IOState::LOCKOUT:
+            LED::set_animation(Animation::LOCKOUT_ANIMATION);
+            break;
+        case IOState::NEXT_CARD:
+            //LED::set_animation(Animation::NEXT_CARD_ANIMATION);
+            break;
+        case IOState::WELCOMING:
+            //LED::set_animation(Animation::WELCOMING_ANIMATION);
+            break;
+        case IOState::WELCOMED:
+            //LED::set_animation(Animation::WELCOMED_ANIMATION);
+            break;
+        case IOState::ALWAYS_ON_WAITING:
+            LED::set_animation(Animation::ALWAYS_ON_WAITING_ANIMATION);
+            break;
+        case IOState::LOCKOUT_WAITING:
+            LED::set_animation(Animation::LOCKOUT_WAITING_ANIMATION);
+            break;
+        case IOState::IDLE_WAITING:
+            LED::set_animation(Animation::IDLE_WAITING_ANIMATION);
+            break;
+        case IOState::AWAIT_AUTH:
+            LED::set_animation(Animation::AWAIT_AUTH_ANIMATION);
+            break;
+        case IOState::DENIED:
+            LED::set_animation(Animation::DENIED_ANIMATION);
+            break;
+        case IOState::FAULT:
+            LED::set_animation(Animation::FAULT_ANIMATION);
+            break;
+        default:
+            ESP_LOGI(TAG, "Failed to set LEDs after identify");
+        return;
+    }
+}
+
+void handle_identify() {
+    LED::set_animation(Animation::IDENTIFY_ANIMATION);
+    Buzzer::send_effect(SoundEffect::MARIO_VICTORY);
+}
+
 void io_thread_fn(void *) {
 
     IOEvent current_event;
@@ -296,6 +353,9 @@ void io_thread_fn(void *) {
                         go_to_state(current_event.network_command.commanded_state);
                         break;
                     case NetworkCommandEventType::IDENTIFY:
+                        handle_identify();
+                        break;
+                    case NetworkCommandEventType::DENY:
 
                         break;
                     default:

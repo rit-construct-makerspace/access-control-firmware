@@ -152,4 +152,12 @@ namespace Animation {
             Frame {ORANGE_DIM, ORANGE, ORANGE_DIM, ORANGE_DIM},
         }
     };
+
+    const Animation IDENTIFY_ANIMATION {
+        .length = 2,
+        .frames = {
+            Frame {BLUE, BLUE, BLUE, BLUE},
+            Frame {OFF, OFF, OFF, OFF},
+        }
+    };
 }

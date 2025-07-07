@@ -55,6 +55,49 @@ namespace SoundEffect {
         const Note DENIED_NOTES[2] = { A4, A2 };
         const Note LOCKOUT_NOTES[3] = { A3, OFF, A3 };
         const Note FAULT_NOTES[6] = {A4, A2, A4, A2, A4, A2};
+
+        // https://musescore.com/balloon12/super-mario-bros-victory-theme-ssbu?srsltid=AfmBOorl_1Uvc2QiYzb5xJksOayISuEMVjFXGOZ1XNuvETrjJuIeRF8c
+        const Note MARIO_VICTORY[32] = {
+            Note {196, 200},
+            Note {262, 200},
+            Note {330, 200},
+            Note {392, 200},
+            Note {523, 200},
+            Note {659, 200},
+            Note {784, 600},
+            Note {659, 300},
+            Note {0, 300},
+            // Bar 2
+            Note {208, 200},
+            Note {262, 200},
+            Note {311, 200},
+
+            Note {415, 200},
+            Note {523, 200},
+            Note {622, 200},
+            
+            Note {831, 600},
+            Note {622, 300},
+            Note {0, 300},
+            //Bar 3
+            Note {233, 200},
+            Note {294, 200},
+            Note {349, 200},
+
+            Note {466, 200},
+            Note {587, 200},
+            Note {698, 200},
+
+            Note {932, 600},
+            Note {0, 10},
+            Note {932, 200},
+            Note {0, 10},
+            Note {932, 200},
+            Note {0, 10},
+            Note {932, 200},
+
+            Note {1047, 2400},
+        };
     };
 
     const Effect ACCEPTED_EFFECT = {
@@ -75,5 +118,14 @@ namespace SoundEffect {
     const Effect FAULT_EFFECT = {
         .length = 6,
         .notes = detail::FAULT_NOTES,
+    };
+
+    const Effect IDENTIFY = {
+
+    };
+
+    const Effect MARIO_VICTORY = {
+        .length = 32,
+        .notes = detail::MARIO_VICTORY,
     };
 }

@@ -32,4 +32,11 @@ extern "C" void app_main(void) {
     USB::init();
     IO::init();
     Network::init();
+
+    IO::send_event({
+        .type = IOEventType::NETWORK_COMMAND,
+        .network_command = {
+            .type = NetworkCommandEventType::IDENTIFY,
+        },
+    });
 }
