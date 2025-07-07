@@ -23,6 +23,7 @@ TaskHandle_t io_thread;
 #define IO_TASK_STACK_SIZE 4000
 
 static IOState state = IOState::STARTUP;
+static IOState prior_request_state;
 static SemaphoreHandle_t animation_mutex;
 
 bool IO::get_state(IOState &send_state) {
@@ -119,11 +120,10 @@ void go_to_state(IOState next_state) {
     }
 }
 
-IOState waiting_prior_state;
 TimerHandle_t waiting_timer;
 
 void waiting_timer_callback(TimerHandle_t timer) {
-    go_to_state(waiting_prior_state);
+    go_to_state(prior_request_state);
 };
 
 void timer_refresh() {
@@ -173,7 +173,7 @@ void handle_button_clicked() {
             go_to_state(IOState::LOCKOUT_WAITING);
             break;
         default:
-            waiting_prior_state = current_state;
+            prior_request_state = current_state;
             go_to_state(IOState::LOCKOUT_WAITING);
             break;
     }
@@ -188,6 +188,7 @@ void handle_card_detected(IOEvent event) {
 
     switch (current_state) {
         case IOState::IDLE:
+            prior_request_state = IOState::IDLE;
             go_to_state(IOState::AWAIT_AUTH);
             Network::send_event({
                 .type = NetworkEventType::AuthRequest,
@@ -312,6 +313,17 @@ void handle_identify() {
     xTimerStart(identify_timer, pdMS_TO_TICKS(100));
 }
 
+TimerHandle_t denied_timer;
+
+void denied_timer_callback(TimerHandle_t timer) {
+    go_to_state(prior_request_state);
+}
+
+void handle_denied() {
+    go_to_state(IOState::DENIED);
+    xTimerStart(denied_timer, pdMS_TO_TICKS(100));
+}
+
 void io_thread_fn(void *) {
 
     IOEvent current_event;
@@ -377,6 +389,7 @@ int IO::init() {
     animation_mutex = xSemaphoreCreateMutex();
     waiting_timer = xTimerCreate("waiting", pdMS_TO_TICKS(5000), pdFALSE, (void *) 0, waiting_timer_callback);
     identify_timer = xTimerCreate("identify", pdMS_TO_TICKS(9630), pdFALSE, (void *) 0, identify_timer_callback);
+    denied_timer = xTimerCreate("denied", pdMS_TO_TICKS(1500), pdFALSE, (void *) 0, denied_timer_callback);
 
     if (event_queue == 0 || animation_mutex == NULL) {
         // TODO: Restart here
