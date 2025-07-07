@@ -26,20 +26,94 @@ uint64_t get_next_seqnum() {
     return i;
 }
 
-void handle_incoming_ws_text(const char* data, size_t len) {
-    if (len == 0) {
+bool parse_iostate(const char* str, IOState& out) {
+    constexpr size_t max_size = 50;
+    int len                   = strnlen(str, max_size);
+    if (len == max_size) {
+        // return if bigger or not null terminated
+        return false;
+    }
+    if (0 == strcasecmp(str, "idle")) {
+        out = IOState::IDLE;
+        return true;
+    } else if (0 == strcasecmp(str, "unlocked")) {
+        out = IOState::UNLOCKED;
+        return true;
+    } else if (0 == strcasecmp(str, "alwayson")) {
+        out = IOState::ALWAYS_ON;
+        return true;
+    } else if (0 == strcasecmp(str, "lockout")) {
+        out = IOState::LOCKOUT;
+        return true;
+    } else if (0 == strcasecmp(str, "nextcard")) {
+        out = IOState::NEXT_CARD;
+        return true;
+    } else if (0 == strcasecmp(str, "startup")) {
+        out = IOState::STARTUP;
+        return true;
+    } else if (0 == strcasecmp(str, "welcoming")) {
+        out = IOState::WELCOMING;
+        return true;
+    } else if (0 == strcasecmp(str, "welcomed")) {
+        out = IOState::WELCOMED;
+        return true;
+    } else if (0 == strcasecmp(str, "alwaysonwaiting")) {
+        out = IOState::ALWAYS_ON_WAITING;
+        return true;
+    } else if (0 == strcasecmp(str, "alwaysonwaiting")) {
+        out = IOState::ALWAYS_ON_WAITING;
+        return true;
+    } else if (0 == strcasecmp(str, "idlewaiting")) {
+        out = IOState::IDLE_WAITING;
+        return true;
+    } else if (0 == strcasecmp(str, "awaitauth")) {
+        out = IOState::AWAIT_AUTH;
+        return true;
+    } else if (0 == strcasecmp(str, "denied")) {
+        out = IOState::DENIED;
+        return true;
+    } else if (0 == strcasecmp(str, "fault")) {
+        out = IOState::FAULT;
+        return true;
+    } else if (0 == strcasecmp(str, "restart")) {
+        out = IOState::RESTART;
+        return true;
+    }
+    return false;
+}
+
+void handle_server_state_change(const char* state) {
+    IOState iostate = IOState::IDLE;
+    if (!parse_iostate(state, iostate)) {
+        ESP_LOGE(TAG, "Not setting state to unknown state: %s", state);
         return;
     }
-    ESP_LOGD(TAG, "Received msg size %d: %.*s", len, len, data);
+    ESP_LOGI(TAG, "send internal event: %s", io_state_to_string(iostate));
+    Network::send_internal_event({
+        .type             = Network::InternalEventType::ServerSetState,
+        .server_set_state = iostate,
+    });
+}
 
-    cJSON *obj = cJSON_ParseWithLength(data, len);
-    if (obj == NULL){
+void handle_incoming_ws_text(const char* data, size_t len) {
+    if (len == 0) {
+        ESP_LOGE(TAG, "ws message with 0 length???");
+        return;
+    }
+    ESP_LOGI(TAG, "Received msg size %d: %.*s", len, len, data);
+
+    cJSON* obj = cJSON_ParseWithLength(data, len);
+    if (obj == NULL) {
         ESP_LOGE(TAG, "Failed to parse json: %.*s", len, data);
         return;
     }
-    if (cJSON_HasObjectItem(obj, "State")){
-        
+    if (cJSON_HasObjectItem(obj, "State")) {
+        ESP_LOGI(TAG, "handle state change: %s", cJSON_GetStringValue(cJSON_GetObjectItem(obj, "State")));
+        handle_server_state_change(
+            cJSON_GetStringValue(cJSON_GetObjectItem(obj, "State")));
     }
+
+    cJSON_free(obj);
 }
 
 void send_keep_alive_message() {
@@ -55,7 +129,7 @@ void send_keep_alive_message() {
     int temp = 33;
 
     cJSON* msg = cJSON_CreateObject();
-    cJSON_AddStringToObject(msg, "State", "Idle");
+    cJSON_AddStringToObject(msg, "State", io_state_to_string(state));
     cJSON_AddNumberToObject(msg, "Temp", (double)temp);
     cJSON_AddNumberToObject(msg, "Seq", (double)get_next_seqnum());
 
@@ -136,10 +210,10 @@ static void websocket_event_handler(void* handler_args, esp_event_base_t base,
         }
         break;
     case WEBSOCKET_EVENT_DATA:
-        // ESP_LOGI(TAG, "WEBSOCKET_EVENT_DATA");
         if (data->op_code == 0x2) { // Opcode 0x2 indicates binary data
             ESP_LOGW(TAG, "Received binary data, DROPPING");
         } else {
+            ESP_LOGI(TAG, "WEBSOCKET_EVENT_DATA");
             handle_incoming_ws_text(data->data_ptr, data->data_len);
         }
         break;
