@@ -279,10 +279,10 @@ void identify_timer_callback(TimerHandle_t timer) {
             //LED::set_animation(Animation::NEXT_CARD_ANIMATION);
             break;
         case IOState::WELCOMING:
-            //LED::set_animation(Animation::WELCOMING_ANIMATION);
+            LED::set_animation(Animation::WELCOMING);
             break;
         case IOState::WELCOMED:
-            //LED::set_animation(Animation::WELCOMED_ANIMATION);
+            LED::set_animation(Animation::WELCOMED);
             break;
         case IOState::ALWAYS_ON_WAITING:
             LED::set_animation(Animation::ALWAYS_ON_WAITING);
@@ -374,7 +374,7 @@ void io_thread_fn(void *) {
                         handle_identify();
                         break;
                     case NetworkCommandEventType::DENY:
-
+                        handle_denied();
                         break;
                     default:
                         ESP_LOGI(TAG, "Unkown network command type recieved");
