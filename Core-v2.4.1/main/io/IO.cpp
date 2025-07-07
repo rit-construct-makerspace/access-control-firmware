@@ -55,7 +55,7 @@ void go_to_state(IOState next_state) {
     IO::get_state(current_state);
 
     if (next_state == IOState::RESTART) {
-        LED::set_animation(Animation::RESTART_ANIMATION);
+        LED::set_animation(Animation::RESTART);
         return;
     }
 
@@ -66,48 +66,49 @@ void go_to_state(IOState next_state) {
 
     switch (next_state) {
         case IOState::IDLE:
-            LED::set_animation(Animation::IDLE_ANIMATION);
+            LED::set_animation(Animation::IDLE);
             break;
         case IOState::UNLOCKED:
             Buzzer::send_effect(SoundEffect::ACCEPTED_EFFECT);
-            LED::set_animation(Animation::UNLOCKED_ANIMATION);
+            LED::set_animation(Animation::UNLOCKED);
             break;
         case IOState::ALWAYS_ON:
-            LED::set_animation(Animation::ALWAYS_ON_ANIMATION);
+            Buzzer::send_effect(SoundEffect::ACCEPTED_EFFECT);
+            LED::set_animation(Animation::ALWAYS_ON);
             break;
         case IOState::LOCKOUT:
             Buzzer::send_effect(SoundEffect::LOCKOUT_EFFECT);
-            LED::set_animation(Animation::LOCKOUT_ANIMATION);
+            LED::set_animation(Animation::LOCKOUT);
             break;
         case IOState::NEXT_CARD:
             //LED::set_animation(Animation::NEXT_CARD_ANIMATION);
             break;
         case IOState::WELCOMING:
-            //LED::set_animation(Animation::WELCOMING_ANIMATION);
+            LED::set_animation(Animation::WELCOMING);
             break;
         case IOState::WELCOMED:
             Buzzer::send_effect(SoundEffect::ACCEPTED_EFFECT);
-            //LED::set_animation(Animation::WELCOMED_ANIMATION);
+            LED::set_animation(Animation::WELCOMED);
             break;
         case IOState::ALWAYS_ON_WAITING:
-            LED::set_animation(Animation::ALWAYS_ON_WAITING_ANIMATION);
+            LED::set_animation(Animation::ALWAYS_ON_WAITING);
             break;
         case IOState::LOCKOUT_WAITING:
-            LED::set_animation(Animation::LOCKOUT_WAITING_ANIMATION);
+            LED::set_animation(Animation::LOCKOUT_WAITING);
             break;
         case IOState::IDLE_WAITING:
-            LED::set_animation(Animation::IDLE_WAITING_ANIMATION);
+            LED::set_animation(Animation::IDLE_WAITING);
             break;
         case IOState::AWAIT_AUTH:
-            LED::set_animation(Animation::AWAIT_AUTH_ANIMATION);
+            LED::set_animation(Animation::AWAIT_AUTH);
             break;
         case IOState::DENIED:
             Buzzer::send_effect(SoundEffect::DENIED_EFFECT);
-            LED::set_animation(Animation::DENIED_ANIMATION);
+            LED::set_animation(Animation::DENIED);
             break;
         case IOState::FAULT:
             Buzzer::send_effect(SoundEffect::FAULT_EFFECT);
-            LED::set_animation(Animation::FAULT_ANIMATION);
+            LED::set_animation(Animation::FAULT);
             break;
         default:
             ESP_LOGI(TAG, "Attempted to go to an unkown state");
@@ -263,16 +264,16 @@ void identify_timer_callback(TimerHandle_t timer) {
 
     switch (current_state) {
         case IOState::IDLE:
-            LED::set_animation(Animation::IDLE_ANIMATION);
+            LED::set_animation(Animation::IDLE);
             break;
         case IOState::UNLOCKED:
-            LED::set_animation(Animation::UNLOCKED_ANIMATION);
+            LED::set_animation(Animation::UNLOCKED);
             break;
         case IOState::ALWAYS_ON:
-            LED::set_animation(Animation::ALWAYS_ON_ANIMATION);
+            LED::set_animation(Animation::ALWAYS_ON);
             break;
         case IOState::LOCKOUT:
-            LED::set_animation(Animation::LOCKOUT_ANIMATION);
+            LED::set_animation(Animation::LOCKOUT);
             break;
         case IOState::NEXT_CARD:
             //LED::set_animation(Animation::NEXT_CARD_ANIMATION);
@@ -284,22 +285,22 @@ void identify_timer_callback(TimerHandle_t timer) {
             //LED::set_animation(Animation::WELCOMED_ANIMATION);
             break;
         case IOState::ALWAYS_ON_WAITING:
-            LED::set_animation(Animation::ALWAYS_ON_WAITING_ANIMATION);
+            LED::set_animation(Animation::ALWAYS_ON_WAITING);
             break;
         case IOState::LOCKOUT_WAITING:
-            LED::set_animation(Animation::LOCKOUT_WAITING_ANIMATION);
+            LED::set_animation(Animation::LOCKOUT_WAITING);
             break;
         case IOState::IDLE_WAITING:
-            LED::set_animation(Animation::IDLE_WAITING_ANIMATION);
+            LED::set_animation(Animation::IDLE_WAITING);
             break;
         case IOState::AWAIT_AUTH:
-            LED::set_animation(Animation::AWAIT_AUTH_ANIMATION);
+            LED::set_animation(Animation::AWAIT_AUTH);
             break;
         case IOState::DENIED:
-            LED::set_animation(Animation::DENIED_ANIMATION);
+            LED::set_animation(Animation::DENIED);
             break;
         case IOState::FAULT:
-            LED::set_animation(Animation::FAULT_ANIMATION);
+            LED::set_animation(Animation::FAULT);
             break;
         default:
             ESP_LOGI(TAG, "Failed to set LEDs after identify");
@@ -308,7 +309,7 @@ void identify_timer_callback(TimerHandle_t timer) {
 }
 
 void handle_identify() {
-    LED::set_animation(Animation::IDENTIFY_ANIMATION);
+    LED::set_animation(Animation::IDENTIFY);
     Buzzer::send_effect(SoundEffect::MARIO_VICTORY);
     xTimerStart(identify_timer, pdMS_TO_TICKS(100));
 }

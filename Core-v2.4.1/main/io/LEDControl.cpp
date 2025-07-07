@@ -19,7 +19,7 @@ TaskHandle_t led_thread;
 #define LED_TASK_STACK_SIZE 4000
 #define NUM_LEDS 4
 
-static Animation::Animation current_animation = Animation::STARTUP_ANIMATION;
+static Animation::Animation current_animation = Animation::STARTUP;
 static SemaphoreHandle_t animation_mutex;
 
 static const char * TAG = "led";
@@ -112,7 +112,7 @@ void led_thread_fn(void *) {
         // TODO: Crash out
     }
 
-    Animation::Animation thread_animation = Animation::STARTUP_ANIMATION;
+    Animation::Animation thread_animation = Animation::STARTUP;
     bool network_good = get_network_state();
     uint8_t current_frame = 0;
 
