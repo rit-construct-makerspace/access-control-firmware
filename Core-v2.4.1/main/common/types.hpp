@@ -56,6 +56,7 @@ enum class IOEventType {
     BUTTON_PRESSED,
     CARD_DETECTED,
     CARD_REMOVED,
+    CARD_READ_ERROR,
     NETWORK_COMMAND,
 };
 const char* io_event_type_to_string(IOEventType type);

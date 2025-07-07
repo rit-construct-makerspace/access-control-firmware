@@ -57,15 +57,37 @@ void card_reader_thread_fn(void *) {
             if (uid_len != 0) {  // did we get an UID?
 
                 if (!card_detected && detect_allowed <= 0) {
-                    IO::send_event({
-                        .type = IOEventType::CARD_DETECTED,
-                        .card_detected = {
-                            .card_tag_id = {
-                                .type = CardTagType::SEVEN,
-                                .value = {0},
-                            },
-                        },
-                    });
+
+                    switch (uid_len) {
+                        case 4:
+                            IO::send_event({
+                                .type = IOEventType::CARD_DETECTED,
+                                .card_detected = {
+                                    .card_tag_id = {
+                                        .type = CardTagType::FOUR,
+                                        .value = {uid[0], uid[1], uid[2], uid[3]},
+                                    }
+                                }
+                            });
+                            break;
+                        case 7:
+                            IO::send_event({
+                                .type = IOEventType::CARD_DETECTED,
+                                .card_detected = {
+                                    .card_tag_id = {
+                                        .type = CardTagType::SEVEN,
+                                        .value = {uid[0], uid[1], uid[2], uid[3], uid[4], uid[5], uid[6]}
+                                    }
+                                }
+                            });
+                            break;
+                        default:
+                            IO::send_event({
+                                .type = IOEventType::CARD_READ_ERROR,
+                            });
+                            break;
+                    }
+
                     card_detected = true;
                     detect_allowed = 6;
                 }

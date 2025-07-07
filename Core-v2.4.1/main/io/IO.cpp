@@ -351,15 +351,19 @@ void io_thread_fn(void *) {
                         ESP_LOGI(TAG, "Unknown button event type recieved");
                         break;
                 }
-            break;
+                break;
 
             case IOEventType::CARD_DETECTED:
                 handle_card_detected(current_event);
-            break;
+                break;
 
             case IOEventType::CARD_REMOVED:
                 handle_card_removed();
-            break;
+                break;
+
+            case IOEventType::CARD_READ_ERROR:
+                Buzzer::send_effect(SoundEffect::DENIED);
+                break;
 
             case IOEventType::NETWORK_COMMAND:
                 switch (current_event.network_command.type) {
@@ -376,11 +380,11 @@ void io_thread_fn(void *) {
                         ESP_LOGI(TAG, "Unkown network command type recieved");
                         break;
                 }
-            break;
+                break;
 
             default:
                 ESP_LOGI(TAG, "Unexpected event type recieved");
-            break;
+                break;
         }
     }
 }
