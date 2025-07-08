@@ -27,72 +27,17 @@ uint64_t get_next_seqnum() {
     return i;
 }
 
-bool parse_iostate(const char* str, IOState& out) {
-    constexpr size_t max_size = 50;
-    int len                   = strnlen(str, max_size);
-    if (len == max_size) {
-        // return if bigger or not null terminated
-        return false;
-    }
-    if (0 == strcasecmp(str, "idle")) {
-        out = IOState::IDLE;
-        return true;
-    } else if (0 == strcasecmp(str, "unlocked")) {
-        out = IOState::UNLOCKED;
-        return true;
-    } else if (0 == strcasecmp(str, "alwayson")) {
-        out = IOState::ALWAYS_ON;
-        return true;
-    } else if (0 == strcasecmp(str, "lockout")) {
-        out = IOState::LOCKOUT;
-        return true;
-    } else if (0 == strcasecmp(str, "nextcard")) {
-        out = IOState::NEXT_CARD;
-        return true;
-    } else if (0 == strcasecmp(str, "startup")) {
-        out = IOState::STARTUP;
-        return true;
-    } else if (0 == strcasecmp(str, "welcoming")) {
-        out = IOState::WELCOMING;
-        return true;
-    } else if (0 == strcasecmp(str, "welcomed")) {
-        out = IOState::WELCOMED;
-        return true;
-    } else if (0 == strcasecmp(str, "alwaysonwaiting")) {
-        out = IOState::ALWAYS_ON_WAITING;
-        return true;
-    } else if (0 == strcasecmp(str, "alwaysonwaiting")) {
-        out = IOState::ALWAYS_ON_WAITING;
-        return true;
-    } else if (0 == strcasecmp(str, "idlewaiting")) {
-        out = IOState::IDLE_WAITING;
-        return true;
-    } else if (0 == strcasecmp(str, "awaitauth")) {
-        out = IOState::AWAIT_AUTH;
-        return true;
-    } else if (0 == strcasecmp(str, "denied")) {
-        out = IOState::DENIED;
-        return true;
-    } else if (0 == strcasecmp(str, "fault")) {
-        out = IOState::FAULT;
-        return true;
-    } else if (0 == strcasecmp(str, "restart")) {
-        out = IOState::RESTART;
-        return true;
-    }
-    return false;
-}
 
 void handle_server_state_change(const char* state) {
-    IOState iostate = IOState::IDLE;
-    if (!parse_iostate(state, iostate)) {
-        ESP_LOGE(TAG, "Not setting state to unknown state: %s", state);
+    std::optional<IOState> iostate = parse_iostate(state);
+    if (!iostate.has_value()) {
+        ESP_LOGE(TAG, "Not setting state to unknown state: %.16s", state);
         return;
     }
-    ESP_LOGI(TAG, "send internal event: %s", io_state_to_string(iostate));
+    ESP_LOGI(TAG, "send internal event: %s", io_state_to_string(iostate.value()));
     Network::send_internal_event({
         .type             = Network::InternalEventType::ServerSetState,
-        .server_set_state = iostate,
+        .server_set_state = iostate.value(),
     });
 }
 

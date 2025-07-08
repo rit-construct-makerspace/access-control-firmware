@@ -58,6 +58,47 @@ std::optional<CardTagID> CardTagID::from_string(const char *str){
     return id;
 }
 
+std::optional<IOState> parse_iostate(const char* str) {
+    constexpr size_t max_size = 50;
+    int len                   = strnlen(str, max_size);
+    if (len == max_size) {
+        // return if bigger or not null terminated
+        return {};
+    }
+    if (0 == strcasecmp(str, "idle")) {
+        return IOState::IDLE;
+    } else if (0 == strcasecmp(str, "unlocked")) {
+        return IOState::UNLOCKED;
+    } else if (0 == strcasecmp(str, "alwayson")) {
+        return IOState::ALWAYS_ON;
+    } else if (0 == strcasecmp(str, "lockout")) {
+        return IOState::LOCKOUT;
+    } else if (0 == strcasecmp(str, "nextcard")) {
+        return IOState::NEXT_CARD;
+    } else if (0 == strcasecmp(str, "startup")) {
+        return IOState::STARTUP;
+    } else if (0 == strcasecmp(str, "welcoming")) {
+        return IOState::WELCOMING;
+    } else if (0 == strcasecmp(str, "welcomed")) {
+        return IOState::WELCOMED;
+    } else if (0 == strcasecmp(str, "alwaysonwaiting")) {
+        return IOState::ALWAYS_ON_WAITING;
+    } else if (0 == strcasecmp(str, "alwaysonwaiting")) {
+        return IOState::ALWAYS_ON_WAITING;
+    } else if (0 == strcasecmp(str, "idlewaiting")) {
+        return IOState::IDLE_WAITING;
+    } else if (0 == strcasecmp(str, "awaitauth")) {
+        return IOState::AWAIT_AUTH;
+    } else if (0 == strcasecmp(str, "denied")) {
+        return IOState::DENIED;
+    } else if (0 == strcasecmp(str, "fault")) {
+        return IOState::FAULT;
+    } else if (0 == strcasecmp(str, "restart")) {
+        return IOState::RESTART;
+    }
+    return {};
+}
+
 const char* io_state_to_string(IOState state) {
     switch (state) {
     case IOState::IDLE:

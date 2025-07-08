@@ -54,6 +54,8 @@ enum class IOState {
     RESTART,
 };
 const char* io_state_to_string(IOState state);
+std::optional<IOState> parse_iostate(const char* str);
+
 
 enum class LogMessageType {
     NORMAL,
@@ -140,7 +142,7 @@ struct StateChange {
     IOState from;
     IOState to;
     StateChangeReason reason;
-    CardTagID who;
+    std::optional<CardTagID> who;
 };
 
 struct AuthRequest {

@@ -403,6 +403,7 @@ void io_thread_fn(void *) {
                                             .from = cur_state,
                                             .to = current_event.network_command.commanded_state,
                                             .reason = StateChangeReason::CardActivated,
+                                            .who = CardTagID{},
                                         }
                                     });
                                     break;
