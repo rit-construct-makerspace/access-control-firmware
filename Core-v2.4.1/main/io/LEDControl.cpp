@@ -17,7 +17,7 @@
 
 TaskHandle_t led_thread;
 
-#define LED_TASK_STACK_SIZE 4000
+#define LED_TASK_STACK_SIZE 3000
 #define NUM_LEDS 4
 
 static Animation::Animation current_animation = Animation::STARTUP;

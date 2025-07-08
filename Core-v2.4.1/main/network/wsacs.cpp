@@ -33,8 +33,6 @@ void handle_server_state_change(const char* state) {
         ESP_LOGE(TAG, "Not setting state to unknown state: %.16s", state);
         return;
     }
-    ESP_LOGI(TAG, "send internal event: %s",
-             io_state_to_string(iostate.value()));
     Network::send_internal_event({
         .type             = Network::InternalEventType::ServerSetState,
         .server_set_state = iostate.value(),
@@ -76,8 +74,6 @@ void handle_incoming_ws_text(const char* data, size_t len) {
         return;
     }
     if (cJSON_HasObjectItem(obj, "State")) {
-        ESP_LOGI(TAG, "handle state change: %s",
-                 cJSON_GetStringValue(cJSON_GetObjectItem(obj, "State")));
         handle_server_state_change(
             cJSON_GetStringValue(cJSON_GetObjectItem(obj, "State")));
     }
@@ -97,11 +93,12 @@ void handle_incoming_ws_text(const char* data, size_t len) {
                             .type = NetworkCommandEventType::IDENTIFY,
                         }});
     }
-    cJSON_free(obj);
+    cJSON_Delete(obj);
 }
 
 // will add sequence number and to string it (ONLY CALL ON WEBSOCKET THREAD)
 void send_cjson(cJSON* obj) {
+
     cJSON_AddNumberToObject(obj, "Seq", (double)get_next_seqnum());
 
     char* text = cJSON_Print(obj);
@@ -113,9 +110,10 @@ void send_cjson(cJSON* obj) {
     if (err != len) {
         ESP_LOGE(TAG, "Failed to send WS message: %d", err);
     }
-    free((void*)text);
+    cJSON_free((void*)text);
 }
 
+cJSON* msg = NULL;
 void keepalive_timer_callback() {
     if (ws_handle == NULL) {
         // try reconnecting
@@ -131,12 +129,13 @@ void keepalive_timer_callback() {
     }
     int temp = 33;
 
-    cJSON* msg = cJSON_CreateObject();
+     msg = cJSON_CreateObject();
+
     cJSON_AddStringToObject(msg, "State", io_state_to_string(state));
     cJSON_AddNumberToObject(msg, "Temp", (double)temp);
-
     send_cjson(msg);
-    cJSON_free(msg);
+
+    cJSON_Delete(msg);
 }
 
 void send_opening_message() {
@@ -159,7 +158,7 @@ void send_opening_message() {
     cJSON_AddStringToObject(msg, "FWVersion", "testing");
 
     send_cjson(msg);
-    cJSON_free(msg);
+    cJSON_Delete(msg);
 }
 void send_auth_request(AuthRequest request) {
     if (ws_handle == NULL) {
@@ -175,7 +174,7 @@ void send_auth_request(AuthRequest request) {
 
     send_cjson(msg);
 
-    cJSON_free(msg);
+    cJSON_Delete(msg);
 }
 
 static void websocket_event_handler(void* handler_args, esp_event_base_t base,
@@ -206,6 +205,7 @@ static void websocket_event_handler(void* handler_args, esp_event_base_t base,
         break;
     case WEBSOCKET_EVENT_DATA:
         // network watchdog feed
+        // TODO check close code
         if (data->op_code == 0x1) { // Opcode 0x1 indicates text data
             handle_incoming_ws_text(data->data_ptr, data->data_len);
         }
@@ -286,7 +286,16 @@ void wsacs_thread_fn(void*) {
         } else if (event.type == WSACS::EventType::AuthRequest) {
             send_auth_request(event.auth_request);
         } else if (event.type == WSACS::EventType::GenericJSON) {
-
+            cJSON* root = cJSON_CreateObject();
+            cJSON_AddItemToObject(root, "Log", event.cjson);
+            send_cjson(root);
+            cJSON_Delete(root);
+        } else if (event.type == WSACS::EventType::Message){
+            cJSON *obj = cJSON_CreateObject();
+            cJSON_AddStringToObject(obj, "Message", event.message);
+            send_cjson(obj);
+            cJSON_Delete(obj);
+            delete[] event.message;
         } else {
             ESP_LOGW(TAG, "Not handling message with type %d", (int)event.type);
         }
@@ -295,8 +304,10 @@ void wsacs_thread_fn(void*) {
 
 namespace WSACS {
     Event::Event(EventType _type) : type(_type) {}
-    Event::Event(EventType _type, AuthRequest auth_request)
-        : type(_type), auth_request(auth_request) {}
+    Event::Event(AuthRequest auth_request)
+        : type(EventType::AuthRequest), auth_request(auth_request) {}
+    Event::Event(char *msg): type(EventType::Message), message(msg){}
+    Event::Event(EventType _type, cJSON*j) : type(_type), cjson(j) {}
 
     int init() {
         esp_log_level_set("TRANS_TCP", ESP_LOG_DEBUG);

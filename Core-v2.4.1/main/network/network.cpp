@@ -160,18 +160,27 @@ static TimerHandle_t auth_timer_handle;
 
 namespace Network {
     void handle_external_event(NetworkEvent event) {
-        if (event.type == NetworkEventType::AuthRequest) {
+        switch (event.type) {
+        case NetworkEventType::AuthRequest:
             outstanding_auth = event.auth_request;
             // do fancier things in case this fails (ask storage)
             xTimerStart(auth_timer_handle, pdMS_TO_TICKS(100));
-            WSACS::send_event(
-                {WSACS::EventType::AuthRequest, event.auth_request});
-        } else if (event.type == NetworkEventType::PleaseRestart) {
+            WSACS::send_event(event.auth_request);
+            break;
+
+        case NetworkEventType::Message:
+            WSACS::send_event(event.message);
+            break;
+
+        case NetworkEventType::PleaseRestart:
             ESP_LOGE(TAG, "going kaboom");
             vTaskDelay(pdMS_TO_TICKS(1000));
             esp_restart();
-        } else if (event.type == NetworkEventType::StateChange) {
+            break;
+
+        case NetworkEventType::StateChange:
             ESP_LOGI(TAG, "need to state change report to wsacs (maybe)");
+            break;
         }
     }
 
@@ -261,7 +270,6 @@ namespace Network {
                           ESP_LOG_INFO); // enable INFO logs from DHCP client
         esp_log_level_set("transport_ws",
                           ESP_LOG_INFO); // enable INFO logs from DHCP client
-
 
         Storage::init(); // Storage must come before wifi as wifi depends on NVS
         network_event_queue = xQueueCreate(5, sizeof(Network::InternalEvent));

@@ -157,6 +157,7 @@ struct AuthResponse{
 // Things to tell network task
 enum class NetworkEventType {
     AuthRequest,
+    Message,
     StateChange,
     PleaseRestart,
 };
@@ -166,6 +167,7 @@ struct NetworkEvent {
     union {
         int _ = 0;
         AuthRequest auth_request;
+        char *message; // allocated using new[]. Sending this also sends lifetime (network will delete[])
         StateChange state_change;
     };
 };

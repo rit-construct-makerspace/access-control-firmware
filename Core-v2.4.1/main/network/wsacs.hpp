@@ -1,6 +1,7 @@
 #pragma once
 #include "common/types.hpp"
 #include "esp_err.h"
+#include "cJSON.h"
 
 namespace WSACS {
     struct AuthResponse{
@@ -15,19 +16,23 @@ namespace WSACS {
 
         AuthRequest,
         GenericJSON,
-
+        Message,
         // Internal events
         ServerConnect,
         ServerDisconnect,
     };
     struct Event {
         Event(EventType type);
-        Event(EventType type, AuthRequest auth_request);
-
+        Event(AuthRequest auth_request);
+        Event(char *message);
+        Event(EventType type, cJSON *cjson);
+        
         EventType type;
         // if try connect
         union{ 
             AuthRequest auth_request;
+            char *message; // ALLOCATED WITH NEW
+            cJSON *cjson;
         };
     };
 
