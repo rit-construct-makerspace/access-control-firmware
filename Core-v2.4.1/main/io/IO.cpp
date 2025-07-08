@@ -249,6 +249,15 @@ void handle_card_removed() {
 
     switch (current_state) {
         case IOState::UNLOCKED:
+            Network::send_event({
+                .type = NetworkEventType::StateChange,
+                .state_change = {
+                    .from = current_state,
+                    .to = IOState::IDLE,
+                    .reason = StateChangeReason::CardRemoved,
+                    .who = {},
+                },
+            });
             go_to_state(IOState::IDLE);
             break;
         default:
@@ -368,6 +377,50 @@ void io_thread_fn(void *) {
             case IOEventType::NETWORK_COMMAND:
                 switch (current_event.network_command.type) {
                     case NetworkCommandEventType::COMMAND_STATE:
+
+                        IOState cur_state;
+                        IO::get_state(cur_state);
+
+                        if (current_event.network_command.requested) {
+                            switch (current_event.network_command.commanded_state) {
+                                case IOState::ALWAYS_ON:
+                                case IOState::LOCKOUT:
+                                case IOState::IDLE:
+                                    Network::send_event({
+                                        .type = NetworkEventType::StateChange,
+                                        .state_change = {
+                                            .from = cur_state,
+                                            .to = current_event.network_command.commanded_state,
+                                            .reason = StateChangeReason::ButtonPress,
+                                            .who = {}
+                                        }
+                                    });
+                                    break;
+                                case IOState::UNLOCKED:
+                                    Network::send_event({
+                                        .type = NetworkEventType::StateChange,
+                                        .state_change = {
+                                            .from = cur_state,
+                                            .to = current_event.network_command.commanded_state,
+                                            .reason = StateChangeReason::CardActivated,
+                                        }
+                                    });
+                                    break;
+                                default:
+                                    //FREAK OUT
+                                    return;
+                            }
+                        } else {
+                            Network::send_event({
+                                .type = NetworkEventType::StateChange,
+                                .state_change = {
+                                    .from = cur_state,
+                                    .to = current_event.network_command.commanded_state,
+                                    .reason = StateChangeReason::ServerCommanded,
+                                    .who = {},
+                                },
+                            });
+                        }
                         go_to_state(current_event.network_command.commanded_state);
                         break;
                     case NetworkCommandEventType::IDENTIFY:
