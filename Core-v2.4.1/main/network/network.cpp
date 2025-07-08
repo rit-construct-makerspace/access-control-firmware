@@ -6,6 +6,8 @@
 #include "storage.hpp"
 #include <string.h>
 
+#include "io/IO.hpp"
+
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
 #include <freertos/task.h>
@@ -18,47 +20,61 @@
 static const char* TAG = "network";
 
 static TaskHandle_t network_task;
+static QueueHandle_t network_event_queue;
 
-/* The event group allows multiple bits for each event, but we only care about
- * two events:
- * - we are connected to the AP with an IP
- * - we failed to connect after the maximum amount of retries */
-#define WIFI_CONNECTED_BIT BIT0
-#define WIFI_FAIL_BIT BIT1
-/* FreeRTOS event group to signal when we are connected*/
+static SemaphoreHandle_t is_online_mutex;
+static bool is_online_value = false;
+static int wifi_retry_count = 0;
 
-static EventGroupHandle_t s_wifi_event_group;
-static int s_retry_num = 0;
+void set_is_online(bool new_online) {
+    if (xSemaphoreTake(is_online_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+        is_online_value = new_online;
+        xSemaphoreGive(is_online_mutex);
+    }
+}
+bool is_online() {
+    if (xSemaphoreTake(is_online_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+        bool is_o = is_online_value;
+        xSemaphoreGive(is_online_mutex);
+        return is_o;
+    }
+    ESP_LOGE(TAG, "Failed to get mutex for esp");
+    return false;
+}
 
 static void on_wifi_event(void* arg, esp_event_base_t event_base,
                           int32_t event_id, void* event_data) {
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
+        ESP_LOGI(TAG, "Wifi Started: Connecting....");
         esp_wifi_connect();
     } else if (event_base == WIFI_EVENT &&
                event_id == WIFI_EVENT_STA_DISCONNECTED) {
-        if (s_retry_num < 5) {
+        if (wifi_retry_count < 5) {
+            ESP_LOGW(TAG, "Wifi Reconnecting....");
             esp_wifi_connect();
-            s_retry_num++;
+            wifi_retry_count++;
             ESP_LOGI(TAG, "retry to connect to the AP");
         } else {
-            xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
+            ESP_LOGE(TAG, "WiFi Failed....");
+            set_is_online(false);
         }
         ESP_LOGI(TAG, "connect to the AP fail");
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t* event = (ip_event_got_ip_t*)event_data;
         ESP_LOGI(TAG, "got ip:" IPSTR, IP2STR(&event->ip_info.ip));
-        // submit_ip(event->ip_info.ip);
+        set_is_online(true);
 
-        s_retry_num = 0;
-        xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
+        Network::send_internal_event(
+            {.type        = Network::InternalEventType::NetifUp,
+             .netif_up_ip = event->ip_info.ip});
+
+        wifi_retry_count = 0;
     }
 }
 
 void wifi_init_sta(void) {
     WifiSSID ssid     = Storage::get_network_ssid();
     WifiPassword pass = Storage::get_network_password();
-
-    s_wifi_event_group = xEventGroupCreate();
 
     ESP_ERROR_CHECK(esp_netif_init());
 
@@ -85,26 +101,7 @@ void wifi_init_sta(void) {
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
     ESP_ERROR_CHECK(esp_wifi_start());
 
-    ESP_LOGI(TAG, "wifi_init_sta finished.");
-
-    /* Waiting until either the connection is established (WIFI_CONNECTED_BIT)
-     * or connection failed for the maximum number of re-tries (WIFI_FAIL_BIT).
-     * The bits are set by event_handler() (see above) */
-    EventBits_t bits = xEventGroupWaitBits(s_wifi_event_group,
-                                           WIFI_CONNECTED_BIT | WIFI_FAIL_BIT,
-                                           pdFALSE, pdFALSE, portMAX_DELAY);
-
-    /* xEventGroupWaitBits() returns the bits before the call returned, hence we
-     * can test which event actually happened. */
-    if (bits & WIFI_CONNECTED_BIT) {
-        ESP_LOGI(TAG, "connected to ap SSID:%s password:%s", ssid.data(),
-                 pass.data());
-    } else if (bits & WIFI_FAIL_BIT) {
-        ESP_LOGI(TAG, "Failed to connect to SSID:%s, password:%s", ssid.data(),
-                 pass.data());
-    } else {
-        ESP_LOGE(TAG, "UNEXPECTED EVENT");
-    }
+    ESP_LOGI(TAG, "wifi thinking.");
 }
 
 const char* reset_reason_to_str(esp_reset_reason_t res) {
@@ -153,46 +150,67 @@ void consider_reset() {
     }
 }
 
-void network_thread_fn(void* p) {
-    wifi_init_sta();
-    int i = 0;
-    while (true) {
-        i++;
-        ESP_LOGI(TAG, "Tick %d", i);
-        vTaskDelay(pdMS_TO_TICKS(5000));
-        // int i = *(int*)p;
-        // ESP_LOGI(TAG, "I=%d, %p", i, p);
-    }
-    return;
-}
-
 namespace Network {
+    void network_thread_fn(void* p) {
+        wifi_init_sta();
+
+        while (true) {
+            Network::InternalEvent event;
+            if (xQueueReceive(network_event_queue, (void*)&event,
+                              portMAX_DELAY) == pdFALSE) {
+                ESP_LOGW(TAG, "Noting for network");
+                continue;
+            }
+
+            if (event.type == InternalEventType::NetifUp) {
+                ESP_LOGD(TAG, "Wifi up, tell wsacs to connect");
+                WSACS::send_message(
+                    WSACS::Event{.type = WSACS::EventType::TryConnect});
+            } else if (event.type == InternalEventType::ServerSetState) {
+                IO::send_event({
+                    .type = IOEventType::NETWORK_COMMAND,
+                    .network_command =
+                        {
+                            .type = NetworkCommandEventType::COMMAND_STATE,
+                            .commanded_state = event.server_set_state,
+                        },
+                });
+            }
+        }
+        return;
+    }
+
+    int send_internal_event(InternalEvent ev) {
+        xQueueSend(network_event_queue, &ev, pdMS_TO_TICKS(100));
+        return 0;
+    }
+
+    int send_event(NetworkEvent ev) {
+        return send_internal_event(InternalEvent{
+            .type           = InternalEventType::ExternalEvent,
+            .external_event = ev,
+        });
+    }
+
     int init() {
+        esp_log_level_set("esp-tls",
+                          ESP_LOG_DEBUG); // enable INFO logs from DHCP client
+        esp_log_level_set("transport_ws",
+                          ESP_LOG_DEBUG); // enable INFO logs from DHCP client
+
+        network_event_queue = xQueueCreate(5, sizeof(Network::InternalEvent));
         consider_reset();
 
         ESP_LOGI(TAG, "Network Side Start");
 
+        WSACS::init();
+        is_online_mutex = xSemaphoreCreateMutex();
         Storage::init(); // Storage must come before wifi as wifi depends on NVS
         xTaskCreate(network_thread_fn, "network", 8192, nullptr, 0,
                     &network_task);
 
         return 0;
     }
+
     bool is_online() { return true; }
-
-    bool send_event(NetworkEvent ev) {
-        if (ev.type == NetworkEventType::AuthRequest) {
-            ESP_LOGI(TAG, "Auth request");
-        } else if (ev.type == NetworkEventType::StateChange) {
-            ESP_LOGI(TAG, "state change from %s to %s",
-                     io_state_to_string(ev.state_change.from),
-                     io_state_to_string(ev.state_change.to));
-        } else if (ev.type == NetworkEventType::PleaseRestart) {
-            ESP_LOGI(TAG, "sohuld restart");
-        }
-        return true;
-    }
-
 } // namespace Network
-
-namespace bad {}

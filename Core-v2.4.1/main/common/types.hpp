@@ -4,8 +4,8 @@
 #include <string>
 
 enum class CardTagType {
-    SEVEN,
-    FOUR,
+    FOUR = 4,
+    SEVEN = 7,
 };
 const char* card_tag_type_to_string(CardTagType type);
 
@@ -13,6 +13,19 @@ struct CardTagID {
     CardTagType type;
     std::array<uint8_t, 10> value;
 
+    bool operator==(const CardTagID &other) const {
+        if (type != other.type) {
+            return false;
+        }
+
+        for (int i = 0; i < (int) type; i++) {
+            if (value[i] != other.value[i]) {
+                return false;
+            }
+        }
+
+        return true;
+    }
     std::string to_string() const;
 };
 
@@ -56,6 +69,7 @@ enum class IOEventType {
     BUTTON_PRESSED,
     CARD_DETECTED,
     CARD_REMOVED,
+    CARD_READ_ERROR,
     NETWORK_COMMAND,
 };
 const char* io_event_type_to_string(IOEventType type);
@@ -66,6 +80,7 @@ struct CardDetectedEvent {
 };
 
 struct CardRemovedEvent {
+    CardTagID card_tag_id;
     std::string to_string() const;
 };
 
@@ -82,6 +97,7 @@ struct ButtonEvent {
 enum class NetworkCommandEventType {
     IDENTIFY,
     COMMAND_STATE,
+    DENY,
 };
 const char* network_command_event_type_to_string(NetworkCommandEventType type);
 
@@ -89,6 +105,7 @@ struct NetworkCommandEvent {
     NetworkCommandEventType type;
     IOState commanded_state; // Only valid if type is COMMAND_STATE
     bool requested; // true if we asked to auth. false if command came from on high
+    CardTagID for_user;
     std::string to_string() const;
 };
 

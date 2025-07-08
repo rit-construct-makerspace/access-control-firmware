@@ -91,6 +91,8 @@ const char* io_event_type_to_string(IOEventType type) {
         return "Card Removed";
     case IOEventType::NETWORK_COMMAND:
         return "Network Command";
+    case IOEventType::CARD_READ_ERROR:
+        return "Card Read Error";
     default:
         return "Unknown IOEvent Type";
     }
@@ -98,6 +100,9 @@ const char* io_event_type_to_string(IOEventType type) {
 
 std::string CardDetectedEvent::to_string() const {
     return "detected:" + card_tag_id.to_string();
+}
+std::string CardRemovedEvent::to_string() const {
+    return "removed:" + card_tag_id.to_string();
 }
 
 const char* network_command_event_type_to_string(NetworkCommandEventType type) {

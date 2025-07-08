@@ -78,10 +78,7 @@ void tinyusb_cdc_line_state_changed_callback(int itf, cdcacm_event_t* event) {
     if (new_rts) {
         rts_ever = true;
     }
-    ESP_LOGI(TAG,
-             "Line state changed on channel %d: From %d:%d to DTR:%d, RTS:%d",
-             itf, dtr, rts, new_dtr, new_rts);
-
+    
     dtr = new_dtr;
     rts = new_rts;
 }
@@ -112,7 +109,10 @@ void usb_thread_fn(void*) {
                                            pdMS_TO_TICKS(100));
         if (read > 0) {
             tinyusb_cdcacm_write_queue(LOG_CDC_ITF, usb_buf, read);
-            tinyusb_cdcacm_write_flush(LOG_CDC_ITF, pdMS_TO_TICKS(100));
+            esp_err_t err = tinyusb_cdcacm_write_flush(LOG_CDC_ITF, pdMS_TO_TICKS(100));
+            if (err != ESP_OK){
+                xStreamBufferReset(debug_stream_buffer);
+            }
         }
     }
 }

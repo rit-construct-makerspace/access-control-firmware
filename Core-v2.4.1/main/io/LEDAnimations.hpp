@@ -39,12 +39,13 @@ namespace Animation {
     static const RGB GREEN_DIM = {0, 5, 0};
     static const RGB BLUE = {0, 0, 15};
     static const RGB ORANGE = {15, 10, 0};
+    static const RGB ORANGE_DIM = {5, 4, 0};
 
     // *********************************
     // ANIMATIONS
     // *********************************
 
-    const Animation IDLE_ANIMATION {
+    const Animation IDLE {
         .length = 2,
         .frames = {
             Frame{ORANGE, ORANGE, ORANGE, ORANGE},
@@ -52,7 +53,7 @@ namespace Animation {
         }
     };
     
-    const Animation LOCKOUT_ANIMATION {
+    const Animation LOCKOUT {
         .length = 2,
         .frames = {
             Frame{RED, RED, RED, RED},
@@ -60,7 +61,7 @@ namespace Animation {
         }
     };
     
-    const Animation UNLOCKED_ANIMATION {
+    const Animation UNLOCKED {
         .length = 2,
         .frames = {
             Frame{GREEN, GREEN, GREEN, GREEN},
@@ -68,7 +69,7 @@ namespace Animation {
         }
     };
     
-    const Animation ALWAYS_ON_ANIMATION {
+    const Animation ALWAYS_ON {
         .length = 8,
         .frames = {
             Frame {GREEN, GREEN_DIM, GREEN, GREEN_DIM},
@@ -82,7 +83,7 @@ namespace Animation {
         }
     };
     
-    const Animation DENIED_ANIMATION {
+    const Animation DENIED {
         .length = 2,
         .frames = {
             Frame {RED, RED, RED, RED},
@@ -90,7 +91,7 @@ namespace Animation {
         }
     };
     
-    const Animation STARTUP_ANIMATION {
+    const Animation STARTUP {
         .length = 3,
         .frames = {
             Frame {RED, RED, RED, RED},
@@ -99,7 +100,7 @@ namespace Animation {
         }
     };
     
-    const Animation IDLE_WAITING_ANIMATION {
+    const Animation IDLE_WAITING {
         .length = 2,
         .frames = {
             Frame {OFF, ORANGE, ORANGE, OFF},
@@ -107,7 +108,7 @@ namespace Animation {
         }
     };
     
-    const Animation ALWAYS_ON_WAITING_ANIMATION {
+    const Animation ALWAYS_ON_WAITING {
         .length = 2,
         .frames = {
             Frame {OFF, GREEN, GREEN, OFF},
@@ -115,7 +116,7 @@ namespace Animation {
         }
     };
     
-    const Animation LOCKOUT_WAITING_ANIMATION {
+    const Animation LOCKOUT_WAITING {
         .length = 2,
         .frames = {
             Frame {OFF, RED, RED, OFF},
@@ -123,7 +124,7 @@ namespace Animation {
         }
     };
     
-    const Animation RESTART_ANIMATION {
+    const Animation RESTART {
         .length = 3,
         .frames = {
             Frame {RED, GREEN, BLUE, RED},
@@ -132,11 +133,49 @@ namespace Animation {
         }
     };
     
-    const Animation FAULT_ANIMATION {
+    const Animation FAULT {
         .length = 2,
         .frames = {
             Frame {RED, RED, RED, RED},
             Frame {OFF, OFF, OFF, OFF},
+        }
+    };
+
+    const Animation AWAIT_AUTH {
+        .length = 6,
+        .frames = {
+            Frame {ORANGE, ORANGE_DIM, ORANGE_DIM, ORANGE_DIM},
+            Frame {ORANGE_DIM, ORANGE, ORANGE_DIM, ORANGE_DIM},
+            Frame {ORANGE_DIM, ORANGE_DIM, ORANGE, ORANGE_DIM},
+            Frame {ORANGE_DIM, ORANGE_DIM, ORANGE_DIM, ORANGE},
+            Frame {ORANGE_DIM, ORANGE_DIM, ORANGE, ORANGE_DIM},
+            Frame {ORANGE_DIM, ORANGE, ORANGE_DIM, ORANGE_DIM},
+        }
+    };
+
+    const Animation IDENTIFY {
+        .length = 2,
+        .frames = {
+            Frame {BLUE, BLUE, BLUE, BLUE},
+            Frame {OFF, OFF, OFF, OFF},
+        }
+    };
+
+    const Animation WELCOMING {
+        .length = 4,
+        .frames = {
+            Frame {OFF, OFF, OFF, OFF},
+            Frame {OFF, OFF, OFF, OFF},
+            Frame {OFF, OFF, OFF, OFF},
+            Frame {ORANGE, OFF, OFF, OFF},
+        }
+    };
+
+    const Animation WELCOMED {
+        .length = 2,
+        .frames = {
+            Frame {GREEN, OFF, OFF, OFF},
+            Frame {GREEN, OFF, OFF, OFF},
         }
     };
 }
