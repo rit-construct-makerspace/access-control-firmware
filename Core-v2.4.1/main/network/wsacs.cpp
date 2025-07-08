@@ -10,6 +10,8 @@
 #include <freertos/queue.h>
 #include <freertos/task.h>
 #include <freertos/timers.h>
+#include "network.hpp"
+#include "common/hardware.hpp"
 
 static const char* TAG = "wsacs";
 
@@ -63,20 +65,22 @@ void handle_auth_response(const char* auth, int verified) {
 
 void handle_incoming_ws_text(const char* data, size_t len) {
     if (len == 0) {
-        ESP_LOGE(TAG, "ws message with 0 length???");
+        ESP_LOGE(TAG, "ws message with 0 length. Protocol Error");
         return;
     }
-    ESP_LOGI(TAG, "Received msg size %d: %.*s", len, len, data);
+    ESP_LOGD(TAG, "Received msg size %d: %.*s", len, len, data);
 
     cJSON* obj = cJSON_ParseWithLength(data, len);
     if (obj == NULL) {
         ESP_LOGE(TAG, "Failed to parse json: %.*s", len, data);
         return;
     }
+
     if (cJSON_HasObjectItem(obj, "State")) {
         handle_server_state_change(
             cJSON_GetStringValue(cJSON_GetObjectItem(obj, "State")));
     }
+
     if (cJSON_HasObjectItem(obj, "Auth")) {
         int verified = 0;
         if (cJSON_HasObjectItem(obj, "Verified")) {
@@ -87,11 +91,15 @@ void handle_incoming_ws_text(const char* data, size_t len) {
             cJSON_GetStringValue(cJSON_GetObjectItem(obj, "Auth"));
         handle_auth_response(auth, verified);
     }
+
     if (cJSON_HasObjectItem(obj, "Identify")) {
-        IO::send_event({.type            = IOEventType::NETWORK_COMMAND,
-                        .network_command = {
-                            .type = NetworkCommandEventType::IDENTIFY,
-                        }});
+        IO::send_event({
+            .type = IOEventType::NETWORK_COMMAND,
+            .network_command =
+                {
+                    .type = NetworkCommandEventType::IDENTIFY,
+                },
+        });
     }
     cJSON_Delete(obj);
 }
@@ -129,7 +137,7 @@ void keepalive_timer_callback() {
     }
     int temp = 33;
 
-     msg = cJSON_CreateObject();
+    msg = cJSON_CreateObject();
 
     cJSON_AddStringToObject(msg, "State", io_state_to_string(state));
     cJSON_AddNumberToObject(msg, "Temp", (double)temp);
@@ -144,11 +152,10 @@ void send_opening_message() {
         return;
     }
     cJSON* msg = cJSON_CreateObject();
-    cJSON_AddStringToObject(msg, "SerialNumber",
-                            Hardware::get_serial_number());
+    cJSON_AddStringToObject(msg, "SerialNumber", Hardware::get_serial_number());
     cJSON_AddStringToObject(msg, "Key", Storage::get_key().c_str());
     cJSON_AddStringToObject(msg, "HWType", "Core");
-    cJSON_AddStringToObject(msg, "HWVersion", "2.4.1");
+    cJSON_AddStringToObject(msg, "HWVersion", Hardware::get_edition_string());
     cJSON_AddStringToObject(msg, "FWVersion", "testing");
     cJSON* req_arr = cJSON_AddArrayToObject(msg, "Request");
     cJSON* req0    = cJSON_CreateString("State");
@@ -160,6 +167,7 @@ void send_opening_message() {
     send_cjson(msg);
     cJSON_Delete(msg);
 }
+
 void send_auth_request(AuthRequest request) {
     if (ws_handle == NULL) {
         ESP_LOGE(TAG, "Programming error");
@@ -204,7 +212,7 @@ static void websocket_event_handler(void* handler_args, esp_event_base_t base,
         }
         break;
     case WEBSOCKET_EVENT_DATA:
-        // network watchdog feed
+        Network::network_watchdog_feed();
         // TODO check close code
         if (data->op_code == 0x1) { // Opcode 0x1 indicates text data
             handle_incoming_ws_text(data->data_ptr, data->data_len);
@@ -266,52 +274,70 @@ void connect_to_server() {
 }
 
 void wsacs_thread_fn(void*) {
+    using namespace WSACS;
     WSACS::Event event{
         WSACS::EventType::TryConnect}; // always overwritten by receive
+
     while (true) {
         if (xQueueReceive(wsacs_queue, (void*)&event, portMAX_DELAY) ==
             pdFALSE) {
             continue;
         }
-        if (event.type == WSACS::EventType::TryConnect) {
+        switch (event.type) {
+        case EventType::TryConnect:
             connect_to_server();
-        } else if (event.type == WSACS::EventType::ServerConnect) {
+            break;
+
+        case EventType::ServerConnect:
             ESP_LOGI(TAG, "Sending openning");
             seqnum = 0;
             send_opening_message();
-        } else if (event.type == WSACS::EventType::ServerDisconnect) {
+            break;
+
+        case EventType::ServerDisconnect:
             handle_disconnect();
-        } else if (event.type == WSACS::EventType::KeepAliveTimer) {
+            break;
+
+        case EventType::KeepAliveTimer:
             keepalive_timer_callback();
-        } else if (event.type == WSACS::EventType::AuthRequest) {
+            break;
+
+        case EventType::AuthRequest:
             send_auth_request(event.auth_request);
-        } else if (event.type == WSACS::EventType::GenericJSON) {
+            break;
+
+        case EventType::JSONLog: {
             cJSON* root = cJSON_CreateObject();
             cJSON_AddItemToObject(root, "Log", event.cjson);
             send_cjson(root);
             cJSON_Delete(root);
-        } else if (event.type == WSACS::EventType::Message){
-            cJSON *obj = cJSON_CreateObject();
-            cJSON_AddStringToObject(obj, "Message", event.message);
+        } break;
+        case EventType::Message: {
+            cJSON* obj = cJSON_CreateObject();
+            cJSON_AddStringToObject(obj, "Message", event.msg);
             send_cjson(obj);
             cJSON_Delete(obj);
-            delete[] event.message;
-        } else {
+            delete[] event.msg;
+        } break;
+
+        default:
             ESP_LOGW(TAG, "Not handling message with type %d", (int)event.type);
         }
     }
 }
 
 namespace WSACS {
-    Event::Event(EventType _type) : type(_type) {}
-    Event::Event(AuthRequest auth_request)
-        : type(EventType::AuthRequest), auth_request(auth_request) {}
-    Event::Event(char *msg): type(EventType::Message), message(msg){}
-    Event::Event(EventType _type, cJSON*j) : type(_type), cjson(j) {}
+    Event Event::auth_req(AuthRequest auth_request) {
+        return {.type = EventType::AuthRequest, .auth_request = auth_request};
+    }
+    Event Event::message(char* msg) {
+        return {.type = EventType::Message, .msg = msg};
+    }
+    Event Event::json(cJSON* j) {
+        return {.type = EventType::JSONLog, .cjson = j};
+    }
 
     int init() {
-        esp_log_level_set("TRANS_TCP", ESP_LOG_DEBUG);
-
         wsacs_queue = xQueueCreate(5, sizeof(Event));
         if (wsacs_queue == NULL) {
             ESP_LOGE(TAG, "Fail and die");
@@ -324,8 +350,9 @@ namespace WSACS {
                              WSACS::send_event({EventType::KeepAliveTimer});
                          });
         if (xTimerStart(keep_alive_timer, pdMS_TO_TICKS(100)) == pdFAIL) {
-
             ESP_LOGE(TAG, "Couldnt start keepalive timer");
+            // todo crash
+            return -1;
         }
 
         if (keep_alive_timer == NULL) {
@@ -342,10 +369,12 @@ namespace WSACS {
         }
         return 0;
     }
-
+    esp_err_t send_event(EventType typ) {
+        return send_event({.type = typ, .msg = NULL});
+    }
     esp_err_t send_event(Event event) {
-        xQueueSend(wsacs_queue, &event, pdMS_TO_TICKS(100));
-        return ESP_OK; // todo real code
+        bool ok = pdTRUE == xQueueSend(wsacs_queue, &event, pdMS_TO_TICKS(100));
+        return ok ? ESP_OK : ESP_ERR_NO_MEM;
     }
 
 } // namespace WSACS

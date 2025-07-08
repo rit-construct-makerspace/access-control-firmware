@@ -1,5 +1,6 @@
 #include "usb.hpp"
 
+#include "common/hardware.hpp"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
@@ -7,9 +8,9 @@
 #include "freertos/task.h"
 #include "sdkconfig.h"
 #include "soc/rtc_cntl_reg.h"
+#include "storage.hpp"
 #include "tinyusb.h"
 #include "tusb_cdc_acm.h"
-#include "storage.hpp"
 
 #define LOG_CDC_ITF ((tinyusb_cdcacm_itf_t)0)
 #define MAX_DEBUG_SIZE 3072
@@ -134,10 +135,10 @@ esp_err_t USB::init() {
         // array of pointer to string descriptors
         (char[]){0x09, 0x04}, // 0: is supported language is English (0x0409)
         CONFIG_TINYUSB_DESC_MANUFACTURER_STRING, // 1: Manufacturer
-        Hardware::get_edition_string(),         // 2: Product
-        Hardware::get_serial_number(),           // 3: Serials, should use chip ID
-        CONFIG_TINYUSB_DESC_CDC_STRING,         // 4: CDC Interface
-        "",                                     // empty bc mass storage not enabled
+        Hardware::get_edition_string(),          // 2: Product
+        Hardware::get_serial_number(),  // 3: Serials, should use chip ID
+        CONFIG_TINYUSB_DESC_CDC_STRING, // 4: CDC Interface
+        "",                             // empty bc mass storage not enabled
     };
 
     const tinyusb_config_t tusb_cfg = {
@@ -148,7 +149,6 @@ esp_err_t USB::init() {
         .self_powered             = true,
         .vbus_monitor_io          = -1,
     };
-
 
     ESP_ERROR_CHECK(tinyusb_driver_install(&tusb_cfg));
 

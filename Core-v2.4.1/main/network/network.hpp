@@ -7,10 +7,18 @@ namespace Network {
 
     int init();
 
-
+    /**
+     * Send an event to the network task
+     * anything not to do with networking should use this
+     */
     int send_event(NetworkEvent ev);
+    /**
+     * @return true if we're connected to the server
+     * @return false if not
+     */
     bool is_online();
 
+    // Called when network events happen that indicate online
     void network_watchdog_feed();
     // Used only by tasks on the network side of things to
     // communicate with the main network handler 

@@ -4,13 +4,13 @@
 #include <thread>
 #include <array>
 #include "network/network.hpp"
-#include "network/storage.hpp"
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <freertos/semphr.h>
 
 #include "common/pins.hpp"
 #include "common/types.hpp"
+#include "common/hardware.hpp"
 #include "esp_log.h"
 #include "led_strip.h"
 #include "io/LEDAnimations.hpp"

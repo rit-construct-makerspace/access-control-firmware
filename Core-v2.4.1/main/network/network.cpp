@@ -159,17 +159,20 @@ static AuthRequest outstanding_auth   = invalid_auth;
 static TimerHandle_t auth_timer_handle;
 
 namespace Network {
+    // TODO make this think about things harder and do stuff if we're falling offline
+    void network_watchdog_feed() {}
+
     void handle_external_event(NetworkEvent event) {
         switch (event.type) {
         case NetworkEventType::AuthRequest:
             outstanding_auth = event.auth_request;
             // do fancier things in case this fails (ask storage)
             xTimerStart(auth_timer_handle, pdMS_TO_TICKS(100));
-            WSACS::send_event(event.auth_request);
+            WSACS::send_event(WSACS::Event::auth_req(event.auth_request));
             break;
 
         case NetworkEventType::Message:
-            WSACS::send_event(event.message);
+            WSACS::send_event(WSACS::Event::message(event.message));
             break;
 
         case NetworkEventType::PleaseRestart:
@@ -271,7 +274,6 @@ namespace Network {
         esp_log_level_set("transport_ws",
                           ESP_LOG_INFO); // enable INFO logs from DHCP client
 
-        Storage::init(); // Storage must come before wifi as wifi depends on NVS
         network_event_queue = xQueueCreate(5, sizeof(Network::InternalEvent));
 
         WSACS::init();
