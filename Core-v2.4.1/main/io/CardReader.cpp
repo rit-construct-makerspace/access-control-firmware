@@ -272,7 +272,7 @@ void CardReader::init(){
 
     // This are register required for my development platform, you probably have to change (or uncomment) them.
     mfrc630_write_reg(0x28, 0x8E);
-    mfrc630_write_reg(0x29, 0x15);
+    mfrc630_write_reg(0x29, 0xD5);
     mfrc630_write_reg(0x2A, 0x11);
     mfrc630_write_reg(0x2B, 0x06);
 
