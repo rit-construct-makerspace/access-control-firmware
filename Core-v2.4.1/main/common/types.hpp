@@ -174,8 +174,6 @@ enum class HardwareEdition {
     STANDARD,
 };
 
-HardwareEdition get_hardware_edition();
-
 enum class FaultReason {
     SERVER_COMMANDED,
     OVER_TEMP,

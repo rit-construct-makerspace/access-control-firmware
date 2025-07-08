@@ -27,14 +27,14 @@ uint64_t get_next_seqnum() {
     return i;
 }
 
-
 void handle_server_state_change(const char* state) {
     std::optional<IOState> iostate = parse_iostate(state);
     if (!iostate.has_value()) {
         ESP_LOGE(TAG, "Not setting state to unknown state: %.16s", state);
         return;
     }
-    ESP_LOGI(TAG, "send internal event: %s", io_state_to_string(iostate.value()));
+    ESP_LOGI(TAG, "send internal event: %s",
+             io_state_to_string(iostate.value()));
     Network::send_internal_event({
         .type             = Network::InternalEventType::ServerSetState,
         .server_set_state = iostate.value(),
@@ -91,16 +91,13 @@ void handle_incoming_ws_text(const char* data, size_t len) {
             cJSON_GetStringValue(cJSON_GetObjectItem(obj, "Auth"));
         handle_auth_response(auth, verified);
     }
-    if (cJSON_HasObjectItem(obj, "Identify")){
-        IO::send_event({
-            .type = IOEventType::NETWORK_COMMAND,
-            .network_command = {
-                .type = NetworkCommandEventType::IDENTIFY,
-            }
-        });
+    if (cJSON_HasObjectItem(obj, "Identify")) {
+        IO::send_event({.type            = IOEventType::NETWORK_COMMAND,
+                        .network_command = {
+                            .type = NetworkCommandEventType::IDENTIFY,
+                        }});
     }
     cJSON_free(obj);
-    
 }
 
 // will add sequence number and to string it (ONLY CALL ON WEBSOCKET THREAD)
@@ -119,11 +116,14 @@ void send_cjson(cJSON* obj) {
     free((void*)text);
 }
 
-void send_keep_alive_message() {
+void keepalive_timer_callback() {
     if (ws_handle == NULL) {
-        ESP_LOGE(TAG, "Programming error");
+        // try reconnecting
+        WSACS::send_event({WSACS::EventType::TryConnect});
         return;
     }
+    ESP_LOGI(TAG, "Sending keepalive");
+
     IOState state = IOState::IDLE;
     if (!IO::get_state(state)) {
         ESP_LOGE(TAG, "Couldn't get state for status message");
@@ -146,7 +146,7 @@ void send_opening_message() {
     }
     cJSON* msg = cJSON_CreateObject();
     cJSON_AddStringToObject(msg, "SerialNumber",
-                            Storage::get_serial_number().c_str());
+                            Hardware::get_serial_number());
     cJSON_AddStringToObject(msg, "Key", Storage::get_key().c_str());
     cJSON_AddStringToObject(msg, "HWType", "Core");
     cJSON_AddStringToObject(msg, "HWVersion", "2.4.1");
@@ -189,7 +189,6 @@ static void websocket_event_handler(void* handler_args, esp_event_base_t base,
         break;
     case WEBSOCKET_EVENT_DISCONNECTED:
         WSACS::send_event({WSACS::EventType::ServerDisconnect});
-
         if (data->error_handle.esp_ws_handshake_status_code != 0) {
             ESP_LOGE(TAG, "HTTP STATUS CODE: %d",
                      data->error_handle.esp_ws_handshake_status_code);
@@ -232,18 +231,23 @@ static void websocket_event_handler(void* handler_args, esp_event_base_t base,
         break;
     }
 }
+static void handle_disconnect() {
+    ESP_LOGW(TAG, "Destroying old ws client");
+    esp_websocket_client_destroy(ws_handle);
+    ws_handle = NULL;
+    seqnum    = 0;
+}
 
 void connect_to_server() {
     if (ws_handle != NULL) {
-        ESP_LOGW(TAG, "Destroying old ws client");
-        esp_websocket_client_destroy(ws_handle);
-        ws_handle = NULL;
-        seqnum    = 0;
-        xTimerStop(keep_alive_timer, pdMS_TO_TICKS(100));
+        handle_disconnect();
     }
-    // cfg.uri                  = "ws://calcarea.student.rit.edu/api/ws";
-    cfg.uri = "ws://make.rit.edu/api/ws";
-    // cfg.port                 = 3000;
+    std::string server_url    = Storage::get_server();
+    std::string websocket_url = "ws://" + server_url + "/api/ws";
+
+    cfg.uri  = websocket_url.c_str();
+    cfg.port = 3000;
+
     cfg.network_timeout_ms   = 10000;
     cfg.reconnect_timeout_ms = 1000;
 
@@ -275,12 +279,10 @@ void wsacs_thread_fn(void*) {
             ESP_LOGI(TAG, "Sending openning");
             seqnum = 0;
             send_opening_message();
-            if (xTimerStart(keep_alive_timer, pdMS_TO_TICKS(100)) == pdFAIL) {
-                ESP_LOGE(TAG, "Couldnt start keepalive timer");
-            }
-        } else if (event.type == WSACS::EventType::ServerConnect) {
+        } else if (event.type == WSACS::EventType::ServerDisconnect) {
+            handle_disconnect();
         } else if (event.type == WSACS::EventType::KeepAliveTimer) {
-            send_keep_alive_message();
+            keepalive_timer_callback();
         } else if (event.type == WSACS::EventType::AuthRequest) {
             send_auth_request(event.auth_request);
         } else if (event.type == WSACS::EventType::GenericJSON) {
@@ -310,6 +312,10 @@ namespace WSACS {
                          NULL, [](TimerHandle_t) {
                              WSACS::send_event({EventType::KeepAliveTimer});
                          });
+        if (xTimerStart(keep_alive_timer, pdMS_TO_TICKS(100)) == pdFAIL) {
+
+            ESP_LOGE(TAG, "Couldnt start keepalive timer");
+        }
 
         if (keep_alive_timer == NULL) {
             ESP_LOGE(TAG, "Fail and die timer edition");

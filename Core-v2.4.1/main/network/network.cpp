@@ -256,22 +256,24 @@ namespace Network {
     }
 
     int init() {
+
         esp_log_level_set("esp-tls",
                           ESP_LOG_INFO); // enable INFO logs from DHCP client
         esp_log_level_set("transport_ws",
                           ESP_LOG_INFO); // enable INFO logs from DHCP client
 
+
+        Storage::init(); // Storage must come before wifi as wifi depends on NVS
         network_event_queue = xQueueCreate(5, sizeof(Network::InternalEvent));
 
         WSACS::init();
         is_online_mutex = xSemaphoreCreateMutex();
-        Storage::init(); // Storage must come before wifi as wifi depends on NVS
 
-        auth_timer_handle = xTimerCreate("wsacs_timeout", pdMS_TO_TICKS(5 * 1000), pdFALSE, NULL,
-                     [](TimerHandle_t) {
-                         send_internal_event(
-                             {.type = InternalEventType::WSACSTimedOut});
-                     });
+        auth_timer_handle = xTimerCreate(
+            "wsacs_timeout", pdMS_TO_TICKS(5 * 1000), pdFALSE, NULL,
+            [](TimerHandle_t) {
+                send_internal_event({.type = InternalEventType::WSACSTimedOut});
+            });
         xTaskCreate(network_thread_fn, "network", 8192, nullptr, 0,
                     &network_task);
 

@@ -4,6 +4,7 @@
 #include <thread>
 #include <array>
 #include "network/network.hpp"
+#include "network/storage.hpp"
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <freertos/semphr.h>
@@ -26,7 +27,7 @@ static const char * TAG = "led";
 
 led_strip_handle_t configure_led(void) {
     led_color_component_format_t strip_color_format;
-    HardwareEdition edition = get_hardware_edition();
+    HardwareEdition edition = Hardware::get_edition();
     switch (edition) {
         case HardwareEdition::LITE:
             strip_color_format = LED_STRIP_COLOR_COMPONENT_FMT_RGB;
