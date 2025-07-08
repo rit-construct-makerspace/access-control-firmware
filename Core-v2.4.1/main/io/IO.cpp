@@ -12,7 +12,7 @@
 #include "io/CardReader.hpp"
 #include "io/Buzzer.hpp"
 #include "network/network.hpp"
-
+#include "io/Temperature.hpp"
 
 static const char* TAG = "io";
 
@@ -457,6 +457,7 @@ int IO::init() {
     Button::init();
     CardReader::init();
     Buzzer::init();
+    Temperature::init();
 
     xTaskCreate(io_thread_fn, "io", IO_TASK_STACK_SIZE, NULL, 0, &io_thread);
     return 0;
