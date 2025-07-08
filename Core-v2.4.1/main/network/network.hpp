@@ -11,6 +11,7 @@ namespace Network {
     int send_event(NetworkEvent ev);
     bool is_online();
 
+    void network_watchdog_feed();
     // Used only by tasks on the network side of things to
     // communicate with the main network handler 
     enum class InternalEventType{
@@ -21,13 +22,15 @@ namespace Network {
         ServerSetState,
 
         WSACSAuthResponse,
+        WSACSTimedOut,
+
+        NetworkWatchdogExpire,
 
         ExternalEvent,
     };
     struct InternalEvent{
         InternalEventType type;
         union {
-            int _ = 0;
             esp_ip4_addr_t netif_up_ip;
             IOState server_set_state;
             uint64_t server_set_time;

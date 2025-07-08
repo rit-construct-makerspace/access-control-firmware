@@ -146,8 +146,16 @@ void handle_incoming_ws_text(const char* data, size_t len) {
             cJSON_GetStringValue(cJSON_GetObjectItem(obj, "Auth"));
         handle_auth_response(auth, verified);
     }
-
+    if (cJSON_HasObjectItem(obj, "Identify")){
+        IO::send_event({
+            .type = IOEventType::NETWORK_COMMAND,
+            .network_command = {
+                .type = NetworkCommandEventType::IDENTIFY,
+            }
+        });
+    }
     cJSON_free(obj);
+    
 }
 
 // will add sequence number and to string it (ONLY CALL ON WEBSOCKET THREAD)
@@ -230,17 +238,12 @@ static void websocket_event_handler(void* handler_args, esp_event_base_t base,
     esp_websocket_event_data_t* data = (esp_websocket_event_data_t*)event_data;
     switch (event_id) {
     case WEBSOCKET_EVENT_BEGIN:
-        ESP_LOGI(TAG, "WEBSOCKET_EVENT_BEGIN");
         break;
     case WEBSOCKET_EVENT_CONNECTED:
-        ESP_LOGI(TAG, "WEBSOCKET_EVENT_CONNECTED");
-        WSACS::send_message(
-            WSACS::Event{.type = WSACS::EventType::ServerConnect, ._ = {0}});
+        WSACS::send_event(WSACS::EventType::ServerConnect);
         break;
     case WEBSOCKET_EVENT_DISCONNECTED:
-        ESP_LOGI(TAG, "WEBSOCKET_EVENT_DISCONNECTED");
-        WSACS::send_message(
-            WSACS::Event{.type = WSACS::EventType::ServerDisconnect});
+        WSACS::send_event({WSACS::EventType::ServerDisconnect});
 
         if (data->error_handle.esp_ws_handshake_status_code != 0) {
             ESP_LOGE(TAG, "HTTP STATUS CODE: %d",
@@ -314,7 +317,8 @@ void connect_to_server() {
 }
 
 void wsacs_thread_fn(void*) {
-    WSACS::Event event;
+    WSACS::Event event{
+        WSACS::EventType::TryConnect}; // always overwritten by receive
     while (true) {
         if (xQueueReceive(wsacs_queue, (void*)&event, portMAX_DELAY) ==
             pdFALSE) {
@@ -334,14 +338,18 @@ void wsacs_thread_fn(void*) {
             send_keep_alive_message();
         } else if (event.type == WSACS::EventType::AuthRequest) {
             send_auth_request(event.auth_request);
-        } else {
+        } else if (event.type == WSACS::EventType::GenericJSON) {
 
+        } else {
             ESP_LOGW(TAG, "Not handling message with type %d", (int)event.type);
         }
     }
 }
 
 namespace WSACS {
+    Event::Event(EventType _type) : type(_type) {}
+    Event::Event(EventType _type, AuthRequest auth_request)
+        : type(_type), auth_request(auth_request) {}
 
     int init() {
         esp_log_level_set("TRANS_TCP", ESP_LOG_DEBUG);
@@ -352,11 +360,11 @@ namespace WSACS {
             // todo crash
             return -1;
         }
-        keep_alive_timer = xTimerCreate(
-            "wsacs keepalive", pdMS_TO_TICKS(10 * 1000), true, NULL,
-            [](TimerHandle_t) {
-                WSACS::send_message({.type = WSACS::EventType::KeepAliveTimer});
-            });
+        keep_alive_timer =
+            xTimerCreate("wsacs keepalive", pdMS_TO_TICKS(10 * 1000), true,
+                         NULL, [](TimerHandle_t) {
+                             WSACS::send_event({EventType::KeepAliveTimer});
+                         });
 
         if (keep_alive_timer == NULL) {
             ESP_LOGE(TAG, "Fail and die timer edition");
@@ -373,7 +381,7 @@ namespace WSACS {
         return 0;
     }
 
-    esp_err_t send_message(Event event) {
+    esp_err_t send_event(Event event) {
         xQueueSend(wsacs_queue, &event, pdMS_TO_TICKS(100));
         return ESP_OK; // todo real code
     }

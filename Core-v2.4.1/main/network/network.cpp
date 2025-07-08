@@ -32,7 +32,10 @@ void set_is_online(bool new_online) {
         xSemaphoreGive(is_online_mutex);
     }
 }
-bool is_online() {
+bool Network::is_online() {
+    if (is_online_mutex == NULL) {
+        return false;
+    }
     if (xSemaphoreTake(is_online_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
         bool is_o = is_online_value;
         xSemaphoreGive(is_online_mutex);
@@ -142,7 +145,7 @@ const char* reset_reason_to_str(esp_reset_reason_t res) {
     return "UNKNOWN";
 }
 
-void consider_reset() {
+void consider_reset_reason() {
     esp_reset_reason_t reason = esp_reset_reason();
     ESP_LOGI(TAG, "Reset cause: %s", reset_reason_to_str(reason));
     if (reason == ESP_RST_PANIC) {
@@ -153,24 +156,21 @@ void consider_reset() {
 static const AuthRequest invalid_auth = {.requester = CardTagID{},
                                          .to_state  = IOState::RESTART};
 static AuthRequest outstanding_auth   = invalid_auth;
+static TimerHandle_t auth_timer_handle;
 
 namespace Network {
     void handle_external_event(NetworkEvent event) {
         if (event.type == NetworkEventType::AuthRequest) {
             outstanding_auth = event.auth_request;
             // do fancier things in case this fails (ask storage)
-            WSACS::send_message(WSACS::Event{
-                .type         = WSACS::EventType::AuthRequest,
-                .auth_request = event.auth_request,
-            });
+            xTimerStart(auth_timer_handle, pdMS_TO_TICKS(100));
+            WSACS::send_event(
+                {WSACS::EventType::AuthRequest, event.auth_request});
         } else if (event.type == NetworkEventType::PleaseRestart) {
             ESP_LOGE(TAG, "going kaboom");
             vTaskDelay(pdMS_TO_TICKS(1000));
             esp_restart();
         } else if (event.type == NetworkEventType::StateChange) {
-            // WSACS::send_message(WSACS::Event{
-            // .type = WSACS::EventType::
-            // })
             ESP_LOGI(TAG, "need to state change report to wsacs (maybe)");
         }
     }
@@ -179,10 +179,10 @@ namespace Network {
         wifi_init_sta();
 
         while (true) {
-            Network::InternalEvent event;
+            Network::InternalEvent event{
+                InternalEventType::ExternalEvent}; // always overwritten
             if (xQueueReceive(network_event_queue, (void*)&event,
                               portMAX_DELAY) == pdFALSE) {
-                ESP_LOGW(TAG, "Noting for network");
                 continue;
             }
 
@@ -190,8 +190,7 @@ namespace Network {
                 handle_external_event(event.external_event);
             } else if (event.type == InternalEventType::NetifUp) {
                 ESP_LOGD(TAG, "Wifi up, tell wsacs to connect");
-                WSACS::send_message(
-                    WSACS::Event{.type = WSACS::EventType::TryConnect});
+                WSACS::send_event({WSACS::EventType::TryConnect});
             } else if (event.type == InternalEventType::ServerSetState) {
                 IO::send_event({
                     .type = IOEventType::NETWORK_COMMAND,
@@ -203,7 +202,19 @@ namespace Network {
                             .for_user        = CardTagID{},
                         },
                 });
+            } else if (event.type == InternalEventType::WSACSTimedOut) {
+                IO::send_event({
+                    .type            = IOEventType::NETWORK_COMMAND,
+                    .network_command = {.type = NetworkCommandEventType::DENY,
+                                        .commanded_state =
+                                            event.wsacs_auth_response.to_state,
+                                        .requested = true,
+                                        .for_user =
+                                            event.wsacs_auth_response.user},
+                });
+
             } else if (event.type == InternalEventType::WSACSAuthResponse) {
+                xTimerStop(auth_timer_handle, pdMS_TO_TICKS(100));
                 if (event.wsacs_auth_response.verified) {
                     IO::send_event({
                         .type = IOEventType::NETWORK_COMMAND,
@@ -220,12 +231,11 @@ namespace Network {
                     IO::send_event({
                         .type = IOEventType::NETWORK_COMMAND,
                         .network_command =
-                            {
-                                .type = NetworkCommandEventType::DENY,
-                                .commanded_state = event.wsacs_auth_response.to_state,
-                                .requested = true,
-                                .for_user = event.wsacs_auth_response.user
-                            },
+                            {.type = NetworkCommandEventType::DENY,
+                             .commanded_state =
+                                 event.wsacs_auth_response.to_state,
+                             .requested = true,
+                             .for_user  = event.wsacs_auth_response.user},
                     });
                 }
             }
@@ -252,23 +262,21 @@ namespace Network {
                           ESP_LOG_INFO); // enable INFO logs from DHCP client
 
         network_event_queue = xQueueCreate(5, sizeof(Network::InternalEvent));
-        consider_reset();
-
-        ESP_LOGI(TAG, "Network Side Start");
 
         WSACS::init();
         is_online_mutex = xSemaphoreCreateMutex();
         Storage::init(); // Storage must come before wifi as wifi depends on NVS
+
+        auth_timer_handle = xTimerCreate("wsacs_timeout", pdMS_TO_TICKS(5 * 1000), pdFALSE, NULL,
+                     [](TimerHandle_t) {
+                         send_internal_event(
+                             {.type = InternalEventType::WSACSTimedOut});
+                     });
         xTaskCreate(network_thread_fn, "network", 8192, nullptr, 0,
                     &network_task);
 
+        consider_reset_reason();
         return 0;
     }
 
-    bool is_online() {
-        // todo, io task inits first before we have a chance to create mutex
-        // check if mutex is null, if it is, return false rather than
-        // dereferencing null ptr
-        return true;
-    }
 } // namespace Network
