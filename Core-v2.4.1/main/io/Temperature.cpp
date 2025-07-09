@@ -12,9 +12,10 @@
 #include "ds18b20.h"
 #include "network/storage.hpp"
 
-#define MAX_ONEWIRE_DEVICES 1
+#define MAX_ONEWIRE_DEVICES 2
 onewire_bus_handle_t onewire_bus;
-ds18b20_device_handle_t s_ds18b20s[2]; // MAX number of ds18b20s (currently 2)
+uint8_t num_ds_detcted = 0;
+ds18b20_device_handle_t s_ds18b20s[MAX_ONEWIRE_DEVICES];
 static float s_temperature[2] = {0.0, 0.0};
 
 SemaphoreHandle_t temp_mutex;
@@ -39,8 +40,9 @@ void sensor_detect() {
         if (search_result == ESP_OK) {
             ds18b20_config_t ds_cfg = {};
 
-            if (ds18b20_new_device(&next_onewire_device, &ds_cfg, &s_ds18b20s[onewire_device_found])) {
+            if (ds18b20_new_device(&next_onewire_device, &ds_cfg, &s_ds18b20s[num_ds_detcted])) {
                 ESP_LOGI(TAG, "Found a DS18B20[%d], address: %016llX", onewire_device_found, next_onewire_device.address);
+                num_ds_detcted++;
             } else {
                 ESP_LOGI(TAG, "Found an unknown device, address: %016llX", next_onewire_device.address);
             }
@@ -55,7 +57,7 @@ void sensor_detect() {
 
 void sensor_read() {
     float temp_temp = 0.0;
-    for (int i = 0; i < MAX_ONEWIRE_DEVICES; i++) {
+    for (int i = 0; i < num_ds_detcted; i++) {
         ds18b20_trigger_temperature_conversion(s_ds18b20s[i]);
         ds18b20_get_temperature(s_ds18b20s[i], &temp_temp);
         ESP_LOGI(TAG, "temperature read from DS18B20[%d]: %.2fC", i, temp_temp);
