@@ -91,7 +91,7 @@ void temp_thread_fn(void *) {
             IO::fault(FaultReason::TEMP_ERROR);
         }
 
-        vTaskDelay(pdMS_TO_TICKS(250));
+        vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }
 
