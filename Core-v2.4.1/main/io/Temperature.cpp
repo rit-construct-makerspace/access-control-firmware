@@ -10,6 +10,7 @@
 #include "common/pins.hpp"
 #include "io/IO.hpp"
 #include "ds18b20.h"
+#include "network/storage.hpp"
 
 #define MAX_ONEWIRE_DEVICES 1
 onewire_bus_handle_t onewire_bus;
@@ -79,6 +80,12 @@ void temp_thread_fn(void *) {
             cur_temp = max;
             xSemaphoreGive(temp_mutex);
         } // If we fail to get the mutex just drop the new data, not a big deal
+
+        if (max >= Storage::get_max_temp()) {
+            IO::send_event({
+                .type = IOEventType::OVER_TEMP,
+            });
+        }
 
         vTaskDelay(pdMS_TO_TICKS(250));
     }

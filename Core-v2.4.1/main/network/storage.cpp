@@ -12,6 +12,8 @@ namespace Storage {
     static constexpr const char* NVS_NETWORK_SSID_TAG = "network_ssid";
     static constexpr const char* NVS_NETWORK_PASS_TAG = "network_pass";
 
+    static constexpr const char* NVS_MAX_TEMP_TAG = "max_temp";
+
     static const char* TAG = "storage";
     nvs_handle_t storage_nvs_handle;
 
@@ -20,6 +22,8 @@ namespace Storage {
 
     std::string cached_server_key  = "";
     std::string cached_server_addr = "";
+
+    uint8_t cached_max_temp = 40;
 
     esp_err_t update_bootcount() {
 
@@ -83,6 +87,14 @@ namespace Storage {
         } else {
             cached_server_key = reading_buf;
         }
+
+        uint8_t temp_int;
+        err = nvs_get_u8(storage_nvs_handle, NVS_MAX_TEMP_TAG, &temp_int);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to load max temp from NVS: %s", esp_err_to_name(err));
+        } else {
+            cached_max_temp = temp_int;
+        }
     }
 
     int init() {
@@ -119,6 +131,8 @@ namespace Storage {
     std::string get_server_certs() { return ""; }
 
     std::string get_key() { return cached_server_key; }
+
+    uint8_t get_max_temp() { return cached_max_temp; }
 
     bool set_network_ssid(WifiSSID ssid) {
         esp_err_t err = nvs_set_blob(storage_nvs_handle, NVS_NETWORK_SSID_TAG,
@@ -158,6 +172,17 @@ namespace Storage {
             cached_server_key = key;
             return true;
         }
+        return false;
+    }
+
+    bool set_max_temp(uint8_t max_temp) {
+        esp_err_t err = nvs_set_u8(storage_nvs_handle, NVS_MAX_TEMP_TAG, max_temp);
+
+        if (err == ESP_OK) {
+            cached_max_temp = max_temp;
+            return true;
+        }
+
         return false;
     }
 
