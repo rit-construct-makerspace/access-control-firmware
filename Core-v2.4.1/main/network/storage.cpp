@@ -24,24 +24,25 @@ namespace Storage {
     esp_err_t update_bootcount() {
 
         // Read
-        int32_t restart_counter = 0;
+        int32_t boot_counter = 0;
 
-        esp_err_t err = nvs_get_i32(storage_nvs_handle, "restart_counter",
-                                    &restart_counter);
+        esp_err_t err = nvs_get_i32(storage_nvs_handle, "boot_counter",
+                                    &boot_counter);
         switch (err) {
         case ESP_OK:
-            ESP_LOGI(TAG, "Restart counter = %ld", restart_counter);
+            ESP_LOGI(TAG, "Boot counter = %ld", boot_counter);
             break;
         case ESP_ERR_NVS_NOT_FOUND:
+            ESP_LOGI(TAG, "First Boot!");
             break;
         default:
             ESP_LOGE(TAG, "(%s) reading!", esp_err_to_name(err));
         }
 
         // Write
-        restart_counter++;
+        boot_counter++;
         ESP_ERROR_CHECK_WITHOUT_ABORT(nvs_set_i32(
-            storage_nvs_handle, "restart_counter", restart_counter));
+            storage_nvs_handle, "boot_counter", boot_counter));
         ESP_ERROR_CHECK_WITHOUT_ABORT(nvs_commit(storage_nvs_handle));
 
         return ESP_OK;
