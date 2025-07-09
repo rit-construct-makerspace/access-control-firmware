@@ -10,13 +10,14 @@
 
 #include "common/pins.hpp"
 #include "common/types.hpp"
+#include "common/hardware.hpp"
 #include "esp_log.h"
 #include "led_strip.h"
 #include "io/LEDAnimations.hpp"
 
 TaskHandle_t led_thread;
 
-#define LED_TASK_STACK_SIZE 4000
+#define LED_TASK_STACK_SIZE 3000
 #define NUM_LEDS 4
 
 static Animation::Animation current_animation = Animation::STARTUP;
@@ -26,7 +27,7 @@ static const char * TAG = "led";
 
 led_strip_handle_t configure_led(void) {
     led_color_component_format_t strip_color_format;
-    HardwareEdition edition = get_hardware_edition();
+    HardwareEdition edition = Hardware::get_edition();
     switch (edition) {
         case HardwareEdition::LITE:
             strip_color_format = LED_STRIP_COLOR_COMPONENT_FMT_RGB;

@@ -1,7 +1,6 @@
 #include "common/types.hpp"
 
-#include <iomanip>
-#include <sstream>
+#include "string.h"
 
 #include "driver/gpio.h"
 
@@ -19,16 +18,85 @@ std::string CardTagID::to_string() const {
     if (this->type != CardTagType::SEVEN && this->type != CardTagType::FOUR) {
         return "Unknown Card Tag";
     }
+    static constexpr size_t buflen = 15; // 7*2 + null terminator
+    char buf[buflen] = {0};
+
     std::size_t len = (this->type == CardTagType::FOUR) ? 4 : 7;
-
-    std::stringstream ss;
-    ss << std::hex << std::noshowbase << std::setw(2) << std::setfill('0');
-
-    for (std::size_t i = 0; i < len; i++) {
-        ss << this->value[i];
+    for (int index = 0; index < len; index++){
+        snprintf(&buf[index*2], 3, "%02x", value[index]);
     }
 
-    return ss.str();
+    return std::string{buf};
+}
+
+std::optional<CardTagID> CardTagID::from_string(const char *str){
+    int len = strnlen(str, 15);
+    if (len == 15){
+        return {};
+    }
+    CardTagID id = {};
+
+    int len_to_read = 0;
+    if (len == 8){
+        id.type = CardTagType::FOUR;
+        len_to_read = 8;
+    } else if (len == 14){
+        id.type = CardTagType::SEVEN;
+        len_to_read = 14;
+    } else {
+        return {};
+    }
+    for (int i = 0; i < len_to_read; i+=2){
+        char hex[3] = {str[i], str[i+1], 0};
+        errno = 0;
+        long val = strtol(hex, NULL, 16);
+        if (errno || val > 255 || val < 0){
+            return {};
+        }
+        id.value[i/2] = (uint8_t)val;
+    }
+    return id;
+}
+
+std::optional<IOState> parse_iostate(const char* str) {
+    constexpr size_t max_size = 50;
+    int len                   = strnlen(str, max_size);
+    if (len == max_size) {
+        // return if bigger or not null terminated
+        return {};
+    }
+    if (0 == strcasecmp(str, "idle")) {
+        return IOState::IDLE;
+    } else if (0 == strcasecmp(str, "unlocked")) {
+        return IOState::UNLOCKED;
+    } else if (0 == strcasecmp(str, "alwayson")) {
+        return IOState::ALWAYS_ON;
+    } else if (0 == strcasecmp(str, "lockout")) {
+        return IOState::LOCKOUT;
+    } else if (0 == strcasecmp(str, "nextcard")) {
+        return IOState::NEXT_CARD;
+    } else if (0 == strcasecmp(str, "startup")) {
+        return IOState::STARTUP;
+    } else if (0 == strcasecmp(str, "welcoming")) {
+        return IOState::WELCOMING;
+    } else if (0 == strcasecmp(str, "welcomed")) {
+        return IOState::WELCOMED;
+    } else if (0 == strcasecmp(str, "alwaysonwaiting")) {
+        return IOState::ALWAYS_ON_WAITING;
+    } else if (0 == strcasecmp(str, "alwaysonwaiting")) {
+        return IOState::ALWAYS_ON_WAITING;
+    } else if (0 == strcasecmp(str, "idlewaiting")) {
+        return IOState::IDLE_WAITING;
+    } else if (0 == strcasecmp(str, "awaitauth")) {
+        return IOState::AWAIT_AUTH;
+    } else if (0 == strcasecmp(str, "denied")) {
+        return IOState::DENIED;
+    } else if (0 == strcasecmp(str, "fault")) {
+        return IOState::FAULT;
+    } else if (0 == strcasecmp(str, "restart")) {
+        return IOState::RESTART;
+    }
+    return {};
 }
 
 const char* io_state_to_string(IOState state) {
@@ -143,15 +211,15 @@ std::string IOEvent::to_string() const {
 
 const char* fault_reason_to_string(FaultReason reason) {
     switch (reason) {
-        case FaultReason::CARD_SWITCH:
-            return "Card Switch";
-        case FaultReason::OVER_TEMP:
-            return "Over Temperature";
-        case FaultReason::SERVER_COMMANDED:
-            return "Server Commanded";
-        case FaultReason::START_FAIL:
-            return "Startup Failure";
-        default:
-            return "INVALID FAULT REASON";
+    case FaultReason::CARD_SWITCH:
+        return "Card Switch";
+    case FaultReason::OVER_TEMP:
+        return "Over Temperature";
+    case FaultReason::SERVER_COMMANDED:
+        return "Server Commanded";
+    case FaultReason::START_FAIL:
+        return "Startup Failure";
+    default:
+        return "INVALID FAULT REASON";
     }
 }
