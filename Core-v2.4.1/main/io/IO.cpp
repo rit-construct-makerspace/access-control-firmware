@@ -435,7 +435,21 @@ void io_thread_fn(void *) {
                         break;
                 }
                 break;
+            case IOEventType::OVER_TEMP:
+                IOState cur_state;
+                IO::get_state(cur_state);
 
+                Network::send_event({
+                    .type = NetworkEventType::StateChange,
+                    .state_change = {
+                        .from = cur_state,
+                        .to = IOState::FAULT,
+                        .reason = StateChangeReason::OverTemperature,
+                        .who = {},
+                    },
+                });
+                go_to_state(IOState::FAULT);
+                break;    
             default:
                 ESP_LOGI(TAG, "Unexpected event type recieved");
                 break;
