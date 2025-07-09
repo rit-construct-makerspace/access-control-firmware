@@ -71,6 +71,7 @@ enum class IOEventType {
     CARD_REMOVED,
     CARD_READ_ERROR,
     NETWORK_COMMAND,
+    OVER_TEMP,
 };
 const char* io_event_type_to_string(IOEventType type);
 
