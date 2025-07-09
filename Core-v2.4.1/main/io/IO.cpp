@@ -12,7 +12,7 @@
 #include "io/CardReader.hpp"
 #include "io/Buzzer.hpp"
 #include "network/network.hpp"
-
+#include "io/Temperature.hpp"
 
 static const char* TAG = "io";
 
@@ -435,7 +435,6 @@ void io_thread_fn(void *) {
                         break;
                 }
                 break;
-
             default:
                 ESP_LOGI(TAG, "Unexpected event type recieved");
                 break;
@@ -458,12 +457,29 @@ int IO::init() {
     Button::init();
     CardReader::init();
     Buzzer::init();
+    Temperature::init();
 
     xTaskCreate(io_thread_fn, "io", IO_TASK_STACK_SIZE, NULL, 0, &io_thread);
     return 0;
 }
 
 void IO::fault(FaultReason reason) {
+    IOState cur_state;
+    IO::get_state(cur_state);
+
+    if (reason == FaultReason::START_FAIL) {
+        return; // TODO: figure out what to do
+    }
+
     go_to_state(IOState::FAULT);
-    // TODO: Log fault reason
+
+    Network::send_event({
+        .type = NetworkEventType::StateChange,
+        .state_change = {
+            .from = cur_state,
+            .to = IOState::FAULT,
+            .reason = fault_reason_to_state_change_reason(reason),
+            .who = {},
+        },
+    });
 };
