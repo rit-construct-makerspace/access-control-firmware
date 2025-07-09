@@ -435,21 +435,6 @@ void io_thread_fn(void *) {
                         break;
                 }
                 break;
-            case IOEventType::OVER_TEMP:
-                IOState cur_state;
-                IO::get_state(cur_state);
-
-                Network::send_event({
-                    .type = NetworkEventType::StateChange,
-                    .state_change = {
-                        .from = cur_state,
-                        .to = IOState::FAULT,
-                        .reason = StateChangeReason::OverTemperature,
-                        .who = {},
-                    },
-                });
-                go_to_state(IOState::FAULT);
-                break;    
             default:
                 ESP_LOGI(TAG, "Unexpected event type recieved");
                 break;
@@ -479,6 +464,22 @@ int IO::init() {
 }
 
 void IO::fault(FaultReason reason) {
+    IOState cur_state;
+    IO::get_state(cur_state);
+
+    if (reason == FaultReason::START_FAIL) {
+        return; // TODO: figure out what to do
+    }
+
     go_to_state(IOState::FAULT);
-    // TODO: Log fault reason
+
+    Network::send_event({
+        .type = NetworkEventType::StateChange,
+        .state_change = {
+            .from = cur_state,
+            .to = IOState::FAULT,
+            .reason = fault_reason_to_state_change_reason(reason),
+            .who = {},
+        },
+    });
 };

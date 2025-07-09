@@ -75,7 +75,6 @@ enum class IOEventType {
     CARD_REMOVED,
     CARD_READ_ERROR,
     NETWORK_COMMAND,
-    OVER_TEMP,
 };
 const char* io_event_type_to_string(IOEventType type);
 
@@ -137,6 +136,7 @@ enum class StateChangeReason {
     CardRemoved,
     CardActivated,
     ServerCommanded,
+    CardSwitch,
 };
 
 struct StateChange {
@@ -183,4 +183,5 @@ enum class FaultReason {
     START_FAIL,
     CARD_SWITCH,
 };
+StateChangeReason fault_reason_to_state_change_reason(FaultReason fault);
 const char* fault_reason_to_string(FaultReason type);

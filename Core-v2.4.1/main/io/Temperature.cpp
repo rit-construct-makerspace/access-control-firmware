@@ -82,9 +82,7 @@ void temp_thread_fn(void *) {
         } // If we fail to get the mutex just drop the new data, not a big deal
 
         if (max >= Storage::get_max_temp()) {
-            IO::send_event({
-                .type = IOEventType::OVER_TEMP,
-            });
+            IO::fault(FaultReason::OVER_TEMP);
         }
 
         vTaskDelay(pdMS_TO_TICKS(250));
