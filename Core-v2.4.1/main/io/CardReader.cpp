@@ -20,6 +20,7 @@ static SemaphoreHandle_t tag_mutex;
 
 CardTagID card_tag = {};
 bool card_detected = false;
+uint8_t switch_error = 0;
 
 const static spi_host_device_t spi_host = SPI3_HOST;
 static spi_device_handle_t spi_device;
@@ -61,156 +62,187 @@ bool CardReader::get_card_tag(CardTagID& ret_tag) {
     }
 }
 
+bool evaluate_switches() {
+    bool sw1 = gpio_get_level(DET1);
+    bool sw2 = gpio_get_level(DET2);
+
+    if (sw1 && sw2) {
+        switch_error = 0;
+        return true;
+    } else if (sw1 != sw2) {
+        switch_error++;
+        if (switch_error > 10) {
+            IO::fault(FaultReason::CARD_SWITCH);
+        }
+        return false;
+    } else {
+        switch_error = 0;
+        return false;
+    }
+}
+
 void card_reader_thread_fn(void*) {
     uint8_t detect_allowed = 0;
     while (true) {
-        uint16_t atqa = mfrc630_iso14443a_REQA();
-        if (atqa != 0) { // Are there any cards that answered?
-            uint8_t sak;
-            uint8_t uid[10] = {0}; // uids are maximum of 10 bytes long.
+        bool card_present = evaluate_switches();
 
-            ESP_LOGD(TAG, "CARD DETECTED");
+        while (card_present || card_detected) {
+            uint16_t atqa = mfrc630_iso14443a_REQA();
+            if (atqa != 0) { // Are there any cards that answered?
+                uint8_t sak;
+                uint8_t uid[10] = {0}; // uids are maximum of 10 bytes long.
 
-            // Select the card and discover its uid.
-            uint8_t uid_len = mfrc630_iso14443a_select(uid, &sak);
+                ESP_LOGD(TAG, "CARD DETECTED");
 
-            if (uid_len != 0) { // did we get an UID?
+                // Select the card and discover its uid.
+                uint8_t uid_len = mfrc630_iso14443a_select(uid, &sak);
 
-                if (!card_detected && (detect_allowed <= 0)) {
+                if (uid_len != 0) { // did we get an UID?
 
-                    CardTagID tag;
-                    switch (uid_len) {
-                    case 4:
-                        tag = {
-                            .type  = CardTagType::FOUR,
-                            .value = {uid[0], uid[1], uid[2], uid[3]},
-                        };
-                        IO::send_event({
-                            .type          = IOEventType::CARD_DETECTED,
-                            .card_detected = {.card_tag_id = tag},
-                        });
-                        set_card_tag(tag);
-                        break;
-                    case 7:
-                        tag = {
-                            .type  = CardTagType::SEVEN,
-                            .value = {uid[0], uid[1], uid[2], uid[3], uid[4],
-                                      uid[5], uid[6]},
-                        };
-                        IO::send_event({
-                            .type          = IOEventType::CARD_DETECTED,
-                            .card_detected = {.card_tag_id = tag},
-                        });
-                        set_card_tag(tag);
-                        break;
-                    default:
-                        IO::send_event({
-                            .type = IOEventType::CARD_READ_ERROR,
-                        });
-                        break;
-                    }
+                    if (!card_detected && (detect_allowed <= 0)) {
 
-                    card_detected  = true;
-                    detect_allowed = 6;
-                } else if (card_detected && (detect_allowed <= 0)) {
-                    // Make sure no switcheroo was pulled
-                    CardTagID det_tag;
+                        CardTagID tag;
+                        switch (uid_len) {
+                        case 4:
+                            tag = {
+                                .type  = CardTagType::FOUR,
+                                .value = {uid[0], uid[1], uid[2], uid[3]},
+                            };
+                            IO::send_event({
+                                .type          = IOEventType::CARD_DETECTED,
+                                .card_detected = {.card_tag_id = tag},
+                            });
+                            set_card_tag(tag);
+                            break;
+                        case 7:
+                            tag = {
+                                .type  = CardTagType::SEVEN,
+                                .value = {uid[0], uid[1], uid[2], uid[3], uid[4],
+                                        uid[5], uid[6]},
+                            };
+                            IO::send_event({
+                                .type          = IOEventType::CARD_DETECTED,
+                                .card_detected = {.card_tag_id = tag},
+                            });
+                            set_card_tag(tag);
+                            break;
+                        default:
+                            IO::send_event({
+                                .type = IOEventType::CARD_READ_ERROR,
+                            });
+                            break;
+                        }
 
-                    switch (uid_len) {
-                    case 4:
-                        det_tag = {
-                            .type  = CardTagType::FOUR,
-                            .value = {uid[0], uid[1], uid[2], uid[3]},
-                        };
-                        break;
-                    case 7:
-                        det_tag = {
-                            .type  = CardTagType::SEVEN,
-                            .value = {uid[0], uid[1], uid[2], uid[3], uid[4],
-                                      uid[5], uid[6]},
-                        };
-                        break;
-                    default:
-                        IO::send_event({
-                            .type = IOEventType::CARD_READ_ERROR,
-                        });
-                        break;
-                    }
+                        card_detected  = true;
+                        detect_allowed = 6;
+                    } else if (card_detected && (detect_allowed <= 0)) {
+                        // Make sure no switcheroo was pulled
+                        CardTagID det_tag;
 
-                    if (det_tag.type == CardTagType::FOUR ||
-                        det_tag.type == CardTagType::SEVEN) {
-                        CardTagID old_tag;
-                        CardReader::get_card_tag(old_tag);
+                        switch (uid_len) {
+                            case 4:
+                                det_tag = {
+                                    .type  = CardTagType::FOUR,
+                                    .value = {uid[0], uid[1], uid[2], uid[3]},
+                                };
+                                break;
+                            case 7:
+                                det_tag = {
+                                    .type  = CardTagType::SEVEN,
+                                    .value = {uid[0], uid[1], uid[2], uid[3], uid[4],
+                                            uid[5], uid[6]},
+                                };
+                                break;
+                            default:
+                                IO::send_event({
+                                    .type = IOEventType::CARD_READ_ERROR,
+                                });
+                                break;
+                        }
 
-                        if (old_tag != det_tag) {
-                            IO::send_event({.type = IOEventType::CARD_REMOVED,
-                                            .card_removed = {
-                                                .card_tag_id = old_tag,
-                                            }});
-                            IO::send_event({.type = IOEventType::CARD_DETECTED,
-                                            .card_detected = {
-                                                .card_tag_id = det_tag,
-                                            }});
-                            set_card_tag(det_tag);
-                            ESP_LOGE(
-                                TAG,
-                                "SWITCHEROO DETECTED, SOUND THE ALARM :alert:");
-                            detect_allowed = 6;
+                        if (det_tag.type == CardTagType::FOUR ||
+                            det_tag.type == CardTagType::SEVEN) {
+                            CardTagID old_tag;
+                            CardReader::get_card_tag(old_tag);
+
+                            if (old_tag != det_tag) {
+
+                                IO::send_event({
+                                    .type = IOEventType::CARD_REMOVED,
+                                    .card_removed = {
+                                        .card_tag_id = old_tag,
+                                    },
+                                });
+
+                                IO::send_event({
+                                    .type = IOEventType::CARD_DETECTED,
+                                    .card_detected = {
+                                        .card_tag_id = det_tag,
+                                    },
+                                });
+                                set_card_tag(det_tag);
+
+                                ESP_LOGE(TAG, "SWITCHEROO DETECTED, SOUND THE ALARM :alert:");
+
+                                detect_allowed = 6;
+                            }
                         }
                     }
-                }
 
-                // Use the manufacturer default key...
-                uint8_t FFkey[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+                    // Use the manufacturer default key...
+                    uint8_t FFkey[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
-                mfrc630_cmd_load_key(FFkey); // load into the key buffer
+                    mfrc630_cmd_load_key(FFkey); // load into the key buffer
 
-                // Try to athenticate block 0.
-                if (mfrc630_MF_auth(uid, MFRC630_MF_AUTH_KEY_A, 0)) {
-                    ESP_LOGD(TAG, "Yay! We are authenticated!");
+                    // Try to athenticate block 0.
+                    if (mfrc630_MF_auth(uid, MFRC630_MF_AUTH_KEY_A, 0)) {
+                        ESP_LOGD(TAG, "Yay! We are authenticated!");
 
-                    // Attempt to read the first 4 blocks.
-                    uint8_t readbuf[16] = {0};
-                    uint8_t len;
-                    for (uint8_t b = 0; b < 4; b++) {
-                        len = mfrc630_MF_read_block(b, readbuf);
-                        // ESP_LOGI("card", "Read block 0x");
-                        // print_block(&len,1);
-                        // ESP_LOGI("card", ": ");
-                        // print_block(readbuf, len);
+                        // Attempt to read the first 4 blocks.
+                        uint8_t readbuf[16] = {0};
+                        uint8_t len;
+                        for (uint8_t b = 0; b < 4; b++) {
+                            len = mfrc630_MF_read_block(b, readbuf);
+                            // ESP_LOGI("card", "Read block 0x");
+                            // print_block(&len,1);
+                            // ESP_LOGI("card", ": ");
+                            // print_block(readbuf, len);
+                        }
+
+                        mfrc630_MF_deauth(); // be sure to call this after an
+                                            // authentication!
+                    } else {
+                        ESP_LOGD(TAG, "Could not authenticate :(\n");
                     }
-
-                    mfrc630_MF_deauth(); // be sure to call this after an
-                                         // authentication!
                 } else {
-                    ESP_LOGD(TAG, "Could not authenticate :(\n");
+                    ESP_LOGD(
+                        TAG,
+                        "Could not determine UID, perhaps some cards don't play");
                 }
             } else {
-                ESP_LOGD(
-                    TAG,
-                    "Could not determine UID, perhaps some cards don't play");
+                ESP_LOGD(TAG, "No answer to REQA, no cards?\n");
+                if (card_detected) {
+                    CardTagID old_tag;
+                    CardReader::get_card_tag(old_tag);
+                    IO::send_event({
+                        .type = IOEventType::CARD_REMOVED,
+                        .card_removed =
+                            {
+                                .card_tag_id = old_tag,
+                            },
+                    });
+                    card_detected = false;
+                }
             }
-        } else {
-            ESP_LOGD(TAG, "No answer to REQA, no cards?\n");
-            if (card_detected) {
-                CardTagID old_tag;
-                CardReader::get_card_tag(old_tag);
-                IO::send_event({
-                    .type = IOEventType::CARD_REMOVED,
-                    .card_removed =
-                        {
-                            .card_tag_id = old_tag,
-                        },
-                });
-                card_detected = false;
+
+            if (detect_allowed > 0) {
+                detect_allowed--;
             }
+
+            vTaskDelay(pdMS_TO_TICKS(50));
         }
 
-        if (detect_allowed > 0) {
-            detect_allowed--;
-        }
-
-        vTaskDelay(pdMS_TO_TICKS(50));
+        vTaskDelay(pdMS_TO_TICKS(200));
     }
 }
 
@@ -260,14 +292,15 @@ void CardReader::init() {
     gpio_set_level(NFC_PDOWN, 0);
     vTaskDelay(pdMS_TO_TICKS(5));
 
-    if (spi_bus_initialize(spi_host, &spi_bus_config, SPI_DMA_CH_AUTO) !=
-        ESP_OK) {
+    gpio_input_enable(DET1);
+    gpio_input_enable(DET2);
+
+    if (spi_bus_initialize(spi_host, &spi_bus_config, SPI_DMA_CH_AUTO) != ESP_OK) {
         ESP_LOGE(TAG, "Failed to initialize SPI bus");
         // TODO: Crash
     }
 
-    esp_err_t add_device =
-        spi_bus_add_device(spi_host, &spi_device_config, &spi_device);
+    esp_err_t add_device = spi_bus_add_device(spi_host, &spi_device_config, &spi_device);
     if (add_device != ESP_OK) {
         ESP_LOGE(TAG, "Failed to initialize SPI device");
         ESP_LOGE(TAG, "Error Code: %d", add_device);
@@ -277,11 +310,9 @@ void CardReader::init() {
     tag_mutex = xSemaphoreCreateMutex();
 
     // Set the registers of the MFRC630 into the default.
-    mfrc630_AN1102_recommended_registers(
-        MFRC630_PROTO_ISO14443A_106_MILLER_MANCHESTER);
+    mfrc630_AN1102_recommended_registers(MFRC630_PROTO_ISO14443A_106_MILLER_MANCHESTER);
 
-    // This are register required for my development platform, you probably have
-    // to change (or uncomment) them.
+    // Mystery registry changes
     mfrc630_write_reg(0x28, 0x8E);
     mfrc630_write_reg(0x29, 0xD5); // Set the transmit power to -1000 mV
     mfrc630_write_reg(0x2A, 0x11);
