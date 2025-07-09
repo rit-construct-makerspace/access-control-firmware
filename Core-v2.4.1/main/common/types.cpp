@@ -213,8 +213,8 @@ StateChangeReason fault_reason_to_state_change_reason(FaultReason fault) {
     switch (fault) {
         case FaultReason::CARD_SWITCH:
             return StateChangeReason::CardSwitch;
-        case FaultReason::OVER_TEMP:
-            return StateChangeReason::OverTemperature;
+        case FaultReason::TEMP_ERROR:
+            return StateChangeReason::TemperatureError;
         case FaultReason::SERVER_COMMANDED:
             return StateChangeReason::ServerCommanded;
         default:
@@ -227,7 +227,7 @@ const char* fault_reason_to_string(FaultReason reason) {
     switch (reason) {
     case FaultReason::CARD_SWITCH:
         return "Card Switch";
-    case FaultReason::OVER_TEMP:
+    case FaultReason::TEMP_ERROR:
         return "Over Temperature";
     case FaultReason::SERVER_COMMANDED:
         return "Server Commanded";

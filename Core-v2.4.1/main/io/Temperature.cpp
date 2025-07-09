@@ -16,7 +16,7 @@
 onewire_bus_handle_t onewire_bus;
 uint8_t num_ds_detcted = 0;
 ds18b20_device_handle_t s_ds18b20s[MAX_ONEWIRE_DEVICES];
-static float s_temperature[2] = {0.0, 0.0};
+static float s_temperature[2] = {1.0, 1.0};
 
 SemaphoreHandle_t temp_mutex;
 static float cur_temp = 0.0;
@@ -70,12 +70,15 @@ void temp_thread_fn(void *) {
     while (true) {
         sensor_read();
 
-        float max = 0.0;
+        float max = 1.0;
+        float min = 1.0;
 
         if (s_temperature[0] > s_temperature[1]) {
             max = s_temperature[0];
+            min = s_temperature[1];
         } else {
             max = s_temperature[1];
+            min = s_temperature[0];
         }
 
         if (xSemaphoreTake(temp_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
@@ -83,8 +86,9 @@ void temp_thread_fn(void *) {
             xSemaphoreGive(temp_mutex);
         } // If we fail to get the mutex just drop the new data, not a big deal
 
-        if (max >= Storage::get_max_temp()) {
-            IO::fault(FaultReason::OVER_TEMP);
+        if (max >= Storage::get_max_temp() || min <= 0) {
+            ESP_LOGE(TAG, "MAX: %f | MIN: %f", max, min);
+            IO::fault(FaultReason::TEMP_ERROR);
         }
 
         vTaskDelay(pdMS_TO_TICKS(250));
