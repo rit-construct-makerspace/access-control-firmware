@@ -2,6 +2,7 @@
 #include <array>
 #include <cstdint>
 #include <string>
+#include <optional>
 
 enum class CardTagType {
     FOUR = 4,
@@ -10,9 +11,10 @@ enum class CardTagType {
 const char* card_tag_type_to_string(CardTagType type);
 
 struct CardTagID {
-    CardTagType type;
-    std::array<uint8_t, 10> value;
+    CardTagType type = CardTagType::SEVEN;
+    std::array<uint8_t, 10> value = {0};
 
+    static std::optional<CardTagID> from_string(const char *);
     bool operator==(const CardTagID &other) const {
         if (type != other.type) {
             return false;
@@ -52,6 +54,8 @@ enum class IOState {
     RESTART,
 };
 const char* io_state_to_string(IOState state);
+std::optional<IOState> parse_iostate(const char* str);
+
 
 enum class LogMessageType {
     NORMAL,
@@ -104,7 +108,8 @@ const char* network_command_event_type_to_string(NetworkCommandEventType type);
 struct NetworkCommandEvent {
     NetworkCommandEventType type;
     IOState commanded_state; // Only valid if type is COMMAND_STATE
-    bool requested; // true if we asked to auth. false if command came from on high
+    bool requested; // true if we asked to auth. false if command came from on
+                    // high
     CardTagID for_user;
     std::string to_string() const;
 };
@@ -113,6 +118,7 @@ struct NetworkCommandEvent {
 struct IOEvent {
     IOEventType type;
     union {
+        int _ = 0;
         ButtonEvent button;
         CardDetectedEvent card_detected;
         CardRemovedEvent card_removed;
@@ -124,29 +130,34 @@ struct IOEvent {
 using WifiSSID     = std::array<uint8_t, 32>;
 using WifiPassword = std::array<uint8_t, 64>;
 
-enum class StateChangeReason{
+enum class StateChangeReason {
     ButtonPress,
-    OverTermperature,
+    OverTemperature,
     CardRemoved,
     CardActivated,
     ServerCommanded,
-};  
+};
 
 struct StateChange {
     IOState from;
     IOState to;
     StateChangeReason reason;
-    CardTagID who;
+    std::optional<CardTagID> who;
 };
 
 struct AuthRequest {
     CardTagID requester;
     IOState to_state;
 };
+struct AuthResponse{
+    CardTagID requester;
+    bool verified;
+};
 
 // Things to tell network task
 enum class NetworkEventType {
     AuthRequest,
+    Message,
     StateChange,
     PleaseRestart,
 };
@@ -154,7 +165,9 @@ enum class NetworkEventType {
 struct NetworkEvent {
     NetworkEventType type;
     union {
+        int _ = 0;
         AuthRequest auth_request;
+        char *message; // allocated using new[]. Sending this also sends lifetime (network will delete[])
         StateChange state_change;
     };
 };
@@ -162,8 +175,6 @@ enum class HardwareEdition {
     LITE,
     STANDARD,
 };
-
-HardwareEdition get_hardware_edition();
 
 enum class FaultReason {
     SERVER_COMMANDED,

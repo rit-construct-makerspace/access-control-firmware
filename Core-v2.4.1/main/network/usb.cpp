@@ -1,5 +1,6 @@
 #include "usb.hpp"
 
+#include "common/hardware.hpp"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
@@ -7,6 +8,7 @@
 #include "freertos/task.h"
 #include "sdkconfig.h"
 #include "soc/rtc_cntl_reg.h"
+#include "storage.hpp"
 #include "tinyusb.h"
 #include "tusb_cdc_acm.h"
 
@@ -78,7 +80,7 @@ void tinyusb_cdc_line_state_changed_callback(int itf, cdcacm_event_t* event) {
     if (new_rts) {
         rts_ever = true;
     }
-    
+
     dtr = new_dtr;
     rts = new_rts;
 }
@@ -109,8 +111,9 @@ void usb_thread_fn(void*) {
                                            pdMS_TO_TICKS(100));
         if (read > 0) {
             tinyusb_cdcacm_write_queue(LOG_CDC_ITF, usb_buf, read);
-            esp_err_t err = tinyusb_cdcacm_write_flush(LOG_CDC_ITF, pdMS_TO_TICKS(100));
-            if (err != ESP_OK){
+            esp_err_t err =
+                tinyusb_cdcacm_write_flush(LOG_CDC_ITF, pdMS_TO_TICKS(100));
+            if (err != ESP_OK) {
                 xStreamBufferReset(debug_stream_buffer);
             }
         }
@@ -120,7 +123,7 @@ void usb_thread_fn(void*) {
 esp_err_t USB::init() {
     stream_buffer_lock  = xSemaphoreCreateMutex();
     debug_stream_buffer = xStreamBufferCreate(DEBUG_STREAM_BUF_SIZE, 32);
-    mike_buf = (unsigned char*)malloc(MAX_DEBUG_SIZE);
+    mike_buf            = (unsigned char*)malloc(MAX_DEBUG_SIZE);
 
     assert(stream_buffer_lock);
     assert(debug_stream_buffer);
@@ -128,9 +131,19 @@ esp_err_t USB::init() {
 
     ESP_LOGI(TAG, "USB initialization begin");
 
+    tusb_desc_strarray_device_t descriptor_str = {
+        // array of pointer to string descriptors
+        (char[]){0x09, 0x04}, // 0: is supported language is English (0x0409)
+        CONFIG_TINYUSB_DESC_MANUFACTURER_STRING, // 1: Manufacturer
+        Hardware::get_edition_string(),          // 2: Product
+        Hardware::get_serial_number(),  // 3: Serials, should use chip ID
+        CONFIG_TINYUSB_DESC_CDC_STRING, // 4: CDC Interface
+        "",                             // empty bc mass storage not enabled
+    };
+
     const tinyusb_config_t tusb_cfg = {
         .device_descriptor        = NULL,
-        .string_descriptor        = NULL,
+        .string_descriptor        = descriptor_str,
         .external_phy             = false,
         .configuration_descriptor = NULL,
         .self_powered             = true,
@@ -147,7 +160,8 @@ esp_err_t USB::init() {
                                                       // register a callback
         .callback_rx_wanted_char      = NULL,
         .callback_line_state_changed  = tinyusb_cdc_line_state_changed_callback,
-        .callback_line_coding_changed = NULL};
+        .callback_line_coding_changed = NULL,
+    };
 
     ESP_ERROR_CHECK(tusb_cdc_acm_init(&acm_cfg));
 
