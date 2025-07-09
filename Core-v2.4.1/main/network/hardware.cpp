@@ -14,7 +14,7 @@ namespace Hardware {
     HardwareEdition edition;
     const char* edition_string = NULL;
 
-    int identify() {
+    int init() {
         // Chip Serial Number
         esp_efuse_read_block(EFUSE_BLK_SYS_DATA_PART1,
                              (void*)serial_number_bytes, UNIQUE_ID_EFUSE_OFFSET,

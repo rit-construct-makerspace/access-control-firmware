@@ -132,7 +132,7 @@ using WifiPassword = std::array<uint8_t, 64>;
 
 enum class StateChangeReason {
     ButtonPress,
-    OverTermperature,
+    OverTemperature,
     CardRemoved,
     CardActivated,
     ServerCommanded,

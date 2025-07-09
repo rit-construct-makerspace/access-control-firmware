@@ -19,19 +19,9 @@ void set_log_levels() {
 
 extern "C" void app_main(void) {
     set_log_levels();
-    Hardware::identify();
-
+    Hardware::init();
     USB::init();
     Storage::init();
     IO::init();
     Network::init();
-
-    int i = 0;
-    while (1) {
-        i++;
-
-        vTaskDelay(300);
-        uint32_t size = esp_get_free_heap_size();
-        ESP_LOGI("main", "Heap size: %lu", size);
-    }
 }

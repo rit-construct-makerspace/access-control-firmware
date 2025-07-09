@@ -26,7 +26,7 @@ static spi_device_handle_t spi_device;
 
 void mfrc630_SPI_transfer(const uint8_t* tx, uint8_t* rx, uint16_t len) {
     spi_transaction_t transaction = {
-        .flags = 0,
+        .flags     = 0,
         .length    = (uint16_t)(len * 8),
         .rxlength  = 0,
         .tx_buffer = tx,
@@ -86,11 +86,8 @@ void card_reader_thread_fn(void*) {
                             .value = {uid[0], uid[1], uid[2], uid[3]},
                         };
                         IO::send_event({
-                            .type = IOEventType::CARD_DETECTED,
-                            .card_detected =
-                                {
-                                    .card_tag_id = tag,
-                                },
+                            .type          = IOEventType::CARD_DETECTED,
+                            .card_detected = {.card_tag_id = tag},
                         });
                         set_card_tag(tag);
                         break;
@@ -101,11 +98,8 @@ void card_reader_thread_fn(void*) {
                                       uid[5], uid[6]},
                         };
                         IO::send_event({
-                            .type = IOEventType::CARD_DETECTED,
-                            .card_detected =
-                                {
-                                    .card_tag_id = tag,
-                                },
+                            .type          = IOEventType::CARD_DETECTED,
+                            .card_detected = {.card_tag_id = tag},
                         });
                         set_card_tag(tag);
                         break;
