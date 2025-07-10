@@ -311,8 +311,7 @@ void CardReader::init() {
     mfrc630_write_reg(0x2A, 0x11);
     mfrc630_write_reg(0x2B, 0x06);
 
-    xTaskCreate(card_reader_thread_fn, "card", CARD_TASK_STACK_SIZE, NULL, 0,
-                &card_thread);
+    xTaskCreate(card_reader_thread_fn, "card", CARD_TASK_STACK_SIZE, NULL, 0, &card_thread);
 }
 
 bool CardReader::card_present() { return card_detected; }
