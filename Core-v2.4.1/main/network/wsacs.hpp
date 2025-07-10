@@ -20,7 +20,7 @@ namespace WSACS {
         Message,     // Send text message to History
 
         // Internal events
-        ServerConnect, // sent when WS stack gets response to websocket upgrade
+        ServerConnect,    // sent when WS stack gets response to websocket upgrade
         ServerDisconnect, // sent when WS stack detects disconnect/close
         KeepAliveTimer,   // sent every 10s if online to tell server our state
     };

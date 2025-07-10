@@ -1,19 +1,19 @@
 #include "Buzzer.hpp"
 
 #include <freertos/FreeRTOS.h>
-#include <freertos/task.h>
 #include <freertos/queue.h>
+#include <freertos/task.h>
 
+#include "common/pins.hpp"
 #include "driver/gpio.h"
 #include "driver/ledc.h"
-#include "common/pins.hpp"
 #include "esp_log.h"
 
 TaskHandle_t buzzer_thread;
 #define BUZZER_TASK_STACK_SIZE 2000
 QueueHandle_t effect_queue;
 
-static const char * TAG = "buzzer";
+static const char* TAG = "buzzer";
 
 const ledc_channel_t ledc_channel = LEDC_CHANNEL_0;
 const ledc_mode_t speed_mode = LEDC_LOW_SPEED_MODE;
@@ -40,7 +40,6 @@ void start(uint32_t frequency) {
         return;
     }
 }
-
 
 void stop() {
     BaseType_t err = ledc_set_duty(speed_mode, ledc_channel, 0);
@@ -71,7 +70,7 @@ void play_effect(SoundEffect::Effect effect) {
     stop();
 }
 
-void buzzer_task_fn(void *) {
+void buzzer_task_fn(void*) {
     stop();
 
     SoundEffect::Effect current_effect;
@@ -113,19 +112,16 @@ int Buzzer::init() {
 
     effect_queue = xQueueCreate(1, sizeof(SoundEffect::Effect));
 
-
-    gpio_config_t conf = {
-        .pin_bit_mask = 1ULL << BUZZER_PIN,
-        .mode = GPIO_MODE_OUTPUT,
-        .pull_up_en = GPIO_PULLUP_DISABLE,
-        .pull_down_en = GPIO_PULLDOWN_DISABLE,
-        .intr_type = GPIO_INTR_DISABLE
-    };
+    gpio_config_t conf = {.pin_bit_mask = 1ULL << BUZZER_PIN,
+                          .mode = GPIO_MODE_OUTPUT,
+                          .pull_up_en = GPIO_PULLUP_DISABLE,
+                          .pull_down_en = GPIO_PULLDOWN_DISABLE,
+                          .intr_type = GPIO_INTR_DISABLE};
 
     gpio_config(&conf);
 
     setup();
-    
+
     xTaskCreate(buzzer_task_fn, "buzzer", BUZZER_TASK_STACK_SIZE, NULL, 0, &buzzer_thread);
     return 0;
 }

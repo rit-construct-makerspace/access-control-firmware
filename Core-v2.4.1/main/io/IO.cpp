@@ -1,24 +1,22 @@
 #include "IO.hpp"
 
 #include <freertos/FreeRTOS.h>
-#include <freertos/task.h>
-#include <freertos/semphr.h>
 #include <freertos/queue.h>
+#include <freertos/semphr.h>
+#include <freertos/task.h>
 #include <freertos/timers.h>
 
 #include "esp_log.h"
-#include "io/LEDControl.hpp"
 #include "io/Button.hpp"
-#include "io/CardReader.hpp"
 #include "io/Buzzer.hpp"
+#include "io/CardReader.hpp"
+#include "io/LEDControl.hpp"
 #include "network/network.hpp"
-
 
 static const char* TAG = "io";
 
 QueueHandle_t event_queue;
 TaskHandle_t io_thread;
-
 
 #define IO_TASK_STACK_SIZE 4000
 
@@ -26,7 +24,7 @@ static IOState state = IOState::STARTUP;
 static IOState prior_request_state;
 static SemaphoreHandle_t animation_mutex;
 
-bool IO::get_state(IOState &send_state) {
+bool IO::get_state(IOState& send_state) {
     if (xSemaphoreTake(animation_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
         send_state = state;
         xSemaphoreGive(animation_mutex);
@@ -81,7 +79,7 @@ void go_to_state(IOState next_state) {
             LED::set_animation(Animation::LOCKOUT);
             break;
         case IOState::NEXT_CARD:
-            //LED::set_animation(Animation::NEXT_CARD_ANIMATION);
+            // LED::set_animation(Animation::NEXT_CARD_ANIMATION);
             break;
         case IOState::WELCOMING:
             LED::set_animation(Animation::WELCOMING);
@@ -112,7 +110,7 @@ void go_to_state(IOState next_state) {
             break;
         default:
             ESP_LOGI(TAG, "Attempted to go to an unkown state");
-        return;
+            return;
     }
 
     if (!set_state(next_state)) {
@@ -193,10 +191,11 @@ void handle_card_detected(IOEvent event) {
             go_to_state(IOState::AWAIT_AUTH);
             Network::send_event({
                 .type = NetworkEventType::AuthRequest,
-                .auth_request = {
-                    .requester = event.card_detected.card_tag_id,
-                    .to_state = IOState::UNLOCKED,
-                },
+                .auth_request =
+                    {
+                        .requester = event.card_detected.card_tag_id,
+                        .to_state = IOState::UNLOCKED,
+                    },
             });
             break;
         case IOState::LOCKOUT_WAITING:
@@ -204,33 +203,30 @@ void handle_card_detected(IOEvent event) {
             go_to_state(IOState::AWAIT_AUTH);
             Network::send_event({
                 .type = NetworkEventType::AuthRequest,
-                .auth_request = {
-                    .requester = event.card_detected.card_tag_id,
-                    .to_state = IOState::LOCKOUT,
-                },
+                .auth_request =
+                    {
+                        .requester = event.card_detected.card_tag_id,
+                        .to_state = IOState::LOCKOUT,
+                    },
             });
             break;
         case IOState::IDLE_WAITING:
             xTimerStop(waiting_timer, pdMS_TO_TICKS(100));
             go_to_state(IOState::AWAIT_AUTH);
-            Network::send_event({
-                .type = NetworkEventType::AuthRequest,
-                .auth_request = {
-                    .requester = event.card_detected.card_tag_id,
-                    .to_state = IOState::IDLE,
-                }
-            });
+            Network::send_event({.type = NetworkEventType::AuthRequest,
+                                 .auth_request = {
+                                     .requester = event.card_detected.card_tag_id,
+                                     .to_state = IOState::IDLE,
+                                 }});
             break;
         case IOState::ALWAYS_ON_WAITING:
             xTimerStop(waiting_timer, pdMS_TO_TICKS(100));
             go_to_state(IOState::AWAIT_AUTH);
-            Network::send_event({
-                .type = NetworkEventType::AuthRequest,
-                .auth_request = {
-                    .requester = event.card_detected.card_tag_id,
-                    .to_state = IOState::ALWAYS_ON,
-                }
-            });
+            Network::send_event({.type = NetworkEventType::AuthRequest,
+                                 .auth_request = {
+                                     .requester = event.card_detected.card_tag_id,
+                                     .to_state = IOState::ALWAYS_ON,
+                                 }});
             break;
         case IOState::LOCKOUT:
             Buzzer::send_effect(SoundEffect::LOCKOUT);
@@ -251,12 +247,13 @@ void handle_card_removed() {
         case IOState::UNLOCKED:
             Network::send_event({
                 .type = NetworkEventType::StateChange,
-                .state_change = {
-                    .from = current_state,
-                    .to = IOState::IDLE,
-                    .reason = StateChangeReason::CardRemoved,
-                    .who = {},
-                },
+                .state_change =
+                    {
+                        .from = current_state,
+                        .to = IOState::IDLE,
+                        .reason = StateChangeReason::CardRemoved,
+                        .who = {},
+                    },
             });
             go_to_state(IOState::IDLE);
             break;
@@ -285,7 +282,7 @@ void identify_timer_callback(TimerHandle_t timer) {
             LED::set_animation(Animation::LOCKOUT);
             break;
         case IOState::NEXT_CARD:
-            //LED::set_animation(Animation::NEXT_CARD_ANIMATION);
+            // LED::set_animation(Animation::NEXT_CARD_ANIMATION);
             break;
         case IOState::WELCOMING:
             LED::set_animation(Animation::WELCOMING);
@@ -313,7 +310,7 @@ void identify_timer_callback(TimerHandle_t timer) {
             break;
         default:
             ESP_LOGI(TAG, "Failed to set LEDs after identify");
-        return;
+            return;
     }
 }
 
@@ -334,7 +331,7 @@ void handle_denied() {
     xTimerStart(denied_timer, pdMS_TO_TICKS(100));
 }
 
-void io_thread_fn(void *) {
+void io_thread_fn(void*) {
 
     IOEvent current_event;
 
@@ -386,40 +383,36 @@ void io_thread_fn(void *) {
                                 case IOState::ALWAYS_ON:
                                 case IOState::LOCKOUT:
                                 case IOState::IDLE:
-                                    Network::send_event({
-                                        .type = NetworkEventType::StateChange,
-                                        .state_change = {
-                                            .from = cur_state,
-                                            .to = current_event.network_command.commanded_state,
-                                            .reason = StateChangeReason::ButtonPress,
-                                            .who = {}
-                                        }
-                                    });
+                                    Network::send_event(
+                                        {.type = NetworkEventType::StateChange,
+                                         .state_change = {.from = cur_state,
+                                                          .to = current_event.network_command.commanded_state,
+                                                          .reason = StateChangeReason::ButtonPress,
+                                                          .who = {}}});
                                     break;
                                 case IOState::UNLOCKED:
-                                    Network::send_event({
-                                        .type = NetworkEventType::StateChange,
-                                        .state_change = {
-                                            .from = cur_state,
-                                            .to = current_event.network_command.commanded_state,
-                                            .reason = StateChangeReason::CardActivated,
-                                            .who = CardTagID{},
-                                        }
-                                    });
+                                    Network::send_event({.type = NetworkEventType::StateChange,
+                                                         .state_change = {
+                                                             .from = cur_state,
+                                                             .to = current_event.network_command.commanded_state,
+                                                             .reason = StateChangeReason::CardActivated,
+                                                             .who = CardTagID{},
+                                                         }});
                                     break;
                                 default:
-                                    //FREAK OUT
+                                    // FREAK OUT
                                     return;
                             }
                         } else {
                             Network::send_event({
                                 .type = NetworkEventType::StateChange,
-                                .state_change = {
-                                    .from = cur_state,
-                                    .to = current_event.network_command.commanded_state,
-                                    .reason = StateChangeReason::ServerCommanded,
-                                    .who = {},
-                                },
+                                .state_change =
+                                    {
+                                        .from = cur_state,
+                                        .to = current_event.network_command.commanded_state,
+                                        .reason = StateChangeReason::ServerCommanded,
+                                        .who = {},
+                                    },
                             });
                         }
                         go_to_state(current_event.network_command.commanded_state);
@@ -446,9 +439,9 @@ void io_thread_fn(void *) {
 int IO::init() {
     event_queue = xQueueCreate(8, sizeof(IOEvent));
     animation_mutex = xSemaphoreCreateMutex();
-    waiting_timer = xTimerCreate("waiting", pdMS_TO_TICKS(5000), pdFALSE, (void *) 0, waiting_timer_callback);
-    identify_timer = xTimerCreate("identify", pdMS_TO_TICKS(9630), pdFALSE, (void *) 0, identify_timer_callback);
-    denied_timer = xTimerCreate("denied", pdMS_TO_TICKS(1500), pdFALSE, (void *) 0, denied_timer_callback);
+    waiting_timer = xTimerCreate("waiting", pdMS_TO_TICKS(5000), pdFALSE, (void*)0, waiting_timer_callback);
+    identify_timer = xTimerCreate("identify", pdMS_TO_TICKS(9630), pdFALSE, (void*)0, identify_timer_callback);
+    denied_timer = xTimerCreate("denied", pdMS_TO_TICKS(1500), pdFALSE, (void*)0, denied_timer_callback);
 
     if (event_queue == 0 || animation_mutex == NULL) {
         // TODO: Restart here

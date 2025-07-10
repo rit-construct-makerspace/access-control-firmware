@@ -26,8 +26,7 @@ int write_to_usb_task(const unsigned char* buf, size_t buf_len) {
         return -1;
     }
 
-    size_t written = xStreamBufferSend(debug_stream_buffer, (void*)buf, buf_len,
-                                       pdMS_TO_TICKS(100));
+    size_t written = xStreamBufferSend(debug_stream_buffer, (void*)buf, buf_len, pdMS_TO_TICKS(100));
     xSemaphoreGive(stream_buffer_lock);
     return written;
 }
@@ -47,8 +46,7 @@ void tinyusb_cdc_rx_callback(int itf, cdcacm_event_t* event) {
 
     /* read */
     esp_err_t ret =
-        tinyusb_cdcacm_read(static_cast<tinyusb_cdcacm_itf_t>(itf), rx_buf,
-                            CONFIG_TINYUSB_CDC_RX_BUFSIZE, &rx_size);
+        tinyusb_cdcacm_read(static_cast<tinyusb_cdcacm_itf_t>(itf), rx_buf, CONFIG_TINYUSB_CDC_RX_BUFSIZE, &rx_size);
     if (ret == ESP_OK) {
         write_to_usb_task(rx_buf, rx_size);
     } else {
@@ -90,7 +88,7 @@ static unsigned char* mike_buf = nullptr;
 extern "C" int usb_log_vprintf(const char* fmt, va_list args) {
 
     size_t mike_buflen = vsnprintf((char*)mike_buf, MAX_DEBUG_SIZE, fmt, args);
-    mike_buf[mike_buflen]     = '\r';
+    mike_buf[mike_buflen] = '\r';
     mike_buf[mike_buflen + 1] = 0;
 
     return write_to_usb_task(mike_buf, mike_buflen + 1);
@@ -106,13 +104,11 @@ void usb_thread_fn(void*) {
     }
     ESP_LOGI(TAG, "dtr: %d, rts: %d", dtr, rts);
     while (1) {
-        size_t read = xStreamBufferReceive(debug_stream_buffer, (void*)usb_buf,
-                                           CONFIG_TINYUSB_CDC_RX_BUFSIZE,
+        size_t read = xStreamBufferReceive(debug_stream_buffer, (void*)usb_buf, CONFIG_TINYUSB_CDC_RX_BUFSIZE,
                                            pdMS_TO_TICKS(100));
         if (read > 0) {
             tinyusb_cdcacm_write_queue(LOG_CDC_ITF, usb_buf, read);
-            esp_err_t err =
-                tinyusb_cdcacm_write_flush(LOG_CDC_ITF, pdMS_TO_TICKS(100));
+            esp_err_t err = tinyusb_cdcacm_write_flush(LOG_CDC_ITF, pdMS_TO_TICKS(100));
             if (err != ESP_OK) {
                 xStreamBufferReset(debug_stream_buffer);
             }
@@ -121,9 +117,9 @@ void usb_thread_fn(void*) {
 }
 
 esp_err_t USB::init() {
-    stream_buffer_lock  = xSemaphoreCreateMutex();
+    stream_buffer_lock = xSemaphoreCreateMutex();
     debug_stream_buffer = xStreamBufferCreate(DEBUG_STREAM_BUF_SIZE, 32);
-    mike_buf            = (unsigned char*)malloc(MAX_DEBUG_SIZE);
+    mike_buf = (unsigned char*)malloc(MAX_DEBUG_SIZE);
 
     assert(stream_buffer_lock);
     assert(debug_stream_buffer);
@@ -133,33 +129,33 @@ esp_err_t USB::init() {
 
     tusb_desc_strarray_device_t descriptor_str = {
         // array of pointer to string descriptors
-        (char[]){0x09, 0x04}, // 0: is supported language is English (0x0409)
+        (char[]){0x09, 0x04},                    // 0: is supported language is English (0x0409)
         CONFIG_TINYUSB_DESC_MANUFACTURER_STRING, // 1: Manufacturer
         Hardware::get_edition_string(),          // 2: Product
-        Hardware::get_serial_number(),  // 3: Serials, should use chip ID
-        CONFIG_TINYUSB_DESC_CDC_STRING, // 4: CDC Interface
-        "",                             // empty bc mass storage not enabled
+        Hardware::get_serial_number(),           // 3: Serials, should use chip ID
+        CONFIG_TINYUSB_DESC_CDC_STRING,          // 4: CDC Interface
+        "",                                      // empty bc mass storage not enabled
     };
 
     const tinyusb_config_t tusb_cfg = {
-        .device_descriptor        = NULL,
-        .string_descriptor        = descriptor_str,
-        .external_phy             = false,
+        .device_descriptor = NULL,
+        .string_descriptor = descriptor_str,
+        .external_phy = false,
         .configuration_descriptor = NULL,
-        .self_powered             = true,
-        .vbus_monitor_io          = -1,
+        .self_powered = true,
+        .vbus_monitor_io = -1,
     };
 
     ESP_ERROR_CHECK(tinyusb_driver_install(&tusb_cfg));
 
     tinyusb_config_cdcacm_t acm_cfg = {
-        .usb_dev          = TINYUSB_USBDEV_0,
-        .cdc_port         = TINYUSB_CDC_ACM_0,
+        .usb_dev = TINYUSB_USBDEV_0,
+        .cdc_port = TINYUSB_CDC_ACM_0,
         .rx_unread_buf_sz = 64,
-        .callback_rx      = &tinyusb_cdc_rx_callback, // the first way to
-                                                      // register a callback
-        .callback_rx_wanted_char      = NULL,
-        .callback_line_state_changed  = tinyusb_cdc_line_state_changed_callback,
+        .callback_rx = &tinyusb_cdc_rx_callback, // the first way to
+                                                 // register a callback
+        .callback_rx_wanted_char = NULL,
+        .callback_line_state_changed = tinyusb_cdc_line_state_changed_callback,
         .callback_line_coding_changed = NULL,
     };
 
@@ -168,8 +164,7 @@ esp_err_t USB::init() {
     // custom log handler
     ESP_LOGI(TAG, "USB initialization DONE");
 
-    xTaskCreate(usb_thread_fn, "usb", USB_TASK_STACK_SIZE, NULL, 0,
-                &usb_thread);
+    xTaskCreate(usb_thread_fn, "usb", USB_TASK_STACK_SIZE, NULL, 0, &usb_thread);
 
     return 0;
 }
