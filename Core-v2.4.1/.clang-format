@@ -1,11 +1,15 @@
 BasedOnStyle: llvm
 
+ColumnLimit: 120
+
 TabWidth: 4
 IndentWidth: 4
 UseTab: Never
 PointerAlignment: Left
 
-AlignConsecutiveAssignments: true
+AlignConsecutiveAssignments: false
 
 NamespaceIndentation: All
-BreakTemplateDeclarations: Yes
+IndentCaseLabels: true
+
+AllowShortFunctionsOnASingleLine: InlineOnly

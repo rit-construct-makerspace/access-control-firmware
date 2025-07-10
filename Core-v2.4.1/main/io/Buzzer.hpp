@@ -5,4 +5,4 @@
 namespace Buzzer {
     int init();
     bool send_effect(SoundEffect::Effect);
-}
+} // namespace Buzzer

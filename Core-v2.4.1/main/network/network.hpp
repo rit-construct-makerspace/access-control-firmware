@@ -1,7 +1,7 @@
 #pragma once
 #include "common/types.hpp"
-#include "network/wsacs.hpp"
 #include "esp_netif_types.h"
+#include "network/wsacs.hpp"
 
 namespace Network {
 
@@ -21,11 +21,11 @@ namespace Network {
     // Called when network events happen that indicate online
     void network_watchdog_feed();
     // Used only by tasks on the network side of things to
-    // communicate with the main network handler 
-    enum class InternalEventType{
+    // communicate with the main network handler
+    enum class InternalEventType {
         NetifUp,
         NetifDown,
-        
+
         ServerSetTime,
         ServerSetState,
 
@@ -36,7 +36,8 @@ namespace Network {
 
         ExternalEvent,
     };
-    struct InternalEvent{
+
+    struct InternalEvent {
         InternalEventType type;
         union {
             esp_ip4_addr_t netif_up_ip;

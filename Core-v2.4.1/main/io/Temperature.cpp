@@ -1,16 +1,16 @@
 #include "io/Temperature.hpp"
 
 #include <freertos/FreeRTOS.h>
-#include <freertos/task.h>
 #include <freertos/semphr.h>
+#include <freertos/task.h>
 
+#include "common/pins.hpp"
+#include "ds18b20.h"
+#include "esp_log.h"
+#include "io/IO.hpp"
+#include "network/storage.hpp"
 #include "onewire_bus.h"
 #include "onewire_device.h"
-#include "esp_log.h"
-#include "common/pins.hpp"
-#include "io/IO.hpp"
-#include "ds18b20.h"
-#include "network/storage.hpp"
 
 #define MAX_ONEWIRE_DEVICES 2
 onewire_bus_handle_t onewire_bus;
@@ -41,7 +41,8 @@ void sensor_detect() {
             ds18b20_config_t ds_cfg = {};
 
             if (ds18b20_new_device(&next_onewire_device, &ds_cfg, &s_ds18b20s[num_ds_detcted])) {
-                ESP_LOGI(TAG, "Found a DS18B20[%d], address: %016llX", onewire_device_found, next_onewire_device.address);
+                ESP_LOGI(TAG, "Found a DS18B20[%d], address: %016llX", onewire_device_found,
+                         next_onewire_device.address);
                 num_ds_detcted++;
             } else {
                 ESP_LOGI(TAG, "Found an unknown device, address: %016llX", next_onewire_device.address);
@@ -65,8 +66,7 @@ void sensor_read() {
     }
 }
 
-
-void temp_thread_fn(void *) {
+void temp_thread_fn(void*) {
     while (true) {
         sensor_read();
 
@@ -99,9 +99,7 @@ int Temperature::init() {
 
     onewire_bus_config_t bus_config = {
         .bus_gpio_num = TEMP_PIN,
-        .flags = {
-            .en_pull_up = 1,
-        },
+        .flags = {.en_pull_up = 1},
     };
 
     onewire_bus_rmt_config_t rmt_config = {
@@ -120,7 +118,7 @@ int Temperature::init() {
     return 0;
 }
 
-bool Temperature::get_temp(float &ret_temp) {
+bool Temperature::get_temp(float& ret_temp) {
     if (xSemaphoreTake(temp_mutex, 100) == pdTRUE) {
         ret_temp = cur_temp;
         xSemaphoreGive(temp_mutex);

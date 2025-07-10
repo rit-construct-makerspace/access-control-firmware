@@ -2,5 +2,5 @@
 
 namespace Temperature {
     int init();
-    bool get_temp(float &ret_temp);
-}
+    bool get_temp(float& ret_temp);
+} // namespace Temperature
