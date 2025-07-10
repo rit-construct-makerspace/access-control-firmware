@@ -111,7 +111,7 @@ namespace Storage {
         return cached_server_addr;
     }
 
-    std::string get_server_certs() {
+    const char *get_server_certs() {
         return "";
     }
 

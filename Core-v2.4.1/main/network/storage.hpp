@@ -9,7 +9,7 @@ namespace Storage {
     WifiSSID get_network_ssid();
     WifiPassword get_network_password();
     std::string get_server();
-    std::string get_server_certs();
+    const char* get_server_certs();
 
     bool set_key(std::string key);
     std::string get_key();
