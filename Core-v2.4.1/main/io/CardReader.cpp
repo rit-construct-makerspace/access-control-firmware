@@ -203,21 +203,14 @@ void card_reader_thread_fn(void*) {
                         uint8_t len;
                         for (uint8_t b = 0; b < 4; b++) {
                             len = mfrc630_MF_read_block(b, readbuf);
-                            // ESP_LOGI("card", "Read block 0x");
-                            // print_block(&len,1);
-                            // ESP_LOGI("card", ": ");
-                            // print_block(readbuf, len);
                         }
 
-                        mfrc630_MF_deauth(); // be sure to call this after an
-                                            // authentication!
+                        mfrc630_MF_deauth(); // be sure to call this after an authentication!
                     } else {
                         ESP_LOGD(TAG, "Could not authenticate :(\n");
                     }
                 } else {
-                    ESP_LOGD(
-                        TAG,
-                        "Could not determine UID, perhaps some cards don't play");
+                    ESP_LOGD(TAG, "Could not determine UID, perhaps some cards don't play");
                 }
             } else {
                 ESP_LOGD(TAG, "No answer to REQA, no cards?\n");
@@ -226,10 +219,9 @@ void card_reader_thread_fn(void*) {
                     CardReader::get_card_tag(old_tag);
                     IO::send_event({
                         .type = IOEventType::CARD_REMOVED,
-                        .card_removed =
-                            {
-                                .card_tag_id = old_tag,
-                            },
+                        .card_removed = {
+                            .card_tag_id = old_tag,
+                        },
                     });
                     card_detected = false;
                 }
@@ -251,12 +243,13 @@ spi_bus_config_t spi_bus_config = {
     .miso_io_num = SPI_MISO,
     .sclk_io_num = SPI_CLK,
 
-    .data2_io_num          = GPIO_NUM_NC,
-    .data3_io_num          = GPIO_NUM_NC,
-    .data4_io_num          = GPIO_NUM_NC,
-    .data5_io_num          = GPIO_NUM_NC,
-    .data6_io_num          = GPIO_NUM_NC,
-    .data7_io_num          = GPIO_NUM_NC,
+    .data2_io_num = GPIO_NUM_NC,
+    .data3_io_num = GPIO_NUM_NC,
+    .data4_io_num = GPIO_NUM_NC,
+    .data5_io_num = GPIO_NUM_NC,
+    .data6_io_num = GPIO_NUM_NC,
+    .data7_io_num = GPIO_NUM_NC,
+
     .data_io_default_level = false,
     .max_transfer_sz       = 512 * 8,
     .flags                 = SPICOMMON_BUSFLAG_GPIO_PINS,
