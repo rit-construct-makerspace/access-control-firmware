@@ -150,11 +150,7 @@ void send_opening_message() {
     }
     cJSON* msg = cJSON_CreateObject();
     cJSON_AddStringToObject(msg, "SerialNumber", Hardware::get_serial_number());
-#ifdef DEV_SERVER
-    cJSON_AddStringToObject(msg, "Key", "5c48906255f1d5f1e99768c5c4bd20d886f71e03d6aad41f26d38a9fb48c762dd251e20bce5f4a9ce5b3484c961dc3b8");
-#else
     cJSON_AddStringToObject(msg, "Key", Storage::get_key().c_str());
-#endif
     cJSON_AddStringToObject(msg, "HWType", "Core");
     cJSON_AddStringToObject(msg, "HWVersion", Hardware::get_edition_string());
     cJSON_AddStringToObject(msg, "FWVersion", "testing");
@@ -239,16 +235,11 @@ void connect_to_server() {
     if (ws_handle != NULL) {
         handle_disconnect();
     }
-#ifdef DEV_SERVER
-    std::string websocket_url = "ws://" DEV_SERVER "/api/ws";
-    cfg.port = 3000;
-#else
     std::string server_url = Storage::get_server();
-    std::string websocket_url = "wss://" + server_url + "/api/ws";
-    cfg.cert_pem = Storage::get_server_certs();
-    cfg.cert_len = 0; // since we have null terminated text cert pem
-#endif
+    std::string websocket_url = "ws://" + server_url + "/api/ws";
+
     cfg.uri = websocket_url.c_str();
+    cfg.port = 3000;
 
     cfg.network_timeout_ms = 10000;
     cfg.reconnect_timeout_ms = 1000;
@@ -335,8 +326,9 @@ namespace WSACS {
             // todo crash
             return -1;
         }
-        keep_alive_timer = xTimerCreate("wsacs keepalive", pdMS_TO_TICKS(10 * 1000), true, NULL,
-                                        [](TimerHandle_t) { WSACS::send_event({EventType::KeepAliveTimer}); });
+
+        auto keepalive_func = [](TimerHandle_t) { WSACS::send_event({EventType::KeepAliveTimer}); };
+        keep_alive_timer = xTimerCreate("wsacs keepalive", pdMS_TO_TICKS(10 * 1000), true, NULL, keepalive_func);
         if (xTimerStart(keep_alive_timer, pdMS_TO_TICKS(100)) == pdFAIL) {
             ESP_LOGE(TAG, "Couldnt start keepalive timer");
             // todo crash

@@ -70,8 +70,8 @@ void advance_frame(Animation::Animation animation, led_strip_handle_t& strip, ui
     }
 
     for (int i = 0; i < 4; i++) {
-        led_strip_set_pixel(strip, i, animation.frames[current_frame][i][0], animation.frames[current_frame][i][1],
-                            animation.frames[current_frame][i][2]);
+        auto [r, g, b] = animation.frames[current_frame][i];
+        led_strip_set_pixel(strip, i, r, g, b);
     }
 }
 

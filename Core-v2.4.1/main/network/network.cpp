@@ -65,7 +65,10 @@ static void on_wifi_event(void* arg, esp_event_base_t event_base, int32_t event_
         ESP_LOGI(TAG, "got ip: " IPSTR, IP2STR(&event->ip_info.ip));
         set_is_online(true);
 
-        Network::send_internal_event({.type = Network::InternalEventType::NetifUp, .netif_up_ip = event->ip_info.ip});
+        Network::send_internal_event({
+            .type = Network::InternalEventType::NetifUp,
+            .netif_up_ip = event->ip_info.ip,
+        });
 
         wifi_retry_count = 0;
     }
@@ -233,10 +236,13 @@ namespace Network {
                 } else {
                     IO::send_event({
                         .type = IOEventType::NETWORK_COMMAND,
-                        .network_command = {.type = NetworkCommandEventType::DENY,
-                                            .commanded_state = event.wsacs_auth_response.to_state,
-                                            .requested = true,
-                                            .for_user = event.wsacs_auth_response.user},
+                        .network_command =
+                            {
+                                .type = NetworkCommandEventType::DENY,
+                                .commanded_state = event.wsacs_auth_response.to_state,
+                                .requested = true,
+                                .for_user = event.wsacs_auth_response.user,
+                            },
                     });
                 }
             }

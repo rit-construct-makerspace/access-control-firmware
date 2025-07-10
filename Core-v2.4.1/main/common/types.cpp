@@ -61,6 +61,7 @@ std::optional<CardTagID> CardTagID::from_string(const char* str) {
 std::optional<IOState> parse_iostate(const char* str) {
     constexpr size_t max_size = 50;
     int len = strnlen(str, max_size);
+
     if (len == max_size) {
         // return if bigger or not null terminated
         return {};
@@ -166,15 +167,17 @@ const char* io_event_type_to_string(IOEventType type) {
     }
 }
 
-std::string CardDetectedEvent::to_string() const {
-    return "detected:" + card_tag_id.to_string();
-}
-std::string CardRemovedEvent::to_string() const {
-    return "removed:" + card_tag_id.to_string();
-}
+std::string CardDetectedEvent::to_string() const { return "detected:" + card_tag_id.to_string(); }
+std::string CardRemovedEvent::to_string() const { return "removed:" + card_tag_id.to_string(); }
 
 const char* network_command_event_type_to_string(NetworkCommandEventType type) {
     switch (type) {
+        case NetworkCommandEventType::COMMAND_STATE:
+            return "Command State";
+        case NetworkCommandEventType::IDENTIFY:
+            return "Identify";
+        default:
+            return "UNKNOWN NETWORK COMMAND EVENT TYPE";
         case NetworkCommandEventType::COMMAND_STATE:
             return "Command State";
         case NetworkCommandEventType::IDENTIFY:
@@ -209,11 +212,25 @@ std::string IOEvent::to_string() const {
     }
 }
 
+StateChangeReason fault_reason_to_state_change_reason(FaultReason fault) {
+    switch (fault) {
+        case FaultReason::CARD_SWITCH:
+            return StateChangeReason::CardSwitch;
+        case FaultReason::TEMP_ERROR:
+            return StateChangeReason::TemperatureError;
+        case FaultReason::SERVER_COMMANDED:
+            return StateChangeReason::ServerCommanded;
+        default:
+            // prolly shouldn't do this but idk waht the default should be
+            return StateChangeReason::ServerCommanded;
+    }
+}
+
 const char* fault_reason_to_string(FaultReason reason) {
     switch (reason) {
         case FaultReason::CARD_SWITCH:
             return "Card Switch";
-        case FaultReason::OVER_TEMP:
+        case FaultReason::TEMP_ERROR:
             return "Over Temperature";
         case FaultReason::SERVER_COMMANDED:
             return "Server Commanded";

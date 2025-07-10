@@ -11,6 +11,7 @@
 #include "io/Buzzer.hpp"
 #include "io/CardReader.hpp"
 #include "io/LEDControl.hpp"
+#include "io/Temperature.hpp"
 #include "network/network.hpp"
 
 static const char* TAG = "io";
@@ -222,11 +223,14 @@ void handle_card_detected(IOEvent event) {
         case IOState::ALWAYS_ON_WAITING:
             xTimerStop(waiting_timer, pdMS_TO_TICKS(100));
             go_to_state(IOState::AWAIT_AUTH);
-            Network::send_event({.type = NetworkEventType::AuthRequest,
-                                 .auth_request = {
-                                     .requester = event.card_detected.card_tag_id,
-                                     .to_state = IOState::ALWAYS_ON,
-                                 }});
+            Network::send_event({
+                .type = NetworkEventType::AuthRequest,
+                .auth_request =
+                    {
+                        .requester = event.card_detected.card_tag_id,
+                        .to_state = IOState::ALWAYS_ON,
+                    },
+            });
             break;
         case IOState::LOCKOUT:
             Buzzer::send_effect(SoundEffect::LOCKOUT);
@@ -383,21 +387,28 @@ void io_thread_fn(void*) {
                                 case IOState::ALWAYS_ON:
                                 case IOState::LOCKOUT:
                                 case IOState::IDLE:
-                                    Network::send_event(
-                                        {.type = NetworkEventType::StateChange,
-                                         .state_change = {.from = cur_state,
-                                                          .to = current_event.network_command.commanded_state,
-                                                          .reason = StateChangeReason::ButtonPress,
-                                                          .who = {}}});
+                                    Network::send_event({
+                                        .type = NetworkEventType::StateChange,
+                                        .state_change =
+                                            {
+                                                .from = cur_state,
+                                                .to = current_event.network_command.commanded_state,
+                                                .reason = StateChangeReason::ButtonPress,
+                                                .who = {},
+                                            },
+                                    });
                                     break;
                                 case IOState::UNLOCKED:
-                                    Network::send_event({.type = NetworkEventType::StateChange,
-                                                         .state_change = {
-                                                             .from = cur_state,
-                                                             .to = current_event.network_command.commanded_state,
-                                                             .reason = StateChangeReason::CardActivated,
-                                                             .who = CardTagID{},
-                                                         }});
+                                    Network::send_event({
+                                        .type = NetworkEventType::StateChange,
+                                        .state_change =
+                                            {
+                                                .from = cur_state,
+                                                .to = current_event.network_command.commanded_state,
+                                                .reason = StateChangeReason::CardActivated,
+                                                .who = CardTagID{},
+                                            },
+                                    });
                                     break;
                                 default:
                                     // FREAK OUT
@@ -428,7 +439,6 @@ void io_thread_fn(void*) {
                         break;
                 }
                 break;
-
             default:
                 ESP_LOGI(TAG, "Unexpected event type recieved");
                 break;
@@ -451,12 +461,30 @@ int IO::init() {
     Button::init();
     CardReader::init();
     Buzzer::init();
+    Temperature::init();
 
     xTaskCreate(io_thread_fn, "io", IO_TASK_STACK_SIZE, NULL, 0, &io_thread);
     return 0;
 }
 
 void IO::fault(FaultReason reason) {
+    IOState cur_state;
+    IO::get_state(cur_state);
+
+    if (reason == FaultReason::START_FAIL) {
+        return; // TODO: figure out what to do
+    }
+
     go_to_state(IOState::FAULT);
-    // TODO: Log fault reason
+
+    Network::send_event({
+        .type = NetworkEventType::StateChange,
+        .state_change =
+            {
+                .from = cur_state,
+                .to = IOState::FAULT,
+                .reason = fault_reason_to_state_change_reason(reason),
+                .who = {},
+            },
+    });
 };
