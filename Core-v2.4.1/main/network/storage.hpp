@@ -20,7 +20,6 @@ namespace Storage {
     bool set_server(std::string server);
     bool set_max_temp(uint8_t max_temp);
 
-    int check_perms(const CardTagID &uid, bool &can_change_state, bool &can_access);
-
+    int check_perms(const CardTagID& uid, bool& can_change_state, bool& can_access);
 
 } // namespace Storage

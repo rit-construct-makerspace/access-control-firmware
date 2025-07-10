@@ -1,9 +1,9 @@
 #include "Button.hpp"
 
+#include <chrono>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <thread>
-#include <chrono>
 
 #include "common/pins.hpp"
 #include "common/types.hpp"
@@ -14,9 +14,9 @@
 #define BUTTON_TASK_STACK_SIZE 2000
 TaskHandle_t button_thread;
 
-static const char * TAG = "Button";
+static const char* TAG = "Button";
 
-void button_thread_fn(void *) {
+void button_thread_fn(void*) {
     int iterations_held = 0;
     int restart_threshold = 60; // 3 seconds
     int status;
@@ -29,26 +29,29 @@ void button_thread_fn(void *) {
             if (iterations_held > restart_threshold) {
                 IO::send_event({
                     .type = IOEventType::BUTTON_PRESSED,
-                    .button = {
-                        .type = ButtonEventType::HELD,
-                    },
+                    .button =
+                        {
+                            .type = ButtonEventType::HELD,
+                        },
                 });
             }
         } else {
             if (iterations_held > restart_threshold) {
                 IO::send_event({
                     .type = IOEventType::BUTTON_PRESSED,
-                    .button = {
-                        .type = ButtonEventType::RELEASED,
-                    },
+                    .button =
+                        {
+                            .type = ButtonEventType::RELEASED,
+                        },
                 });
                 iterations_held = 0;
             } else if (iterations_held > 0) {
                 IO::send_event({
                     .type = IOEventType::BUTTON_PRESSED,
-                    .button = {
-                        .type = ButtonEventType::CLICK,
-                    },
+                    .button =
+                        {
+                            .type = ButtonEventType::CLICK,
+                        },
                 });
                 iterations_held = 0;
             }
