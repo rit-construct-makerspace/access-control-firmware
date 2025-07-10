@@ -63,8 +63,8 @@ bool CardReader::get_card_tag(CardTagID& ret_tag) {
 }
 
 bool evaluate_switches() {
-    bool sw1 = gpio_get_level(DET1);
-    bool sw2 = gpio_get_level(DET2);
+    bool sw1 = gpio_get_level(CARD_DET1);
+    bool sw2 = gpio_get_level(CARD_DET2);
 
     if (sw1 && sw2) {
         switch_error = 0;
@@ -285,8 +285,8 @@ void CardReader::init() {
     gpio_set_level(NFC_PDOWN, 0);
     vTaskDelay(pdMS_TO_TICKS(5));
 
-    gpio_input_enable(DET1);
-    gpio_input_enable(DET2);
+    gpio_input_enable(CARD_DET1);
+    gpio_input_enable(CARD_DET2);
 
     if (spi_bus_initialize(spi_host, &spi_bus_config, SPI_DMA_CH_AUTO) != ESP_OK) {
         ESP_LOGE(TAG, "Failed to initialize SPI bus");
