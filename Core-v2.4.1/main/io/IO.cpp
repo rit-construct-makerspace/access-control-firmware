@@ -284,8 +284,10 @@ void handle_card_removed() {
             break;
         case IOState::AWAIT_AUTH:
             go_to_state(prior_request_state);
+            break;
         case IOState::WELCOMED:
             go_to_state(IOState::WELCOMING);
+            break;
         default:
             return;
     }
