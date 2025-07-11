@@ -195,7 +195,7 @@ namespace Animation {
     };
 
     const Animation NEXT_CARD{
-        .length = 0,
+        .length = 6,
         .frames =
             {
                 Frame{GREEN, ORANGE, ORANGE, ORANGE},
