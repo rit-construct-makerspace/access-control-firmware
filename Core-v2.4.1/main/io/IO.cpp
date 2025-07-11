@@ -245,6 +245,18 @@ void handle_card_detected(IOEvent event) {
         case IOState::LOCKOUT:
             Buzzer::send_effect(SoundEffect::LOCKOUT);
             break;
+        case IOState::NEXT_CARD:
+            Network::send_event({
+                .type = NetworkEventType::StateChange,
+                .state_change =
+                    {
+                        .from = IOState::NEXT_CARD,
+                        .to = IOState::UNLOCKED,
+                        .reason = StateChangeReason::CardActivated,
+                        .who = event.card_detected.card_tag_id,
+                    },
+            });
+            go_to_state(IOState::UNLOCKED);
         default:
             return;
     }
