@@ -22,6 +22,7 @@ extern "C" void app_main(void) {
     Hardware::init();
     USB::init();
     Storage::init();
+    Storage::set_key("6de6833db7f7d4050687c83667c0a64af9b44f83d0b187ab35f35d0620e05b31e59a255ffb26fe4d9376d825430aad7c");
     IO::init();
     Network::init();
 }
