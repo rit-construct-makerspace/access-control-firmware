@@ -64,7 +64,11 @@ void play_effect(SoundEffect::Effect effect) {
         } else {
             start(effect.notes[i].frequency);
         }
-        vTaskDelay(pdMS_TO_TICKS(effect.notes[i].duration));
+
+        SoundEffect::Effect _;
+        if (xQueuePeek(effect_queue, &_, pdMS_TO_TICKS(effect.notes[i].duration))) {
+            break;
+        }
         stop();
     }
     stop();
