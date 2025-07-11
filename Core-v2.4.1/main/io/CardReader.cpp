@@ -131,7 +131,16 @@ bool switcheroo(CardTagID new_tag) {
             set_card_tag(new_tag);
 
             ESP_LOGE(TAG, "SWITCHEROO DETECTED, SOUND THE ALARM :alert:");
+            return true;
+        } else {
+            return false;
         }
+    } else {
+        // idk what to do here, indicates card read error
+        IO::send_event({
+            .type = IOEventType::CARD_READ_ERROR,
+        });
+        return false;
     }
 };
 
