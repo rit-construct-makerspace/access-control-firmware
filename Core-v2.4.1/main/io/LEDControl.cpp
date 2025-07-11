@@ -44,13 +44,16 @@ led_strip_handle_t configure_led(void) {
         }};
 
     // LED strip backend configuration: RMT
-    led_strip_rmt_config_t rmt_config = {.clk_src = RMT_CLK_SRC_DEFAULT,    // different clock source can lead to
-                                                                            // different power consumption
-                                         .resolution_hz = 10 * 1000 * 1000, // RMT counter clock frequency
-                                         .mem_block_symbols = 0, // the memory block size used by the RMT channel
-                                         .flags = {
-                                             .with_dma = 0, // Using DMA can improve performance when driving more LEDs
-                                         }};
+    led_strip_rmt_config_t rmt_config = {
+        .clk_src = RMT_CLK_SRC_DEFAULT,    // different clock source can lead to
+                                           // different power consumption
+        .resolution_hz = 10 * 1000 * 1000, // RMT counter clock frequency
+        .mem_block_symbols = 0,            // the memory block size used by the RMT channel
+        .flags =
+            {
+                .with_dma = 0, // Using DMA can improve performance when driving more LEDs
+            },
+    };
 
     // LED Strip object handle
     led_strip_handle_t led_strip;
