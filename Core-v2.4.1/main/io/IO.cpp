@@ -6,6 +6,8 @@
 #include <freertos/task.h>
 #include <freertos/timers.h>
 
+#include "common/pins.hpp"
+#include "driver/gpio.h"
 #include "esp_log.h"
 #include "io/Button.hpp"
 #include "io/Buzzer.hpp"
@@ -65,27 +67,34 @@ void go_to_state(IOState next_state) {
 
     switch (next_state) {
         case IOState::IDLE:
+            gpio_set_level(SWITCH_CNTRL, 0);
             LED::set_animation(Animation::IDLE);
             break;
         case IOState::UNLOCKED:
+            gpio_set_level(SWITCH_CNTRL, 1);
             Buzzer::send_effect(SoundEffect::ACCEPTED);
             LED::set_animation(Animation::UNLOCKED);
             break;
         case IOState::ALWAYS_ON:
+            gpio_set_level(SWITCH_CNTRL, 1);
             Buzzer::send_effect(SoundEffect::ACCEPTED);
             LED::set_animation(Animation::ALWAYS_ON);
             break;
         case IOState::LOCKOUT:
+            gpio_set_level(SWITCH_CNTRL, 0);
             Buzzer::send_effect(SoundEffect::LOCKOUT);
             LED::set_animation(Animation::LOCKOUT);
             break;
         case IOState::NEXT_CARD:
+            gpio_set_level(SWITCH_CNTRL, 0);
             // LED::set_animation(Animation::NEXT_CARD_ANIMATION);
             break;
         case IOState::WELCOMING:
+            gpio_set_level(SWITCH_CNTRL, 0);
             LED::set_animation(Animation::WELCOMING);
             break;
         case IOState::WELCOMED:
+            gpio_set_level(SWITCH_CNTRL, 0);
             Buzzer::send_effect(SoundEffect::ACCEPTED);
             LED::set_animation(Animation::WELCOMED);
             break;
@@ -106,6 +115,7 @@ void go_to_state(IOState next_state) {
             LED::set_animation(Animation::DENIED);
             break;
         case IOState::FAULT:
+            gpio_set_level(SWITCH_CNTRL, 0);
             Buzzer::send_effect(SoundEffect::FAULT);
             LED::set_animation(Animation::FAULT);
             break;
@@ -337,7 +347,7 @@ void handle_denied() {
 
 void io_thread_fn(void*) {
 
-    IOEvent current_event;
+    IOEvent current_event = {};
 
     while (true) {
         if (xQueueReceive(event_queue, &current_event, portMAX_DELAY) != pdTRUE) {
@@ -456,6 +466,16 @@ int IO::init() {
     if (event_queue == 0 || animation_mutex == NULL) {
         // TODO: Restart here
     }
+
+    gpio_config_t conf = {
+        .pin_bit_mask = (1ULL << SWITCH_CNTRL),
+        .mode = GPIO_MODE_OUTPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE,
+    };
+
+    gpio_config(&conf); // Enable turning on and off the connected switch
 
     LED::init();
     Button::init();
