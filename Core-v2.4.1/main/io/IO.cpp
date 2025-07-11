@@ -245,6 +245,17 @@ void handle_card_detected(IOEvent event) {
         case IOState::LOCKOUT:
             Buzzer::send_effect(SoundEffect::LOCKOUT);
             break;
+        case IOState::WELCOMING:
+            go_to_state(IOState::AWAIT_AUTH);
+            Network::send_event({
+                .type = NetworkEventType::AuthRequest,
+                .auth_request =
+                    {
+                        .requester = event.card_detected.card_tag_id,
+                        .to_state = IOState::WELCOMED,
+                    },
+            });
+            break;
         case IOState::NEXT_CARD:
             Network::send_event({
                 .type = NetworkEventType::StateChange,
@@ -257,6 +268,7 @@ void handle_card_detected(IOEvent event) {
                     },
             });
             go_to_state(IOState::UNLOCKED);
+            break;
         default:
             return;
     }
@@ -285,6 +297,10 @@ void handle_card_removed() {
             break;
         case IOState::AWAIT_AUTH:
             go_to_state(prior_request_state);
+            break;
+        case IOState::WELCOMED:
+            go_to_state(IOState::WELCOMING);
+            break;
         default:
             return;
     }
