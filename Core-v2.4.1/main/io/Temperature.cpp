@@ -12,11 +12,11 @@
 #include "onewire_bus.h"
 #include "onewire_device.h"
 
-#define MAX_ONEWIRE_DEVICES 2
+#define MAX_ONEWIRE_DEVICES 64
 onewire_bus_handle_t onewire_bus;
 uint8_t num_ds_detcted = 0;
 ds18b20_device_handle_t s_ds18b20s[MAX_ONEWIRE_DEVICES];
-static float s_temperature[2] = {1.0, 1.0};
+static float s_temperature[MAX_ONEWIRE_DEVICES];
 
 SemaphoreHandle_t temp_mutex;
 static float cur_temp = 0.0;
@@ -40,7 +40,7 @@ void sensor_detect() {
         if (search_result == ESP_OK) {
             ds18b20_config_t ds_cfg = {};
 
-            if (ds18b20_new_device(&next_onewire_device, &ds_cfg, &s_ds18b20s[num_ds_detcted])) {
+            if (ds18b20_new_device(&next_onewire_device, &ds_cfg, &s_ds18b20s[num_ds_detcted]) == ESP_OK) {
                 ESP_LOGI(TAG, "Found a DS18B20[%d], address: %016llX", onewire_device_found,
                          next_onewire_device.address);
                 num_ds_detcted++;
@@ -71,14 +71,16 @@ void temp_thread_fn(void*) {
         sensor_read();
 
         float max = 1.0;
-        float min = 1.0;
+        float min = 100.0f;
 
-        if (s_temperature[0] > s_temperature[1]) {
-            max = s_temperature[0];
-            min = s_temperature[1];
-        } else {
-            max = s_temperature[1];
-            min = s_temperature[0];
+        for (int i = 0; i < MAX_ONEWIRE_DEVICES; i++) {
+            if (s_temperature[i] > max) {
+                max = s_temperature[i];
+            }
+
+            if (s_temperature[i] < min) {
+                min = s_temperature[i];
+            }
         }
 
         if (xSemaphoreTake(temp_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
@@ -113,6 +115,10 @@ int Temperature::init() {
     temp_mutex = xSemaphoreCreateMutex();
 
     sensor_detect();
+
+    for (int i = 0; i < MAX_ONEWIRE_DEVICES; i++) {
+        s_temperature[i] = 1.0f;
+    }
 
     xTaskCreate(temp_thread_fn, "temp", CONFIG_TEMP_TASK_STACK_SIZE, NULL, 0, &temp_thread);
     return 0;
