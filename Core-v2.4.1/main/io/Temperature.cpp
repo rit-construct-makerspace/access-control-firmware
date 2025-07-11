@@ -80,6 +80,7 @@ void temp_thread_fn(void*) {
             max = s_temperature[1];
             min = s_temperature[0];
         }
+        ESP_LOGI(TAG, "Temp: %f", max);
 
         if (xSemaphoreTake(temp_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
             cur_temp = max;

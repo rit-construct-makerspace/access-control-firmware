@@ -14,6 +14,8 @@
 #include <freertos/timers.h>
 
 static const char* TAG = "wsacs";
+// #define DEV_SERVER "calcarea.student.rit.edu"
+
 
 QueueHandle_t wsacs_queue;
 TaskHandle_t wsacs_thread;
@@ -148,8 +150,14 @@ void send_opening_message() {
     }
     cJSON* msg = cJSON_CreateObject();
     cJSON_AddStringToObject(msg, "SerialNumber", Hardware::get_serial_number());
+    #ifdef DEV_SERVER
+    cJSON_AddStringToObject(msg, "Key", "2f80faa364db236a21803f886792f284f00302839df70f64ae9b91887da53cf1e90f3336334ae48b1ce671d0822fe79f");
+    #else
     cJSON_AddStringToObject(msg, "Key", Storage::get_key().c_str());
+    
+    #endif
     cJSON_AddStringToObject(msg, "HWType", "Core");
+    
     cJSON_AddStringToObject(msg, "HWVersion", Hardware::get_edition_string());
     cJSON_AddStringToObject(msg, "FWVersion", "testing");
     cJSON* req_arr = cJSON_AddArrayToObject(msg, "Request");
@@ -233,11 +241,17 @@ void connect_to_server() {
     if (ws_handle != NULL) {
         handle_disconnect();
     }
-    std::string server_url = Storage::get_server();
-    std::string websocket_url = "ws://" + server_url + "/api/ws";
-
+#ifdef DEV_SERVER
+    std::string websocket_url = "ws://"DEV_SERVER"/api/ws";
     cfg.uri = websocket_url.c_str();
     cfg.port = 3000;
+#else
+    std::string server_url = Storage::get_server();
+    std::string websocket_url = "wss://"+ server_url +"/api/ws";
+    cfg.uri = websocket_url.c_str();
+    cfg.cert_pem = Storage::get_server_certs();
+    cfg.cert_len = 0; // use strlen
+#endif
 
     cfg.network_timeout_ms = 10000;
     cfg.reconnect_timeout_ms = 1000;

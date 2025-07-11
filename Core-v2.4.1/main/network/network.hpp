@@ -36,7 +36,6 @@ namespace Network {
 
         ExternalEvent,
     };
-
     struct InternalEvent {
         InternalEventType type;
         union {

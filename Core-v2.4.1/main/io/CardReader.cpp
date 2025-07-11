@@ -67,8 +67,8 @@ bool CardReader::get_card_tag(CardTagID& ret_tag) {
 }
 
 bool evaluate_switches() {
-    bool sw1 = gpio_get_level(CARD_DET1);
-    bool sw2 = gpio_get_level(CARD_DET2);
+    bool sw1 = !gpio_get_level(CARD_DET1);
+    bool sw2 = !gpio_get_level(CARD_DET2);
 
     if (sw1 && sw2) {
         switch_error = 0;
@@ -89,8 +89,8 @@ void card_reader_thread_fn(void*) {
     uint8_t detect_allowed = 0;
     while (true) {
         bool card_present = evaluate_switches();
-
         while (card_present || card_detected) {
+            card_present = evaluate_switches();
             uint16_t atqa = mfrc630_iso14443a_REQA();
             if (atqa != 0) { // Are there any cards that answered?
                 uint8_t sak;
