@@ -5,6 +5,7 @@
 #include "common/hardware.hpp"
 #include "esp_log.h"
 #include "esp_websocket_client.h"
+#include "io/Buzzer.hpp"
 #include "io/IO.hpp"
 #include "network.hpp"
 #include "network/network.hpp"
@@ -113,7 +114,10 @@ void handle_incoming_ws_text(const char* data, size_t len) {
     }
 
     if (cJSON_HasObjectItem(obj, "State")) {
-        handle_server_state_change(cJSON_GetStringValue(cJSON_GetObjectItem(obj, "State")));
+        cJSON* state_obj = cJSON_GetObjectItem(obj, "State");
+        if (state_obj->type & cJSON_String) {
+            handle_server_state_change(cJSON_GetStringValue(state_obj));
+        }
     }
 
     if (cJSON_HasObjectItem(obj, "Auth")) {
@@ -136,6 +140,12 @@ void handle_incoming_ws_text(const char* data, size_t len) {
     }
     if (cJSON_HasObjectItem(obj, "Song")) {
         handle_song_request(cJSON_GetObjectItem(obj, "Song"));
+    }
+    if (cJSON_HasObjectItem(obj, "PlaySong")) {
+        if (cJSON_IsTrue(cJSON_GetObjectItem(obj, "PlaySong"))){
+            Buzzer::send_effect(network_song);
+
+        }
     }
     cJSON_Delete(obj);
 }
@@ -190,7 +200,7 @@ void send_opening_message() {
     cJSON_AddStringToObject(msg, "SerialNumber", Hardware::get_serial_number());
 #ifdef DEV_SERVER
     cJSON_AddStringToObject(
-        msg, "Key", "2f80faa364db236a21803f886792f284f00302839df70f64ae9b91887da53cf1e90f3336334ae48b1ce671d0822fe79f");
+        msg, "Key", "6de6833db7f7d4050687c83667c0a64af9b44f83d0b187ab35f35d0620e05b31e59a255ffb26fe4d9376d825430aad7c");
 #else
     cJSON_AddStringToObject(msg, "Key", Storage::get_key().c_str());
 
