@@ -92,27 +92,14 @@ CardTagID make_card_tag(uint8_t uid_len, uint8_t* uid) {
                 .type = CardTagType::FOUR,
                 .value = {uid[0], uid[1], uid[2], uid[3]},
             };
-            IO::send_event({
-                .type = IOEventType::CARD_DETECTED,
-                .card_detected = {.card_tag_id = tag},
-            });
-            set_card_tag(tag);
             break;
         case 7:
             tag = {
                 .type = CardTagType::SEVEN,
                 .value = {uid[0], uid[1], uid[2], uid[3], uid[4], uid[5], uid[6]},
             };
-            IO::send_event({
-                .type = IOEventType::CARD_DETECTED,
-                .card_detected = {.card_tag_id = tag},
-            });
-            set_card_tag(tag);
             break;
         default:
-            IO::send_event({
-                .type = IOEventType::CARD_READ_ERROR,
-            });
             break;
     }
     return tag;
@@ -172,6 +159,17 @@ void card_reader_thread_fn(void*) {
                     if (!card_detected && (detect_allowed <= 0)) {
                         // A new card has been inserted
                         CardTagID tag = make_card_tag(uid_len, uid);
+                        if (tag.type == CardTagType::FOUR || tag.type == CardTagType::SEVEN) {
+                            IO::send_event({
+                                .type = IOEventType::CARD_DETECTED,
+                                .card_detected = {.card_tag_id = tag},
+                            });
+                        } else {
+                            IO::send_event({
+                                .type = IOEventType::CARD_READ_ERROR,
+                            });
+                        }
+                        set_card_tag(tag);
                         card_detected = true;
                         detect_allowed = 6;
 
