@@ -89,7 +89,7 @@ void go_to_state(IOState next_state) {
             gpio_set_level(SWITCH_CNTRL, 0);
             // LED::set_animation(Animation::NEXT_CARD_ANIMATION);
             break;
-        case IOState::weLCOMING:
+        case IOState::WELCOMING:
             gpio_set_level(SWITCH_CNTRL, 0);
             LED::set_animation(&Animation::WELCOMING);
             break;
