@@ -22,6 +22,12 @@ extern "C" void app_main(void) {
     Hardware::init();
     USB::init();
     Storage::init();
+
     IO::init();
     Network::init();
+
+    while(true){
+        ESP_LOGI("main", "Heap size: %lu", esp_get_free_heap_size());
+        vTaskDelay(100);
+    }
 }

@@ -178,12 +178,6 @@ const char* network_command_event_type_to_string(NetworkCommandEventType type) {
             return "Identify";
         default:
             return "UNKNOWN NETWORK COMMAND EVENT TYPE";
-        case NetworkCommandEventType::COMMAND_STATE:
-            return "Command State";
-        case NetworkCommandEventType::IDENTIFY:
-            return "Identify";
-        default:
-            return "UNKNOWN NETWORK COMMAND EVENT TYPE";
     }
 }
 

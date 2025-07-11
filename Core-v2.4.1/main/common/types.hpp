@@ -107,8 +107,6 @@ const char* network_command_event_type_to_string(NetworkCommandEventType type);
 struct NetworkCommandEvent {
     NetworkCommandEventType type;
     IOState commanded_state; // Only valid if type is COMMAND_STATE
-    bool requested;          // true if we asked to auth. false if command came from on
-                             // high
     bool requested;          // true if we asked. false if command came from on high
     CardTagID for_user;
     std::string to_string() const;
