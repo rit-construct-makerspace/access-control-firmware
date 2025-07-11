@@ -87,7 +87,7 @@ void go_to_state(IOState next_state) {
             break;
         case IOState::NEXT_CARD:
             gpio_set_level(SWITCH_CNTRL, 0);
-            // LED::set_animation(Animation::NEXT_CARD_ANIMATION);
+            LED::set_animation(&Animation::NEXT_CARD);
             break;
         case IOState::WELCOMING:
             gpio_set_level(SWITCH_CNTRL, 0);
@@ -310,7 +310,7 @@ void identify_timer_callback(TimerHandle_t timer) {
             LED::set_animation(&Animation::LOCKOUT);
             break;
         case IOState::NEXT_CARD:
-            // LED::set_animation(&Animation::NEXT_CARD_ANIMATION);
+            LED::set_animation(&Animation::NEXT_CARD);
             break;
         case IOState::WELCOMING:
             LED::set_animation(&Animation::WELCOMING);

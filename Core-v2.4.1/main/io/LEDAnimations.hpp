@@ -193,4 +193,17 @@ namespace Animation {
                 Frame{GREEN, OFF, OFF, OFF},
             },
     };
+
+    const Animation NEXT_CARD{
+        .length = 0,
+        .frames =
+            {
+                Frame{GREEN, ORANGE, ORANGE, ORANGE},
+                Frame{ORANGE, GREEN, ORANGE, ORANGE},
+                Frame{ORANGE, ORANGE, GREEN, ORANGE},
+                Frame{ORANGE, ORANGE, ORANGE, GREEN},
+                Frame{ORANGE, ORANGE, GREEN, ORANGE},
+                Frame{ORANGE, GREEN, ORANGE, ORANGE},
+            },
+    };
 } // namespace Animation
