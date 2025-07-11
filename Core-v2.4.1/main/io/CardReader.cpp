@@ -152,28 +152,30 @@ void card_reader_thread_fn(void*) {
     uint8_t detect_allowed = 0;
     while (true) {
         bool card_present = evaluate_switches();
+
+        // Enter into loop because of switches, exit when reader no longer detects a card
         while (card_present || card_detected) {
+
             card_present = evaluate_switches();
             uint16_t atqa = mfrc630_iso14443a_REQA();
-            if (atqa != 0) { // Are there any cards that answered?
+
+            if (atqa != 0) {
                 uint8_t sak;
-                uint8_t uid[10] = {0}; // uids are maximum of 10 bytes long.
+                uint8_t uid[10] = {0};
 
                 ESP_LOGD(TAG, "CARD DETECTED");
 
-                // Select the card and discover its uid.
                 uint8_t uid_len = mfrc630_iso14443a_select(uid, &sak);
 
                 if (uid_len != 0) {
 
                     if (!card_detected && (detect_allowed <= 0)) {
-
+                        // A new card has been inserted
                         CardTagID tag = make_card_tag(uid_len, uid);
                         card_detected = true;
                         detect_allowed = 6;
 
                     } else if (card_detected && (detect_allowed <= 0)) {
-
                         // Make sure no switcheroo was pulled
                         CardTagID det_tag = make_card_tag(uid_len, uid);
                         if (switcheroo(det_tag)) {
@@ -182,12 +184,11 @@ void card_reader_thread_fn(void*) {
                         }
                     }
 
-                    // Use the manufacturer default key...
+                    // Manufacturer default key...
                     uint8_t FFkey[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
-                    mfrc630_cmd_load_key(FFkey); // load into the key buffer
+                    mfrc630_cmd_load_key(FFkey);
 
-                    // Try to athenticate block 0.
                     if (mfrc630_MF_auth(uid, MFRC630_MF_AUTH_KEY_A, 0)) {
                         ESP_LOGD(TAG, "Yay! We are authenticated!");
 
@@ -206,10 +207,11 @@ void card_reader_thread_fn(void*) {
                     ESP_LOGD(TAG, "Could not determine UID, perhaps some cards don't play");
                 }
             } else {
-                ESP_LOGD(TAG, "No answer to REQA, no cards?\n");
-                if (card_detected) {
+
+                if (card_detected) { // The card has been removed
                     CardTagID old_tag;
                     CardReader::get_card_tag(old_tag);
+
                     IO::send_event({
                         .type = IOEventType::CARD_REMOVED,
                         .card_removed =
@@ -217,6 +219,7 @@ void card_reader_thread_fn(void*) {
                                 .card_tag_id = old_tag,
                             },
                     });
+
                     card_detected = false;
                 }
             }
