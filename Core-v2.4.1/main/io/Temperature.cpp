@@ -80,7 +80,6 @@ void temp_thread_fn(void*) {
             max = s_temperature[1];
             min = s_temperature[0];
         }
-        ESP_LOGI(TAG, "Temp: %f", max);
 
         if (xSemaphoreTake(temp_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
             cur_temp = max;
@@ -115,7 +114,7 @@ int Temperature::init() {
 
     sensor_detect();
 
-    xTaskCreate(temp_thread_fn, "temp", TEMP_TASK_STACK_SIZE, NULL, 0, &temp_thread);
+    xTaskCreate(temp_thread_fn, "temp", CONFIG_TEMP_TASK_STACK_SIZE, NULL, 0, &temp_thread);
     return 0;
 }
 

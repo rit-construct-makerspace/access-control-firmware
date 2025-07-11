@@ -277,7 +277,7 @@ namespace Network {
         auth_timer_handle = xTimerCreate("wsacs_timeout", pdMS_TO_TICKS(5 * 1000), pdFALSE, NULL, [](TimerHandle_t) {
             send_internal_event({.type = InternalEventType::WSACSTimedOut});
         });
-        xTaskCreate(network_thread_fn, "network", 8192, nullptr, 0, &network_task);
+        xTaskCreate(network_thread_fn, "network", CONFIG_NETWORK_TASK_STACK_SIZE, nullptr, 0, &network_task);
 
         consider_reset_reason();
         return 0;

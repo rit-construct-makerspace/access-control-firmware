@@ -17,10 +17,7 @@
 
 TaskHandle_t led_thread;
 
-#define LED_TASK_STACK_SIZE 3000
-#define NUM_LEDS 4
-
-static Animation::Animation current_animation = Animation::STARTUP;
+static const Animation::Animation* current_animation = &Animation::STARTUP;
 static SemaphoreHandle_t animation_mutex;
 
 static const char* TAG = "led";
@@ -48,12 +45,15 @@ led_strip_handle_t configure_led(void) {
 
     // LED strip backend configuration: RMT
     led_strip_rmt_config_t rmt_config = {
-        .clk_src = RMT_CLK_SRC_DEFAULT,    // different clock source can lead to different power consumption
+        .clk_src = RMT_CLK_SRC_DEFAULT,    // different clock source can lead to
+                                           // different power consumption
         .resolution_hz = 10 * 1000 * 1000, // RMT counter clock frequency
         .mem_block_symbols = 0,            // the memory block size used by the RMT channel
-        .flags = {
-            .with_dma = 0, // Using DMA can improve performance when driving more LEDs
-        }};
+        .flags =
+            {
+                .with_dma = 0, // Using DMA can improve performance when driving more LEDs
+            },
+    };
 
     // LED Strip object handle
     led_strip_handle_t led_strip;
@@ -62,20 +62,20 @@ led_strip_handle_t configure_led(void) {
     return led_strip;
 }
 
-void advance_frame(Animation::Animation animation, led_strip_handle_t& strip, uint8_t& current_frame) {
-    if (current_frame + 1 >= animation.length) {
+void advance_frame(const Animation::Animation* animation, led_strip_handle_t& strip, uint8_t& current_frame) {
+    if (current_frame + 1 >= animation->length) {
         current_frame = 0;
     } else {
         current_frame++;
     }
 
     for (int i = 0; i < 4; i++) {
-        auto [r, g, b] = animation.frames[current_frame][i];
+        auto [r, g, b] = animation->frames[current_frame][i];
         led_strip_set_pixel(strip, i, r, g, b);
     }
 }
 
-bool LED::set_animation(Animation::Animation animation) {
+bool LED::set_animation(const Animation::Animation* animation) {
     if (xSemaphoreTake(animation_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
         current_animation = animation;
         xSemaphoreGive(animation_mutex);
@@ -86,13 +86,13 @@ bool LED::set_animation(Animation::Animation animation) {
 };
 
 // Returns true if current_state was updated, false otherwise
-bool get_animation(Animation::Animation& next_animation) {
+bool get_animation(Animation::Animation const** next_animation) {
     if (xSemaphoreTake(animation_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
-        if (current_animation == next_animation) {
+        if (current_animation == *next_animation) {
             xSemaphoreGive(animation_mutex);
             return false;
         }
-        next_animation = current_animation;
+        *next_animation = current_animation;
         xSemaphoreGive(animation_mutex);
         return true;
     } else {
@@ -107,12 +107,12 @@ void led_thread_fn(void*) {
         // TODO: Crash out
     }
 
-    Animation::Animation thread_animation = Animation::STARTUP;
+    const Animation::Animation* thread_animation = &Animation::STARTUP;
     bool network_good = false;
     uint8_t current_frame = 0;
 
     while (true) {
-        if (get_animation(thread_animation)) {
+        if (get_animation(&thread_animation)) {
             current_frame = 0;
         }
 
@@ -138,6 +138,6 @@ int LED::init() {
         return 1;
     }
 
-    xTaskCreate(led_thread_fn, "led", LED_TASK_STACK_SIZE, NULL, 0, &led_thread);
+    xTaskCreate(led_thread_fn, "led", CONFIG_LED_TASK_STACK_SIZE, NULL, 0, &led_thread);
     return 0;
 };
