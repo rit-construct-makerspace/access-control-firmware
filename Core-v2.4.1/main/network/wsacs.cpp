@@ -163,7 +163,7 @@ void send_opening_message() {
     cJSON* msg = cJSON_CreateObject();
     cJSON_AddStringToObject(msg, "SerialNumber", Hardware::get_serial_number());
     #ifdef DEV_SERVER
-    cJSON_AddStringToObject(msg, "Key", "e69bfc84c69a6c08d85757c6b8bb6ff6048fa808fe53ed598ab6a9536e559cbd9568ce2ce03fbee7c5b95c1529987c14");
+    cJSON_AddStringToObject(msg, "Key", "bf4f0c98c3b174b333dfd0515fd02fe16c87ed625af450be7bdda68f4d30218a91186f5b150b6e978b95eee42b5a61be");
     #else
     cJSON_AddStringToObject(msg, "Key", Storage::get_key().c_str());
     

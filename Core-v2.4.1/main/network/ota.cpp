@@ -1,6 +1,7 @@
 #include "ota.hpp"
 #include "esp_log.h"
 #include "esp_ota_ops.h"
+#
 
 namespace OTA {
     static const char* TAG = "ota";
@@ -14,10 +15,11 @@ namespace OTA {
             ESP_LOGE(TAG, "Failed to get information about currently running app");
         } else {
             ESP_LOGI(TAG, "========   CURRENT PROJECT   ========");
-            ESP_LOGI(TAG, "Project: %.32s", running_description.project_name);
-            ESP_LOGI(TAG, "Version: %.32s", running_description.version);
-            ESP_LOGI(TAG, "%.16s %.16s", running_description.date, running_description.time);
-            ESP_LOGI(TAG, "ESP IDF Version %.32s", running_description.idf_ver);
+            ESP_LOGI(TAG, "= Project: %.32s", running_description.project_name);
+            ESP_LOGI(TAG, "= Version: %.32s", running_description.version);
+            ESP_LOGI(TAG, "= %.16s %.16s", running_description.date, running_description.time);
+            ESP_LOGI(TAG, "= ESP IDF Version %.32s", running_description.idf_ver);
+            ESP_LOGI(TAG, "=====================================");
         }
         active_ota_part = esp_ota_get_next_update_partition(NULL);
         if (active_ota_part == NULL) {
