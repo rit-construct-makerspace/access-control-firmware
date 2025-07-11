@@ -17,7 +17,6 @@
 #include <freertos/timers.h>
 
 static const char* TAG = "wsacs";
-// #define DEV_SERVER "calcarea.student.rit.edu"
 
 esp_websocket_client_handle_t ws_handle = NULL;
 esp_websocket_client_config_t cfg{};
