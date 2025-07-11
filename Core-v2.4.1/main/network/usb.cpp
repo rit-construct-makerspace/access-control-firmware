@@ -164,7 +164,7 @@ esp_err_t USB::init() {
     // custom log handler
     ESP_LOGI(TAG, "USB initialization DONE");
 
-    xTaskCreate(usb_thread_fn, "usb", USB_TASK_STACK_SIZE, NULL, 0, &usb_thread);
+    xTaskCreate(usb_thread_fn, "usb", CONFIG_USB_TASK_STACK_SIZE, NULL, 0, &usb_thread);
 
     return 0;
 }

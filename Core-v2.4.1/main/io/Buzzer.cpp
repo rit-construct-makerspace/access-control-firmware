@@ -124,7 +124,7 @@ int Buzzer::init() {
 
     setup();
 
-    xTaskCreate(buzzer_task_fn, "buzzer", BUZZER_TASK_STACK_SIZE, NULL, 0, &buzzer_thread);
+    xTaskCreate(buzzer_task_fn, "buzzer", CONFIG_BUZZER_TASK_STACK_SIZE, NULL, 0, &buzzer_thread);
     return 0;
 }
 

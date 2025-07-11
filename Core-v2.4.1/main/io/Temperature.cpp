@@ -114,7 +114,7 @@ int Temperature::init() {
 
     sensor_detect();
 
-    xTaskCreate(temp_thread_fn, "temp", TEMP_TASK_STACK_SIZE, NULL, 0, &temp_thread);
+    xTaskCreate(temp_thread_fn, "temp", CONFIG_TEMP_TASK_STACK_SIZE, NULL, 0, &temp_thread);
     return 0;
 }
 

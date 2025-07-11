@@ -1,4 +1,31 @@
 menu "Shlug Configuration"
+    config BUTTON_TASK_STACK_SIZE
+        int "stack size of button task"
+    
+    config BUZZER_TASK_STACK_SIZE
+        int "stack size of button task"
+    
+    config CARD_TASK_STACK_SIZE
+        int "stack size of card reader task"
+                
+    config IO_TASK_STACK_SIZE
+        int "stack size of IO task"
+    
+    config LED_TASK_STACK_SIZE
+        int "stack size of led task"
+    
+    config TEMP_TASK_STACK_SIZE
+        int "stack size of temperature task"
+    
+    config NETWORK_TASK_STACK_SIZE
+        int "stack size of network task"
+                
+    config USB_TASK_STACK_SIZE
+        int "stack size of network task"
+    
+    config WSACS_TASK_STACK_SIZE
+        int "stack size of WSACS task"
         
-endmenu
+        
+    endmenu
     

@@ -508,7 +508,7 @@ int IO::init() {
     Buzzer::init();
     Temperature::init();
 
-    xTaskCreate(io_thread_fn, "io", IO_TASK_STACK_SIZE, NULL, 0, &io_thread);
+    xTaskCreate(io_thread_fn, "io", CONFIG_IO_TASK_STACK_SIZE, NULL, 0, &io_thread);
     return 0;
 }
 
