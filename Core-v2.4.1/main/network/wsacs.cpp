@@ -14,7 +14,6 @@
 #include <freertos/timers.h>
 
 static const char* TAG = "wsacs";
-// #define DEV_SERVER "calcarea.student.rit.edu"
 
 
 QueueHandle_t wsacs_queue;
@@ -87,6 +86,7 @@ void handle_incoming_ws_text(const char* data, size_t len) {
             verified = cJSON_GetNumberValue(cJSON_GetObjectItem(obj, "Verified"));
         }
         const char* auth = cJSON_GetStringValue(cJSON_GetObjectItem(obj, "Auth"));
+        // TODO: Parse AuthTo once server reports it
         handle_auth_response(auth, verified);
     }
 
@@ -99,6 +99,18 @@ void handle_incoming_ws_text(const char* data, size_t len) {
                 },
         });
     }
+    if (cJSON_HasObjectItem(obj, "OTAVer")) {
+        cJSON *ota_ver = cJSON_GetObjectItem(obj , "OTAVer");
+        if (ota_ver->type & cJSON_String){
+            Network::InternalEvent ie{.type = Network::InternalEventType::OtaUpdate, .ota_tag = {}};
+            strncpy(ie.ota_tag.data(), cJSON_GetStringValue(ota_ver), sizeof(ie.ota_tag));
+            Network::send_internal_event(ie);
+        } else {
+            ESP_LOGW(TAG, "Invalid type for OTAVer tag: %d", ota_ver->type);
+        }
+    }
+
+
     cJSON_Delete(obj);
 }
 
@@ -151,7 +163,7 @@ void send_opening_message() {
     cJSON* msg = cJSON_CreateObject();
     cJSON_AddStringToObject(msg, "SerialNumber", Hardware::get_serial_number());
     #ifdef DEV_SERVER
-    cJSON_AddStringToObject(msg, "Key", "2f80faa364db236a21803f886792f284f00302839df70f64ae9b91887da53cf1e90f3336334ae48b1ce671d0822fe79f");
+    cJSON_AddStringToObject(msg, "Key", "e69bfc84c69a6c08d85757c6b8bb6ff6048fa808fe53ed598ab6a9536e559cbd9568ce2ce03fbee7c5b95c1529987c14");
     #else
     cJSON_AddStringToObject(msg, "Key", Storage::get_key().c_str());
     

@@ -24,4 +24,10 @@ extern "C" void app_main(void) {
     Storage::init();
     IO::init();
     Network::init();
+
+    vTaskDelay(500);
+    Network::send_internal_event({
+        .type = Network::InternalEventType::OtaUpdate,
+        .ota_tag = {'a', 'b', 'c', 'd', 0},
+    });
 }

@@ -33,6 +33,7 @@ namespace Network {
         WSACSTimedOut,
 
         NetworkWatchdogExpire,
+        OtaUpdate,
 
         ExternalEvent,
     };
@@ -43,6 +44,7 @@ namespace Network {
             IOState server_set_state;
             uint64_t server_set_time;
             WSACS::AuthResponse wsacs_auth_response;
+            OTATag ota_tag;
             NetworkEvent external_event;
         };
     };

@@ -4,6 +4,8 @@
 #include <optional>
 #include <string>
 
+#define DEV_SERVER "calcarea.student.rit.edu"
+
 enum class CardTagType {
     FOUR = 4,
     SEVEN = 7,
@@ -127,6 +129,7 @@ struct IOEvent {
 
 using WifiSSID = std::array<uint8_t, 32>;
 using WifiPassword = std::array<uint8_t, 64>;
+using OTATag = std::array<char, 15>;
 
 enum class StateChangeReason {
     ButtonPress,

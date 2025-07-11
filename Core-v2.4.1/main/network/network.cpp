@@ -2,11 +2,11 @@
 #include "esp_err.h"
 #include "esp_log.h"
 #include "esp_wifi.h"
+#include "io/IO.hpp"
+#include "ota.hpp"
 #include "sdkconfig.h"
 #include "storage.hpp"
 #include <string.h>
-
-#include "io/IO.hpp"
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
@@ -195,56 +195,66 @@ namespace Network {
                 continue;
             }
 
-            if (event.type == InternalEventType::ExternalEvent) {
-                handle_external_event(event.external_event);
-            } else if (event.type == InternalEventType::NetifUp) {
-                ESP_LOGD(TAG, "Wifi up, tell wsacs to connect");
-                WSACS::send_event({WSACS::EventType::TryConnect});
-            } else if (event.type == InternalEventType::ServerSetState) {
-                IO::send_event({
-                    .type = IOEventType::NETWORK_COMMAND,
-                    .network_command =
-                        {
-                            .type = NetworkCommandEventType::COMMAND_STATE,
-                            .commanded_state = event.server_set_state,
-                            .requested = false,
-                            .for_user = CardTagID{},
-                        },
-                });
-            } else if (event.type == InternalEventType::WSACSTimedOut) {
-                IO::send_event({
-                    .type = IOEventType::NETWORK_COMMAND,
-                    .network_command = {.type = NetworkCommandEventType::DENY,
-                                        .commanded_state = event.wsacs_auth_response.to_state,
-                                        .requested = true,
-                                        .for_user = event.wsacs_auth_response.user},
-                });
-
-            } else if (event.type == InternalEventType::WSACSAuthResponse) {
-                xTimerStop(auth_timer_handle, pdMS_TO_TICKS(100));
-                if (event.wsacs_auth_response.verified) {
+            switch (event.type) {
+                case InternalEventType::ExternalEvent:
+                    handle_external_event(event.external_event);
+                    break;
+                case InternalEventType::NetifUp:
+                    ESP_LOGD(TAG, "Wifi up, tell wsacs to connect");
+                    WSACS::send_event({WSACS::EventType::TryConnect});
+                    break;
+                case InternalEventType::ServerSetState:
                     IO::send_event({
                         .type = IOEventType::NETWORK_COMMAND,
                         .network_command =
                             {
                                 .type = NetworkCommandEventType::COMMAND_STATE,
-                                .commanded_state = event.wsacs_auth_response.to_state,
-                                .requested = true,
-                                .for_user = event.wsacs_auth_response.user,
+                                .commanded_state = event.server_set_state,
+                                .requested = false,
+                                .for_user = CardTagID{},
                             },
                     });
-                } else {
+                    break;
+                case InternalEventType::WSACSTimedOut:
                     IO::send_event({
                         .type = IOEventType::NETWORK_COMMAND,
-                        .network_command =
-                            {
-                                .type = NetworkCommandEventType::DENY,
-                                .commanded_state = event.wsacs_auth_response.to_state,
-                                .requested = true,
-                                .for_user = event.wsacs_auth_response.user,
-                            },
+                        .network_command = {.type = NetworkCommandEventType::DENY,
+                                            .commanded_state = event.wsacs_auth_response.to_state,
+                                            .requested = true,
+                                            .for_user = event.wsacs_auth_response.user},
                     });
-                }
+                    break;
+                case InternalEventType::WSACSAuthResponse:
+                    xTimerStop(auth_timer_handle, pdMS_TO_TICKS(100));
+                    if (event.wsacs_auth_response.verified) {
+                        IO::send_event({
+                            .type = IOEventType::NETWORK_COMMAND,
+                            .network_command =
+                                {
+                                    .type = NetworkCommandEventType::COMMAND_STATE,
+                                    .commanded_state = event.wsacs_auth_response.to_state,
+                                    .requested = true,
+                                    .for_user = event.wsacs_auth_response.user,
+                                },
+                        });
+                    } else {
+                        IO::send_event({
+                            .type = IOEventType::NETWORK_COMMAND,
+                            .network_command =
+                                {
+                                    .type = NetworkCommandEventType::DENY,
+                                    .commanded_state = event.wsacs_auth_response.to_state,
+                                    .requested = true,
+                                    .for_user = event.wsacs_auth_response.user,
+                                },
+                        });
+                    }
+                    break;
+                case InternalEventType::OtaUpdate:
+                    OTA::begin(event.ota_tag);
+                    break;
+                default:
+                    ESP_LOGW(TAG, "Not handling event: %d", (int)event.type);
             }
         }
         return;
