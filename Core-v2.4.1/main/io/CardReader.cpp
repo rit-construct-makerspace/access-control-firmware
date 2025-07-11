@@ -106,10 +106,11 @@ CardTagID make_card_tag(uint8_t uid_len, uint8_t* uid) {
 }
 
 bool switcheroo(CardTagID new_tag) {
+    CardTagID old_tag;
+    CardReader::get_card_tag(old_tag);
+
     // makes sure new_tag is a real tag
     if (new_tag.type == CardTagType::FOUR || new_tag.type == CardTagType::SEVEN) {
-        CardTagID old_tag;
-        CardReader::get_card_tag(old_tag);
 
         if (old_tag != new_tag) {
 
@@ -140,7 +141,15 @@ bool switcheroo(CardTagID new_tag) {
         IO::send_event({
             .type = IOEventType::CARD_READ_ERROR,
         });
-        return false;
+        IO::send_event({
+            .type = IOEventType::CARD_REMOVED,
+            .card_removed =
+                {
+                    .card_tag_id = old_tag,
+                },
+        });
+        card_detected = false;
+        return true;
     }
 };
 
