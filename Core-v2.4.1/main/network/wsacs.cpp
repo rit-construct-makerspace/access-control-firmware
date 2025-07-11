@@ -1,9 +1,11 @@
 #include "wsacs.hpp"
+#include "io/BuzzerSounds.hpp"
 
 #include "cJSON.h"
 #include "common/hardware.hpp"
 #include "esp_log.h"
 #include "esp_websocket_client.h"
+#include "io/Buzzer.hpp"
 #include "io/IO.hpp"
 #include "network.hpp"
 #include "network/network.hpp"
@@ -15,7 +17,6 @@
 
 static const char* TAG = "wsacs";
 // #define DEV_SERVER "calcarea.student.rit.edu"
-
 
 QueueHandle_t wsacs_queue;
 TaskHandle_t wsacs_thread;
@@ -64,6 +65,46 @@ void handle_auth_response(const char* auth, int verified) {
     });
 }
 
+SoundEffect::Effect network_song = {.length = 0, .notes = NULL};
+
+void handle_song_request(cJSON* song) {
+    if (!cJSON_HasObjectItem(song, "Notes")) {
+        ESP_LOGW(TAG, "Song request had incorrect keys");
+        return;
+    }
+    cJSON* notes_obj = cJSON_GetObjectItem(song, "Notes");
+    if (!(notes_obj->type & cJSON_Array)) {
+        ESP_LOGW(TAG, "Wrong type for song notes");
+        return;
+    }
+    size_t length = cJSON_GetArraySize(notes_obj);
+    SoundEffect::Note* notes = new SoundEffect::Note[length];
+
+    cJSON* notedef = NULL;
+    size_t i = 0;
+    cJSON_ArrayForEach(notedef, notes_obj) {
+        if (cJSON_GetArraySize(notedef) != 2) {
+            ESP_LOGW(TAG, "Wrong number of items in array");
+            delete[] notes;
+            return;
+        }
+        cJSON* freq_obj = cJSON_GetArrayItem(notedef, 0);
+        cJSON* len_obj = cJSON_GetArrayItem(notedef, 1);
+        notes[i] = SoundEffect::Note{
+            .frequency = (uint32_t)cJSON_GetNumberValue(freq_obj),
+            .duration = (uint16_t)cJSON_GetNumberValue(len_obj),
+        };
+        i++;
+    }
+
+    network_song.length = length;
+    if (network_song.notes != NULL) {
+        delete[] network_song.notes;
+    }
+    network_song.notes = notes;
+    ESP_LOGI(TAG, "Parsed song of %u notes", network_song.length);
+}
+
 void handle_incoming_ws_text(const char* data, size_t len) {
     if (len == 0) {
         ESP_LOGE(TAG, "ws message with 0 length. Protocol Error");
@@ -78,7 +119,10 @@ void handle_incoming_ws_text(const char* data, size_t len) {
     }
 
     if (cJSON_HasObjectItem(obj, "State")) {
-        handle_server_state_change(cJSON_GetStringValue(cJSON_GetObjectItem(obj, "State")));
+        cJSON* state_obj = cJSON_GetObjectItem(obj, "State");
+        if (state_obj->type & cJSON_String) {
+            handle_server_state_change(cJSON_GetStringValue(state_obj));
+        }
     }
 
     if (cJSON_HasObjectItem(obj, "Auth")) {
@@ -98,6 +142,14 @@ void handle_incoming_ws_text(const char* data, size_t len) {
                     .type = NetworkCommandEventType::IDENTIFY,
                 },
         });
+    }
+    if (cJSON_HasObjectItem(obj, "Song")) {
+        handle_song_request(cJSON_GetObjectItem(obj, "Song"));
+    }
+    if (cJSON_HasObjectItem(obj, "PlaySong")) {
+        if (cJSON_IsTrue(cJSON_GetObjectItem(obj, "PlaySong"))) {
+            Buzzer::send_effect(network_song);
+        }
     }
     cJSON_Delete(obj);
 }
@@ -150,14 +202,15 @@ void send_opening_message() {
     }
     cJSON* msg = cJSON_CreateObject();
     cJSON_AddStringToObject(msg, "SerialNumber", Hardware::get_serial_number());
-    #ifdef DEV_SERVER
-    cJSON_AddStringToObject(msg, "Key", "2f80faa364db236a21803f886792f284f00302839df70f64ae9b91887da53cf1e90f3336334ae48b1ce671d0822fe79f");
-    #else
+#ifdef DEV_SERVER
+    cJSON_AddStringToObject(
+        msg, "Key", "6de6833db7f7d4050687c83667c0a64af9b44f83d0b187ab35f35d0620e05b31e59a255ffb26fe4d9376d825430aad7c");
+#else
     cJSON_AddStringToObject(msg, "Key", Storage::get_key().c_str());
-    
-    #endif
+
+#endif
     cJSON_AddStringToObject(msg, "HWType", "Core");
-    
+
     cJSON_AddStringToObject(msg, "HWVersion", Hardware::get_edition_string());
     cJSON_AddStringToObject(msg, "FWVersion", "testing");
     cJSON* req_arr = cJSON_AddArrayToObject(msg, "Request");
@@ -242,12 +295,12 @@ void connect_to_server() {
         handle_disconnect();
     }
 #ifdef DEV_SERVER
-    std::string websocket_url = "ws://"DEV_SERVER"/api/ws";
+    std::string websocket_url = "ws://" DEV_SERVER "/api/ws";
     cfg.uri = websocket_url.c_str();
     cfg.port = 3000;
 #else
     std::string server_url = Storage::get_server();
-    std::string websocket_url = "wss://"+ server_url +"/api/ws";
+    std::string websocket_url = "wss://" + server_url + "/api/ws";
     cfg.uri = websocket_url.c_str();
     cfg.cert_pem = Storage::get_server_certs();
     cfg.cert_len = 0; // use strlen
