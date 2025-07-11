@@ -49,9 +49,9 @@ namespace Storage {
 
         return ESP_OK;
     }
-    bool commit(){
+    bool commit() {
         esp_err_t e = nvs_commit(storage_nvs_handle);
-        if (e != ESP_OK){
+        if (e != ESP_OK) {
             ESP_LOGE(TAG, "Could not commit to NVS: %s", esp_err_to_name(e));
         }
         return e == ESP_OK;
@@ -179,50 +179,61 @@ namespace Storage {
 
     bool set_network_ssid(WifiSSID ssid) {
         esp_err_t err = nvs_set_blob(storage_nvs_handle, NVS_NETWORK_SSID_TAG, ssid.data(), sizeof(ssid));
-        if (err == ESP_OK) {
-            cached_network_ssid = ssid;
-            return true;
+        if (err != ESP_OK) {
+            return false;
         }
-        return commit();
+        bool ok = commit();
+        if (ok) {
+            cached_network_ssid = ssid;
+        }
+        return ok;
     }
 
     bool set_network_password(WifiPassword password) {
         esp_err_t err = nvs_set_blob(storage_nvs_handle, NVS_NETWORK_PASS_TAG, password.data(), sizeof(password));
-        if (err == ESP_OK) {
-            cached_network_pass = password;
-            return true;
+        if (err != ESP_OK) {
+            return false;
         }
-        return commit();
+        bool ok = commit();
+        if (ok) {
+            cached_network_pass = password;
+        }
+        return ok;
     }
 
     bool set_server(std::string server) {
         esp_err_t err = nvs_set_str(storage_nvs_handle, NVS_SERVER_ADDR_TAG, server.c_str());
-
-        if (err == ESP_OK) {
-            cached_server_addr = server;
-            return true;
+        if (err != ESP_OK) {
+            return false;
         }
-        return commit();
+        bool ok = commit();
+        if (ok) {
+            cached_server_addr = server;
+        }
+        return ok;
     }
     bool set_key(std::string key) {
         esp_err_t err = nvs_set_str(storage_nvs_handle, NVS_SERVER_KEY_TAG, key.c_str());
-
-        if (err == ESP_OK) {
-            cached_server_key = key;
-            return true;
+        if (err != ESP_OK) {
+            return false;
         }
-        return commit();
+        bool ok = commit();
+        if (ok) {
+            cached_server_key = key;
+        }
+        return ok;
     }
 
     bool set_max_temp(uint8_t max_temp) {
         esp_err_t err = nvs_set_u8(storage_nvs_handle, NVS_MAX_TEMP_TAG, max_temp);
-
-        if (err == ESP_OK) {
-            cached_max_temp = max_temp;
-            return true;
+        if (err != ESP_OK) {
+            return false;
         }
-
-        return commit();
+        bool ok = commit();
+        if (ok) {
+            cached_max_temp = max_temp;
+        }
+        return ok;
     }
 
 } // namespace Storage
