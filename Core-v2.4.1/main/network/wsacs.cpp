@@ -66,6 +66,7 @@ void handle_auth_response(const char* auth, int verified) {
 }
 
 SoundEffect::Effect network_song = {.length = 0, .notes = NULL};
+
 void handle_song_request(cJSON* song) {
     if (!cJSON_HasObjectItem(song, "Notes")) {
         ESP_LOGW(TAG, "Song request had incorrect keys");
@@ -95,7 +96,11 @@ void handle_song_request(cJSON* song) {
         };
         i++;
     }
+
     network_song.length = length;
+    if (network_song.notes != NULL) {
+        delete[] network_song.notes;
+    }
     network_song.notes = notes;
     ESP_LOGI(TAG, "Parsed song of %u notes", network_song.length);
 }
@@ -142,9 +147,8 @@ void handle_incoming_ws_text(const char* data, size_t len) {
         handle_song_request(cJSON_GetObjectItem(obj, "Song"));
     }
     if (cJSON_HasObjectItem(obj, "PlaySong")) {
-        if (cJSON_IsTrue(cJSON_GetObjectItem(obj, "PlaySong"))){
+        if (cJSON_IsTrue(cJSON_GetObjectItem(obj, "PlaySong"))) {
             Buzzer::send_effect(network_song);
-
         }
     }
     cJSON_Delete(obj);
