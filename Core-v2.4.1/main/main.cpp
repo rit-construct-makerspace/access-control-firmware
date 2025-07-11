@@ -22,7 +22,6 @@ extern "C" void app_main(void) {
     Hardware::init();
     USB::init();
     Storage::init();
-
     IO::init();
     Network::init();
 

@@ -14,7 +14,7 @@
 #include <freertos/timers.h>
 
 static const char* TAG = "wsacs";
-#define DEV_SERVER "calcarea.student.rit.edu"
+// #define DEV_SERVER "calcarea.student.rit.edu"
 
 
 QueueHandle_t wsacs_queue;
@@ -250,7 +250,7 @@ void connect_to_server() {
     std::string websocket_url = "wss://"+ server_url +"/api/ws";
     cfg.uri = websocket_url.c_str();
     cfg.cert_pem = Storage::get_server_certs();
-    cfg.cert_len = 0;
+    cfg.cert_len = 0; // use strlen
 #endif
 
     cfg.network_timeout_ms = 10000;

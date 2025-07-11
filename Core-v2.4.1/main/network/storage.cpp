@@ -49,6 +49,13 @@ namespace Storage {
 
         return ESP_OK;
     }
+    bool commit(){
+        esp_err_t e = nvs_commit(storage_nvs_handle);
+        if (e != ESP_OK){
+            ESP_LOGE(TAG, "Could not commit to NVS: %s", esp_err_to_name(e));
+        }
+        return e == ESP_OK;
+    }
 
     void load_initial_values() {
         size_t len = sizeof(WifiSSID);
@@ -123,8 +130,43 @@ namespace Storage {
         return cached_server_addr;
     }
 
-    std::string get_server_certs() {
-        return "";
+    const char* get_server_certs() {
+        return "-----BEGIN CERTIFICATE-----\n"
+               "MIIGSjCCBDKgAwIBAgIRAINbdhUgbS1uCX4LbkCf78AwDQYJKoZIhvcNAQEMBQAw\n"
+               "gYgxCzAJBgNVBAYTAlVTMRMwEQYDVQQIEwpOZXcgSmVyc2V5MRQwEgYDVQQHEwtK\n"
+               "ZXJzZXkgQ2l0eTEeMBwGA1UEChMVVGhlIFVTRVJUUlVTVCBOZXR3b3JrMS4wLAYD\n"
+               "VQQDEyVVU0VSVHJ1c3QgUlNBIENlcnRpZmljYXRpb24gQXV0aG9yaXR5MB4XDTIy\n"
+               "MTExNjAwMDAwMFoXDTMyMTExNTIzNTk1OVowRDELMAkGA1UEBhMCVVMxEjAQBgNV\n"
+               "BAoTCUludGVybmV0MjEhMB8GA1UEAxMYSW5Db21tb24gUlNBIFNlcnZlciBDQSAy\n"
+               "MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAifBcxDi60DRXr5dVoPQi\n"
+               "Q/w+GBE62216UiEGMdbUt7eSiIaFj/iZ/xiFop0rWuH4BCFJ3kSvQF+aIhEsOnuX\n"
+               "R6mViSpUx53HM5ApIzFIVbd4GqY6tgwaPzu/XRI/4Dmz+hoLW/i/zD19iXvS95qf\n"
+               "NU8qP7/3/USf2/VNSUNmuMKlaRgwkouue0usidYK7V8W3ze+rTFvWR2JtWKNTInc\n"
+               "NyWD3GhVy/7G09PwTAu7h0qqRyTkETLf+z7FWtc8c12f+SfvmKHKFVqKpNPtgMkr\n"
+               "wqwaOgOOD4Q00AihVT+UzJ6MmhNPGg+/Xf0BavmXKCGDTv5uzQeOdD35o/Zw16V4\n"
+               "C4J4toj1WLY7hkVhrzKG+UWJiSn8Hv3dUTj4dkneJBNQrUfcIfTHV3gCtKwXn1eX\n"
+               "mrxhH+tWu9RVwsDegRG0s28OMdVeOwljZvYrUjRomutNO5GzynveVxJVCn3Cbn7a\n"
+               "c4L+5vwPNgs04DdOAGzNYdG5t6ryyYPosSLH2B8qDNzxAgMBAAGjggFwMIIBbDAf\n"
+               "BgNVHSMEGDAWgBRTeb9aqitKz1SA4dibwJ3ysgNmyzAdBgNVHQ4EFgQU70wAkqb7\n"
+               "di5eleLJX4cbGdVN4tkwDgYDVR0PAQH/BAQDAgGGMBIGA1UdEwEB/wQIMAYBAf8C\n"
+               "AQAwHQYDVR0lBBYwFAYIKwYBBQUHAwEGCCsGAQUFBwMCMCIGA1UdIAQbMBkwDQYL\n"
+               "KwYBBAGyMQECAmcwCAYGZ4EMAQICMFAGA1UdHwRJMEcwRaBDoEGGP2h0dHA6Ly9j\n"
+               "cmwudXNlcnRydXN0LmNvbS9VU0VSVHJ1c3RSU0FDZXJ0aWZpY2F0aW9uQXV0aG9y\n"
+               "aXR5LmNybDBxBggrBgEFBQcBAQRlMGMwOgYIKwYBBQUHMAKGLmh0dHA6Ly9jcnQu\n"
+               "dXNlcnRydXN0LmNvbS9VU0VSVHJ1c3RSU0FBQUFDQS5jcnQwJQYIKwYBBQUHMAGG\n"
+               "GWh0dHA6Ly9vY3NwLnVzZXJ0cnVzdC5jb20wDQYJKoZIhvcNAQEMBQADggIBACaA\n"
+               "DTTkHq4ivq8+puKE+ca3JbH32y+odcJqgqzDts5bgsapBswRYypjmXLel11Q2U6w\n"
+               "rySldlIjBRDZ8Ah8NOs85A6MKJQLaU9qHzRyG6w2UQTzRwx2seY30Mks3ZdIe9rj\n"
+               "s5rEYliIOh9Dwy8wUTJxXzmYf/A1Gkp4JJp0xIhCVR1gCSOX5JW6185kwid242bs\n"
+               "Lm0vCQBAA/rQgxvLpItZhC9US/r33lgtX/cYFzB4jGOd+Xs2sEAUlGyu8grLohYh\n"
+               "kgWN6hqyoFdOpmrl8yu7CSGV7gmVQf9viwVBDIKm+2zLDo/nhRkk8xA0Bb1BqPzy\n"
+               "bPESSVh4y5rZ5bzB4Lo2YN061HV9+HDnnIDBffNIicACdv4JGyGfpbS6xsi3UCN1\n"
+               "5ypaG43PJqQ0UnBQDuR60io1ApeSNkYhkaHQ9Tk/0C4A+EM3MW/KFuU53eHLVlX9\n"
+               "ss1iG2AJfVktaZ2l/SbY7py8JUYMkL/jqZBRjNkD6srsmpJ6utUMmAlt7m1+cTX8\n"
+               "6/VEBc5Dp9VfuD6hNbNKDSg7YxyEVaBqBEtN5dppj4xSiCrs6LxLHnNo3rG8VJRf\n"
+               "NVQdgFbMb7dOIBokklzfmU69lS0kgyz2mZMJmW2G/hhEdddJWHh3FcLi2MaeYiOV\n"
+               "RFrLHtJvXEdf2aEaZ0LOb2Xo3zO6BJvjXldv2woN\n"
+               "-----END CERTIFICATE-----\n";
     }
 
     std::string get_key() {
@@ -141,7 +183,7 @@ namespace Storage {
             cached_network_ssid = ssid;
             return true;
         }
-        return false;
+        return commit();
     }
 
     bool set_network_password(WifiPassword password) {
@@ -150,7 +192,7 @@ namespace Storage {
             cached_network_pass = password;
             return true;
         }
-        return false;
+        return commit();
     }
 
     bool set_server(std::string server) {
@@ -160,7 +202,7 @@ namespace Storage {
             cached_server_addr = server;
             return true;
         }
-        return false;
+        return commit();
     }
     bool set_key(std::string key) {
         esp_err_t err = nvs_set_str(storage_nvs_handle, NVS_SERVER_KEY_TAG, key.c_str());
@@ -169,7 +211,7 @@ namespace Storage {
             cached_server_key = key;
             return true;
         }
-        return false;
+        return commit();
     }
 
     bool set_max_temp(uint8_t max_temp) {
@@ -180,7 +222,7 @@ namespace Storage {
             return true;
         }
 
-        return false;
+        return commit();
     }
 
 } // namespace Storage
