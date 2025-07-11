@@ -16,7 +16,7 @@
 #include <freertos/timers.h>
 
 static const char* TAG = "wsacs";
-#define DEV_SERVER "calcarea.student.rit.edu"
+// #define DEV_SERVER "calcarea.student.rit.edu"
 
 QueueHandle_t wsacs_queue;
 TaskHandle_t wsacs_thread;
