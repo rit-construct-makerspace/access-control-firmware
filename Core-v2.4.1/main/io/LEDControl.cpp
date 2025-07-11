@@ -118,8 +118,6 @@ void led_thread_fn(void*) {
     while (true) {
         if (get_animation(&thread_animation)) {
             current_frame      = 0;
-            uint32_t watermark = uxTaskGetStackHighWaterMark(NULL);
-            ESP_LOGW(TAG, "watermark %lu", watermark);
         }
 
         advance_frame(thread_animation, strip, current_frame);
