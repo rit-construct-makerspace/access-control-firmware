@@ -15,3 +15,4 @@ constexpr gpio_num_t CARD_DET1 = GPIO_NUM_15;
 constexpr gpio_num_t CARD_DET2 = GPIO_NUM_16;
 constexpr gpio_num_t TEMP_PIN = GPIO_NUM_37;
 constexpr gpio_num_t MODE = GPIO_NUM_38;
+constexpr gpio_num_t SWITCH_CNTRL = GPIO_NUM_41;
