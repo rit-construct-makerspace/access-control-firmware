@@ -417,6 +417,11 @@ void handle_network_command(IOEvent current_event) {
     }
 }
 
+bool allowed_fault_event(IOEvent event) {
+    return (event.type == IOEventType::BUTTON_PRESSED ||
+            (event.type == IOEventType::NETWORK_COMMAND && event.network_command.commanded_state == IOState::RESTART));
+}
+
 void io_thread_fn(void*) {
 
     IOEvent current_event = {};
@@ -428,9 +433,7 @@ void io_thread_fn(void*) {
 
         IOState current_state;
         if (IO::get_state(current_state) && current_state == IOState::FAULT) {
-            if (!(current_event.type == IOEventType::BUTTON_PRESSED ||
-                  (current_event.type == IOEventType::NETWORK_COMMAND &&
-                   current_event.network_command.commanded_state == IOState::RESTART))) {
+            if (!allowed_fault_event(current_event)) {
                 continue;
             }
         }
