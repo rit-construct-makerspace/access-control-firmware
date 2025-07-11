@@ -40,7 +40,7 @@ void sensor_detect() {
         if (search_result == ESP_OK) {
             ds18b20_config_t ds_cfg = {};
 
-            if (ds18b20_new_device(&next_onewire_device, &ds_cfg, &s_ds18b20s[num_ds_detcted])) {
+            if (ds18b20_new_device(&next_onewire_device, &ds_cfg, &s_ds18b20s[num_ds_detcted]) == ESP_OK) {
                 ESP_LOGI(TAG, "Found a DS18B20[%d], address: %016llX", onewire_device_found,
                          next_onewire_device.address);
                 num_ds_detcted++;
