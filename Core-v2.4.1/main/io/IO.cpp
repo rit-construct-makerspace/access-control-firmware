@@ -56,7 +56,7 @@ void go_to_state(IOState next_state) {
     IO::get_state(current_state);
 
     if (next_state == IOState::RESTART) {
-        LED::set_animation(Animation::RESTART);
+        LED::set_animation(&Animation::RESTART);
         return;
     }
 
@@ -68,22 +68,22 @@ void go_to_state(IOState next_state) {
     switch (next_state) {
         case IOState::IDLE:
             gpio_set_level(SWITCH_CNTRL, 0);
-            LED::set_animation(Animation::IDLE);
+            LED::set_animation(&Animation::IDLE);
             break;
         case IOState::UNLOCKED:
             gpio_set_level(SWITCH_CNTRL, 1);
             Buzzer::send_effect(SoundEffect::ACCEPTED);
-            LED::set_animation(Animation::UNLOCKED);
+            LED::set_animation(&Animation::UNLOCKED);
             break;
         case IOState::ALWAYS_ON:
             gpio_set_level(SWITCH_CNTRL, 1);
             Buzzer::send_effect(SoundEffect::ACCEPTED);
-            LED::set_animation(Animation::ALWAYS_ON);
+            LED::set_animation(&Animation::ALWAYS_ON);
             break;
         case IOState::LOCKOUT:
             gpio_set_level(SWITCH_CNTRL, 0);
             Buzzer::send_effect(SoundEffect::LOCKOUT);
-            LED::set_animation(Animation::LOCKOUT);
+            LED::set_animation(&Animation::LOCKOUT);
             break;
         case IOState::NEXT_CARD:
             gpio_set_level(SWITCH_CNTRL, 0);
@@ -91,33 +91,33 @@ void go_to_state(IOState next_state) {
             break;
         case IOState::WELCOMING:
             gpio_set_level(SWITCH_CNTRL, 0);
-            LED::set_animation(Animation::WELCOMING);
+            LED::set_animation(&Animation::WELCOMING);
             break;
         case IOState::WELCOMED:
             gpio_set_level(SWITCH_CNTRL, 0);
             Buzzer::send_effect(SoundEffect::ACCEPTED);
-            LED::set_animation(Animation::WELCOMED);
+            LED::set_animation(&Animation::WELCOMED);
             break;
         case IOState::ALWAYS_ON_WAITING:
-            LED::set_animation(Animation::ALWAYS_ON_WAITING);
+            LED::set_animation(&Animation::ALWAYS_ON_WAITING);
             break;
         case IOState::LOCKOUT_WAITING:
-            LED::set_animation(Animation::LOCKOUT_WAITING);
+            LED::set_animation(&Animation::LOCKOUT_WAITING);
             break;
         case IOState::IDLE_WAITING:
-            LED::set_animation(Animation::IDLE_WAITING);
+            LED::set_animation(&Animation::IDLE_WAITING);
             break;
         case IOState::AWAIT_AUTH:
-            LED::set_animation(Animation::AWAIT_AUTH);
+            LED::set_animation(&Animation::AWAIT_AUTH);
             break;
         case IOState::DENIED:
             Buzzer::send_effect(SoundEffect::DENIED);
-            LED::set_animation(Animation::DENIED);
+            LED::set_animation(&Animation::DENIED);
             break;
         case IOState::FAULT:
             gpio_set_level(SWITCH_CNTRL, 0);
             Buzzer::send_effect(SoundEffect::FAULT);
-            LED::set_animation(Animation::FAULT);
+            LED::set_animation(&Animation::FAULT);
             break;
         default:
             ESP_LOGI(TAG, "Attempted to go to an unkown state");
@@ -286,43 +286,43 @@ void identify_timer_callback(TimerHandle_t timer) {
 
     switch (current_state) {
         case IOState::IDLE:
-            LED::set_animation(Animation::IDLE);
+            LED::set_animation(&Animation::IDLE);
             break;
         case IOState::UNLOCKED:
-            LED::set_animation(Animation::UNLOCKED);
+            LED::set_animation(&Animation::UNLOCKED);
             break;
         case IOState::ALWAYS_ON:
-            LED::set_animation(Animation::ALWAYS_ON);
+            LED::set_animation(&Animation::ALWAYS_ON);
             break;
         case IOState::LOCKOUT:
-            LED::set_animation(Animation::LOCKOUT);
+            LED::set_animation(&Animation::LOCKOUT);
             break;
         case IOState::NEXT_CARD:
-            // LED::set_animation(Animation::NEXT_CARD_ANIMATION);
+            // LED::set_animation(&Animation::NEXT_CARD_ANIMATION);
             break;
         case IOState::WELCOMING:
-            LED::set_animation(Animation::WELCOMING);
+            LED::set_animation(&Animation::WELCOMING);
             break;
         case IOState::WELCOMED:
-            LED::set_animation(Animation::WELCOMED);
+            LED::set_animation(&Animation::WELCOMED);
             break;
         case IOState::ALWAYS_ON_WAITING:
-            LED::set_animation(Animation::ALWAYS_ON_WAITING);
+            LED::set_animation(&Animation::ALWAYS_ON_WAITING);
             break;
         case IOState::LOCKOUT_WAITING:
-            LED::set_animation(Animation::LOCKOUT_WAITING);
+            LED::set_animation(&Animation::LOCKOUT_WAITING);
             break;
         case IOState::IDLE_WAITING:
-            LED::set_animation(Animation::IDLE_WAITING);
+            LED::set_animation(&Animation::IDLE_WAITING);
             break;
         case IOState::AWAIT_AUTH:
-            LED::set_animation(Animation::AWAIT_AUTH);
+            LED::set_animation(&Animation::AWAIT_AUTH);
             break;
         case IOState::DENIED:
-            LED::set_animation(Animation::DENIED);
+            LED::set_animation(&Animation::DENIED);
             break;
         case IOState::FAULT:
-            LED::set_animation(Animation::FAULT);
+            LED::set_animation(&Animation::FAULT);
             break;
         default:
             ESP_LOGI(TAG, "Failed to set LEDs after identify");
@@ -331,7 +331,7 @@ void identify_timer_callback(TimerHandle_t timer) {
 }
 
 void handle_identify() {
-    LED::set_animation(Animation::IDENTIFY);
+    LED::set_animation(&Animation::IDENTIFY);
     Buzzer::send_effect(SoundEffect::MARIO_VICTORY);
     xTimerStart(identify_timer, pdMS_TO_TICKS(100));
 }
@@ -508,7 +508,7 @@ int IO::init() {
     Buzzer::init();
     Temperature::init();
 
-    xTaskCreate(io_thread_fn, "io", IO_TASK_STACK_SIZE, NULL, 0, &io_thread);
+    xTaskCreate(io_thread_fn, "io", CONFIG_IO_TASK_STACK_SIZE, NULL, 0, &io_thread);
     return 0;
 }
 

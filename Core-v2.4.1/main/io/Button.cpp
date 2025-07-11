@@ -67,7 +67,7 @@ int Button::init() {
         // TODO: Crash
     }
 
-    xTaskCreate(button_thread_fn, "button", BUTTON_TASK_STACK_SIZE, NULL, 0, &button_thread);
+    xTaskCreate(button_thread_fn, "button", CONFIG_BUTTON_TASK_STACK_SIZE, NULL, 0, &button_thread);
 
     return 0;
 }

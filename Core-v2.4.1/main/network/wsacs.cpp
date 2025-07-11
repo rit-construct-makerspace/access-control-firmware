@@ -392,7 +392,7 @@ namespace WSACS {
             return -1;
         }
 
-        xTaskCreate(wsacs_thread_fn, "wsacs", 2000, NULL, 0, &wsacs_thread);
+        xTaskCreate(wsacs_thread_fn, "wsacs", CONFIG_WSACS_TASK_STACK_SIZE, NULL, 0, &wsacs_thread);
         if (wsacs_thread == NULL) {
             ESP_LOGE(TAG, "Fail and die task edition");
             // todo crash
