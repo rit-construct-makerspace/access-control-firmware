@@ -68,43 +68,53 @@ void go_to_state(IOState next_state) {
     switch (next_state) {
         case IOState::IDLE:
             gpio_set_level(SWITCH_CNTRL, 0);
+            CardReader::set_require_switches(true);
             LED::set_animation(&Animation::IDLE);
             break;
         case IOState::UNLOCKED:
             gpio_set_level(SWITCH_CNTRL, 1);
+            CardReader::set_require_switches(true);
             Buzzer::send_effect(SoundEffect::ACCEPTED);
             LED::set_animation(&Animation::UNLOCKED);
             break;
         case IOState::ALWAYS_ON:
             gpio_set_level(SWITCH_CNTRL, 1);
+            CardReader::set_require_switches(true);
             Buzzer::send_effect(SoundEffect::ACCEPTED);
             LED::set_animation(&Animation::ALWAYS_ON);
             break;
         case IOState::LOCKOUT:
             gpio_set_level(SWITCH_CNTRL, 0);
+            CardReader::set_require_switches(true);
             Buzzer::send_effect(SoundEffect::LOCKOUT);
             LED::set_animation(&Animation::LOCKOUT);
             break;
         case IOState::NEXT_CARD:
             gpio_set_level(SWITCH_CNTRL, 0);
+            CardReader::set_require_switches(true);
             LED::set_animation(&Animation::NEXT_CARD);
             break;
         case IOState::WELCOMING:
             gpio_set_level(SWITCH_CNTRL, 0);
+            CardReader::set_require_switches(false);
             LED::set_animation(&Animation::WELCOMING);
             break;
         case IOState::WELCOMED:
             gpio_set_level(SWITCH_CNTRL, 0);
+            CardReader::set_require_switches(false);
             Buzzer::send_effect(SoundEffect::ACCEPTED);
             LED::set_animation(&Animation::WELCOMED);
             break;
         case IOState::ALWAYS_ON_WAITING:
+            CardReader::set_require_switches(true);
             LED::set_animation(&Animation::ALWAYS_ON_WAITING);
             break;
         case IOState::LOCKOUT_WAITING:
+            CardReader::set_require_switches(true);
             LED::set_animation(&Animation::LOCKOUT_WAITING);
             break;
         case IOState::IDLE_WAITING:
+            CardReader::set_require_switches(true);
             LED::set_animation(&Animation::IDLE_WAITING);
             break;
         case IOState::AWAIT_AUTH:
@@ -126,7 +136,7 @@ void go_to_state(IOState next_state) {
 
     if (!set_state(next_state)) {
         ESP_LOGI(TAG, "Failed to update the stored state");
-        // TODO: Crash
+        IO::fault(FaultReason::MUTEX_ERROR);
     }
 }
 
@@ -164,7 +174,7 @@ void handle_button_clicked() {
         case IOState::FAULT:
         case IOState::WELCOMED:
         case IOState::WELCOMING:
-            ESP_LOGI(TAG, "Tried to go to a waiting state from a dissallowed state");
+            ESP_LOGI(TAG, "Tried to go to a waiting state from %s", io_state_to_string(current_state));
             return;
         default:
             break;
