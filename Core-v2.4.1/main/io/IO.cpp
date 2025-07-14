@@ -284,7 +284,7 @@ void handle_card_detected(IOEvent event) {
     }
 }
 
-void handle_card_removed() {
+void handle_card_removed(IOEvent cur_event) {
     IOState current_state;
     if (!IO::get_state(current_state)) {
         ESP_LOGE(TAG, "Failed to get state");
@@ -300,7 +300,7 @@ void handle_card_removed() {
                         .from = current_state,
                         .to = IOState::IDLE,
                         .reason = StateChangeReason::CardRemoved,
-                        .who = {},
+                        .who = cur_event.card_removed.card_tag_id,
                     },
             });
             go_to_state(IOState::IDLE);
@@ -398,6 +398,12 @@ void handle_network_command(IOEvent current_event) {
                     return;
                 }
 
+                CardTagID cur_tag;
+                if (!CardReader::get_card_tag(cur_tag)) {
+                    IO::fault(FaultReason::MUTEX_ERROR);
+                    return;
+                }
+
                 switch (current_event.network_command.commanded_state) {
                     case IOState::ALWAYS_ON:
                     case IOState::LOCKOUT:
@@ -409,7 +415,7 @@ void handle_network_command(IOEvent current_event) {
                                     .from = cur_state,
                                     .to = current_event.network_command.commanded_state,
                                     .reason = StateChangeReason::ButtonPress,
-                                    .who = {},
+                                    .who = cur_tag,
                                 },
                         });
                         break;
@@ -421,7 +427,7 @@ void handle_network_command(IOEvent current_event) {
                                     .from = cur_state,
                                     .to = current_event.network_command.commanded_state,
                                     .reason = StateChangeReason::CardActivated,
-                                    .who = CardTagID{},
+                                    .who = cur_tag,
                                 },
                         });
                         break;
@@ -502,7 +508,7 @@ void io_thread_fn(void*) {
                 break;
 
             case IOEventType::CARD_REMOVED:
-                handle_card_removed();
+                handle_card_removed(current_event);
                 break;
 
             case IOEventType::CARD_READ_ERROR:
