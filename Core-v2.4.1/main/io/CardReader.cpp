@@ -21,6 +21,8 @@ CardTagID card_tag = {};
 bool card_detected = false;
 uint8_t switch_error = 0;
 
+bool switches_required = true;
+
 const static spi_host_device_t spi_host = SPI3_HOST;
 static spi_device_handle_t spi_device;
 
@@ -66,6 +68,10 @@ bool CardReader::get_card_tag(CardTagID& ret_tag) {
 }
 
 bool evaluate_switches() {
+    if (!switches_required) {
+        return true;
+    }
+
     bool sw1 = !gpio_get_level(CARD_DET1);
     bool sw2 = !gpio_get_level(CARD_DET2);
 
@@ -330,4 +336,8 @@ void CardReader::init() {
 
 bool CardReader::card_present() {
     return card_detected;
+}
+
+void CardReader::set_require_switches(bool require_switches) {
+    switches_required = require_switches;
 }

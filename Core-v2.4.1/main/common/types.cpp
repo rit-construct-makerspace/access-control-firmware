@@ -167,8 +167,12 @@ const char* io_event_type_to_string(IOEventType type) {
     }
 }
 
-std::string CardDetectedEvent::to_string() const { return "detected:" + card_tag_id.to_string(); }
-std::string CardRemovedEvent::to_string() const { return "removed:" + card_tag_id.to_string(); }
+std::string CardDetectedEvent::to_string() const {
+    return "detected:" + card_tag_id.to_string();
+}
+std::string CardRemovedEvent::to_string() const {
+    return "removed:" + card_tag_id.to_string();
+}
 
 const char* network_command_event_type_to_string(NetworkCommandEventType type) {
     switch (type) {
@@ -230,6 +234,8 @@ const char* fault_reason_to_string(FaultReason reason) {
             return "Server Commanded";
         case FaultReason::START_FAIL:
             return "Startup Failure";
+        case FaultReason::SOFTWARE_ERROR:
+            return "Software Error";
         default:
             return "INVALID FAULT REASON";
     }

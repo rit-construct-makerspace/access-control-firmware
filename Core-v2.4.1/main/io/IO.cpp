@@ -21,8 +21,6 @@ static const char* TAG = "io";
 QueueHandle_t event_queue;
 TaskHandle_t io_thread;
 
-#define IO_TASK_STACK_SIZE 4000
-
 static IOState state = IOState::STARTUP;
 static IOState prior_request_state;
 static SemaphoreHandle_t animation_mutex;
@@ -68,43 +66,53 @@ void go_to_state(IOState next_state) {
     switch (next_state) {
         case IOState::IDLE:
             gpio_set_level(SWITCH_CNTRL, 0);
+            CardReader::set_require_switches(true);
             LED::set_animation(&Animation::IDLE);
             break;
         case IOState::UNLOCKED:
             gpio_set_level(SWITCH_CNTRL, 1);
+            CardReader::set_require_switches(true);
             Buzzer::send_effect(SoundEffect::ACCEPTED);
             LED::set_animation(&Animation::UNLOCKED);
             break;
         case IOState::ALWAYS_ON:
             gpio_set_level(SWITCH_CNTRL, 1);
+            CardReader::set_require_switches(true);
             Buzzer::send_effect(SoundEffect::ACCEPTED);
             LED::set_animation(&Animation::ALWAYS_ON);
             break;
         case IOState::LOCKOUT:
             gpio_set_level(SWITCH_CNTRL, 0);
+            CardReader::set_require_switches(true);
             Buzzer::send_effect(SoundEffect::LOCKOUT);
             LED::set_animation(&Animation::LOCKOUT);
             break;
         case IOState::NEXT_CARD:
             gpio_set_level(SWITCH_CNTRL, 0);
+            CardReader::set_require_switches(true);
             LED::set_animation(&Animation::NEXT_CARD);
             break;
         case IOState::WELCOMING:
             gpio_set_level(SWITCH_CNTRL, 0);
+            CardReader::set_require_switches(false);
             LED::set_animation(&Animation::WELCOMING);
             break;
         case IOState::WELCOMED:
             gpio_set_level(SWITCH_CNTRL, 0);
+            CardReader::set_require_switches(false);
             Buzzer::send_effect(SoundEffect::ACCEPTED);
             LED::set_animation(&Animation::WELCOMED);
             break;
         case IOState::ALWAYS_ON_WAITING:
+            CardReader::set_require_switches(true);
             LED::set_animation(&Animation::ALWAYS_ON_WAITING);
             break;
         case IOState::LOCKOUT_WAITING:
+            CardReader::set_require_switches(true);
             LED::set_animation(&Animation::LOCKOUT_WAITING);
             break;
         case IOState::IDLE_WAITING:
+            CardReader::set_require_switches(true);
             LED::set_animation(&Animation::IDLE_WAITING);
             break;
         case IOState::AWAIT_AUTH:
@@ -126,7 +134,7 @@ void go_to_state(IOState next_state) {
 
     if (!set_state(next_state)) {
         ESP_LOGI(TAG, "Failed to update the stored state");
-        // TODO: Crash
+        IO::fault(FaultReason::SOFTWARE_ERROR);
     }
 }
 
@@ -139,11 +147,11 @@ void waiting_timer_callback(TimerHandle_t timer) {
 void timer_refresh() {
     if (xTimerIsTimerActive(waiting_timer) == pdFALSE) {
         if (xTimerStart(waiting_timer, pdMS_TO_TICKS(100)) == pdFAIL) {
-            // TODO: Crash
+            IO::fault(FaultReason::SOFTWARE_ERROR);
         }
     } else {
         if (xTimerReset(waiting_timer, pdMS_TO_TICKS(100)) == pdFAIL) {
-            // TODO: Crash
+            IO::fault(FaultReason::SOFTWARE_ERROR);
         }
     }
 }
@@ -164,7 +172,7 @@ void handle_button_clicked() {
         case IOState::FAULT:
         case IOState::WELCOMED:
         case IOState::WELCOMING:
-            ESP_LOGI(TAG, "Tried to go to a waiting state from a dissallowed state");
+            ESP_LOGI(TAG, "Tried to go to a waiting state from %s", io_state_to_string(current_state));
             return;
         default:
             break;
@@ -274,7 +282,7 @@ void handle_card_detected(IOEvent event) {
     }
 }
 
-void handle_card_removed() {
+void handle_card_removed(IOEvent cur_event) {
     IOState current_state;
     if (!IO::get_state(current_state)) {
         ESP_LOGE(TAG, "Failed to get state");
@@ -290,7 +298,7 @@ void handle_card_removed() {
                         .from = current_state,
                         .to = IOState::IDLE,
                         .reason = StateChangeReason::CardRemoved,
-                        .who = {},
+                        .who = cur_event.card_removed.card_tag_id,
                     },
             });
             go_to_state(IOState::IDLE);
@@ -388,6 +396,12 @@ void handle_network_command(IOEvent current_event) {
                     return;
                 }
 
+                CardTagID cur_tag;
+                if (!CardReader::get_card_tag(cur_tag)) {
+                    IO::fault(FaultReason::SOFTWARE_ERROR);
+                    return;
+                }
+
                 switch (current_event.network_command.commanded_state) {
                     case IOState::ALWAYS_ON:
                     case IOState::LOCKOUT:
@@ -399,7 +413,7 @@ void handle_network_command(IOEvent current_event) {
                                     .from = cur_state,
                                     .to = current_event.network_command.commanded_state,
                                     .reason = StateChangeReason::ButtonPress,
-                                    .who = {},
+                                    .who = cur_tag,
                                 },
                         });
                         break;
@@ -411,12 +425,12 @@ void handle_network_command(IOEvent current_event) {
                                     .from = cur_state,
                                     .to = current_event.network_command.commanded_state,
                                     .reason = StateChangeReason::CardActivated,
-                                    .who = CardTagID{},
+                                    .who = cur_tag,
                                 },
                         });
                         break;
                     default:
-                        // FREAK OUT
+                        // Ignore it
                         return;
                 }
             } else {
@@ -440,7 +454,8 @@ void handle_network_command(IOEvent current_event) {
             handle_denied();
             break;
         default:
-            ESP_LOGI(TAG, "Unkown network command type recieved");
+            ESP_LOGI(TAG, "Unkown network command type recieved: %s",
+                     network_command_event_type_to_string(current_event.network_command.type));
             break;
     }
 }
@@ -491,7 +506,7 @@ void io_thread_fn(void*) {
                 break;
 
             case IOEventType::CARD_REMOVED:
-                handle_card_removed();
+                handle_card_removed(current_event);
                 break;
 
             case IOEventType::CARD_READ_ERROR:
@@ -517,7 +532,9 @@ int IO::init() {
     denied_timer = xTimerCreate("denied", pdMS_TO_TICKS(1500), pdFALSE, (void*)0, denied_timer_callback);
 
     if (event_queue == 0 || animation_mutex == NULL) {
-        // TODO: Restart here
+        ESP_LOGE(TAG, "Failed ot intialize IO queue or mutex, restarting...");
+        vTaskDelay(pdMS_TO_TICKS(1000));
+        esp_restart();
     }
 
     gpio_config_t conf = {
