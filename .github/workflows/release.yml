@@ -1,0 +1,30 @@
+name: Build Release
+on:
+    push:
+      tags:
+      - '*'
+jobs:
+    build:
+        runs-on: ubuntu-latest
+
+        steps:
+        -   name: Checkout repo
+            uses: actions/checkout@v4
+            with:
+                submodules: 'recursive'
+        -   name: esp-idf build
+            uses: espressif/esp-idf-ci-action@v1.2.0
+            with:
+                esp_idf_version: v5.4.1
+                target: esp32s2
+                path: 'Core-v2.4.1'
+        -   name: Release
+            uses: softprops/action-gh-release@v2
+            with:
+                files: |
+                    Core-v2.4.1/build/Core.bin
+                    Core-v2.4.1/build/Core.elf
+                fail_on_unmatched_files: true
+                generate_release_notes: true
+                make_latest: false
+                    
