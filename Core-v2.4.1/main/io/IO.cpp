@@ -149,11 +149,11 @@ void waiting_timer_callback(TimerHandle_t timer) {
 void timer_refresh() {
     if (xTimerIsTimerActive(waiting_timer) == pdFALSE) {
         if (xTimerStart(waiting_timer, pdMS_TO_TICKS(100)) == pdFAIL) {
-            // TODO: Crash
+            IO::fault(FaultReason::MUTEX_ERROR);
         }
     } else {
         if (xTimerReset(waiting_timer, pdMS_TO_TICKS(100)) == pdFAIL) {
-            // TODO: Crash
+            IO::fault(FaultReason::MUTEX_ERROR);
         }
     }
 }
@@ -426,7 +426,7 @@ void handle_network_command(IOEvent current_event) {
                         });
                         break;
                     default:
-                        // FREAK OUT
+                        // Ignore it
                         return;
                 }
             } else {
@@ -450,7 +450,8 @@ void handle_network_command(IOEvent current_event) {
             handle_denied();
             break;
         default:
-            ESP_LOGI(TAG, "Unkown network command type recieved");
+            ESP_LOGI(TAG, "Unkown network command type recieved: %s",
+                     network_command_event_type_to_string(current_event.network_command.type));
             break;
     }
 }
@@ -527,7 +528,9 @@ int IO::init() {
     denied_timer = xTimerCreate("denied", pdMS_TO_TICKS(1500), pdFALSE, (void*)0, denied_timer_callback);
 
     if (event_queue == 0 || animation_mutex == NULL) {
-        // TODO: Restart here
+        ESP_LOGE(TAG, "Failed ot intialize IO queue or mutex, restarting...");
+        vTaskDelay(pdMS_TO_TICKS(1000));
+        esp_restart();
     }
 
     gpio_config_t conf = {
