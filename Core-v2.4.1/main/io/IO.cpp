@@ -21,8 +21,6 @@ static const char* TAG = "io";
 QueueHandle_t event_queue;
 TaskHandle_t io_thread;
 
-#define IO_TASK_STACK_SIZE 4000
-
 static IOState state = IOState::STARTUP;
 static IOState prior_request_state;
 static SemaphoreHandle_t animation_mutex;
