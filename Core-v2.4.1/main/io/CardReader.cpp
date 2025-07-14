@@ -338,6 +338,6 @@ bool CardReader::card_present() {
     return card_detected;
 }
 
-bool CardReader::set_require_switches(bool require_switches) {
+void CardReader::set_require_switches(bool require_switches) {
     switches_required = require_switches;
 }

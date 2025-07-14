@@ -134,7 +134,7 @@ void go_to_state(IOState next_state) {
 
     if (!set_state(next_state)) {
         ESP_LOGI(TAG, "Failed to update the stored state");
-        IO::fault(FaultReason::MUTEX_ERROR);
+        IO::fault(FaultReason::SOFTWARE_ERROR);
     }
 }
 
@@ -147,11 +147,11 @@ void waiting_timer_callback(TimerHandle_t timer) {
 void timer_refresh() {
     if (xTimerIsTimerActive(waiting_timer) == pdFALSE) {
         if (xTimerStart(waiting_timer, pdMS_TO_TICKS(100)) == pdFAIL) {
-            IO::fault(FaultReason::MUTEX_ERROR);
+            IO::fault(FaultReason::SOFTWARE_ERROR);
         }
     } else {
         if (xTimerReset(waiting_timer, pdMS_TO_TICKS(100)) == pdFAIL) {
-            IO::fault(FaultReason::MUTEX_ERROR);
+            IO::fault(FaultReason::SOFTWARE_ERROR);
         }
     }
 }
@@ -398,7 +398,7 @@ void handle_network_command(IOEvent current_event) {
 
                 CardTagID cur_tag;
                 if (!CardReader::get_card_tag(cur_tag)) {
-                    IO::fault(FaultReason::MUTEX_ERROR);
+                    IO::fault(FaultReason::SOFTWARE_ERROR);
                     return;
                 }
 

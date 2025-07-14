@@ -234,8 +234,8 @@ const char* fault_reason_to_string(FaultReason reason) {
             return "Server Commanded";
         case FaultReason::START_FAIL:
             return "Startup Failure";
-        case FaultReason::MUTEX_ERROR:
-            return "Mutex Error";
+        case FaultReason::SOFTWARE_ERROR:
+            return "Software Error";
         default:
             return "INVALID FAULT REASON";
     }

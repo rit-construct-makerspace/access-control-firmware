@@ -180,7 +180,7 @@ enum class FaultReason {
     TEMP_ERROR,
     START_FAIL,
     CARD_SWITCH,
-    MUTEX_ERROR,
+    SOFTWARE_ERROR,
 };
 StateChangeReason fault_reason_to_state_change_reason(FaultReason fault);
 const char* fault_reason_to_string(FaultReason type);
