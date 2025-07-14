@@ -16,7 +16,7 @@
 #include <freertos/timers.h>
 
 static const char* TAG = "wsacs";
-// #define DEV_SERVER "calcarea.student.rit.edu"
+#define DEV_SERVER "calcarea.student.rit.edu"
 
 QueueHandle_t wsacs_queue;
 TaskHandle_t wsacs_thread;
@@ -204,7 +204,7 @@ void send_opening_message() {
     cJSON_AddStringToObject(msg, "SerialNumber", Hardware::get_serial_number());
 #ifdef DEV_SERVER
     cJSON_AddStringToObject(
-        msg, "Key", "6de6833db7f7d4050687c83667c0a64af9b44f83d0b187ab35f35d0620e05b31e59a255ffb26fe4d9376d825430aad7c");
+        msg, "Key", "d8b8d655539f7ef4f3546498624282d37b2a187b695f6ff8d1a34263498fd15094a681a00f74676c44cd47f3970f2595");
 #else
     cJSON_AddStringToObject(msg, "Key", Storage::get_key().c_str());
 
