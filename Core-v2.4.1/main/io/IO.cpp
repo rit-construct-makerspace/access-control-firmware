@@ -235,6 +235,31 @@ void handle_card_detected(IOEvent event) {
         case IOState::LOCKOUT:
             Buzzer::send_effect(SoundEffect::LOCKOUT);
             break;
+        case IOState::WELCOMING:
+            prior_request_state = IOState::WELCOMING;
+            go_to_state(IOState::AWAIT_AUTH);
+            Network::send_event({
+                .type = NetworkEventType::AuthRequest,
+                .auth_request =
+                    {
+                        .requester = event.card_detected.card_tag_id,
+                        .to_state = IOState::WELCOMED,
+                    },
+            });
+            break;
+        case IOState::NEXT_CARD:
+            Network::send_event({
+                .type = NetworkEventType::StateChange,
+                .state_change =
+                    {
+                        .from = IOState::NEXT_CARD,
+                        .to = IOState::UNLOCKED,
+                        .reason = StateChangeReason::CardActivated,
+                        .who = event.card_detected.card_tag_id,
+                    },
+            });
+            go_to_state(IOState::UNLOCKED);
+            break;
         default:
             return;
     }
@@ -382,60 +407,116 @@ void io_thread_fn(void*) {
                         IOState cur_state;
                         IO::get_state(cur_state);
 
-                        if (current_event.network_command.requested) {
-                            switch (current_event.network_command.commanded_state) {
-                                case IOState::ALWAYS_ON:
-                                case IOState::LOCKOUT:
-                                case IOState::IDLE:
-                                    Network::send_event({
-                                        .type = NetworkEventType::StateChange,
-                                        .state_change =
-                                            {
-                                                .from = cur_state,
-                                                .to = current_event.network_command.commanded_state,
-                                                .reason = StateChangeReason::ButtonPress,
-                                                .who = {},
-                                            },
-                                    });
-                                    break;
-                                case IOState::UNLOCKED:
-                                    Network::send_event({
-                                        .type = NetworkEventType::StateChange,
-                                        .state_change =
-                                            {
-                                                .from = cur_state,
-                                                .to = current_event.network_command.commanded_state,
-                                                .reason = StateChangeReason::CardActivated,
-                                                .who = CardTagID{},
-                                            },
-                                    });
-                                    break;
-                                default:
-                                    // FREAK OUT
-                                    return;
-                            }
-                        } else {
-                            Network::send_event({
-                                .type = NetworkEventType::StateChange,
-                                .state_change =
-                                    {
-                                        .from = cur_state,
-                                        .to = current_event.network_command.commanded_state,
-                                        .reason = StateChangeReason::ServerCommanded,
-                                        .who = {},
-                                    },
-                            });
-                        }
-                        go_to_state(current_event.network_command.commanded_state);
+            if (current_event.network_command.requested) {
+
+                if (cur_state != IOState::AWAIT_AUTH) {
+                    return;
+                }
+
+                CardTagID cur_tag;
+                if (!CardReader::get_card_tag(cur_tag)) {
+                    IO::fault(FaultReason::SOFTWARE_ERROR);
+                    return;
+                }
+
+                switch (current_event.network_command.commanded_state) {
+                    case IOState::ALWAYS_ON:
+                    case IOState::LOCKOUT:
+                    case IOState::IDLE:
+                        Network::send_event({
+                            .type = NetworkEventType::StateChange,
+                            .state_change =
+                                {
+                                    .from = cur_state,
+                                    .to = current_event.network_command.commanded_state,
+                                    .reason = StateChangeReason::ButtonPress,
+                                    .who = cur_tag,
+                                },
+                        });
                         break;
-                    case NetworkCommandEventType::IDENTIFY:
-                        handle_identify();
+                    case IOState::UNLOCKED:
+                        Network::send_event({
+                            .type = NetworkEventType::StateChange,
+                            .state_change =
+                                {
+                                    .from = cur_state,
+                                    .to = current_event.network_command.commanded_state,
+                                    .reason = StateChangeReason::CardActivated,
+                                    .who = cur_tag,
+                                },
+                        });
                         break;
-                    case NetworkCommandEventType::DENY:
-                        handle_denied();
+                    case IOState::WELCOMED:
+                        go_to_state(IOState::WELCOMED);
                         break;
                     default:
-                        ESP_LOGI(TAG, "Unkown network command type recieved");
+                        // Ignore it
+                        return;
+                }
+            } else {
+                Network::send_event({
+                    .type = NetworkEventType::StateChange,
+                    .state_change =
+                        {
+                            .from = cur_state,
+                            .to = current_event.network_command.commanded_state,
+                            .reason = StateChangeReason::ServerCommanded,
+                            .who = {},
+                        },
+                });
+            }
+            go_to_state(current_event.network_command.commanded_state);
+            break;
+        case NetworkCommandEventType::IDENTIFY:
+            handle_identify();
+            break;
+        case NetworkCommandEventType::DENY:
+            handle_denied();
+            break;
+        default:
+            ESP_LOGI(TAG, "Unkown network command type recieved: %s",
+                     network_command_event_type_to_string(current_event.network_command.type));
+            break;
+    }
+}
+
+bool allowed_fault_event(IOEvent event) {
+    return (event.type == IOEventType::BUTTON_PRESSED ||
+            (event.type == IOEventType::NETWORK_COMMAND && event.network_command.commanded_state == IOState::RESTART));
+}
+
+void io_thread_fn(void*) {
+
+    IOEvent current_event = {};
+
+    while (true) {
+        if (xQueueReceive(event_queue, &current_event, portMAX_DELAY) != pdTRUE) {
+            continue;
+        }
+
+        IOState current_state;
+        if (IO::get_state(current_state) && current_state == IOState::FAULT) {
+            if (!allowed_fault_event(current_event)) {
+                continue;
+            }
+        }
+
+        switch (current_event.type) {
+            case IOEventType::BUTTON_PRESSED:
+                switch (current_event.button.type) {
+                    case ButtonEventType::CLICK:
+                        handle_button_clicked();
+                        break;
+                    case ButtonEventType::HELD:
+                        go_to_state(IOState::RESTART);
+                        break;
+                    case ButtonEventType::RELEASED:
+                        Network::send_event({
+                            .type = NetworkEventType::PleaseRestart,
+                        });
+                        break;
+                    default:
+                        ESP_LOGI(TAG, "Unknown button event type recieved");
                         break;
                 }
                 break;

@@ -61,7 +61,6 @@ void sensor_read() {
     for (int i = 0; i < num_ds_detcted; i++) {
         ds18b20_trigger_temperature_conversion(s_ds18b20s[i]);
         ds18b20_get_temperature(s_ds18b20s[i], &temp_temp);
-        ESP_LOGI(TAG, "temperature read from DS18B20[%d]: %.2fC", i, temp_temp);
         s_temperature[i] = temp_temp;
     }
 }

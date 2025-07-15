@@ -30,6 +30,9 @@ std::string CardTagID::to_string() const {
 }
 
 std::optional<CardTagID> CardTagID::from_string(const char* str) {
+    if (str == NULL){
+        return {};
+    }
     int len = strnlen(str, 15);
     if (len == 15) {
         return {};
