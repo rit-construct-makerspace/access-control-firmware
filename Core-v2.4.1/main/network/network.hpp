@@ -23,20 +23,25 @@ namespace Network {
     // Used only by tasks on the network side of things to
     // communicate with the main network handler
     enum class InternalEventType {
+        // From Wifi Handler
         NetifUp,
         NetifDown,
-        
+
+        TryConnect,
+
+        // From WS handler
         ServerUp,
         ServerDown,
 
-        ServerSetTime,
-        ServerSetState,
-
-        WSACSAuthResponse,
+        // From timer
         WSACSTimedOut,
 
+        KeepAliveTime,
+
+        // From timer
         NetworkWatchdogExpire,
 
+        // From weirdos in IO
         ExternalEvent,
     };
     struct InternalEvent {
@@ -45,10 +50,10 @@ namespace Network {
             esp_ip4_addr_t netif_up_ip;
             IOState server_set_state;
             uint64_t server_set_time;
-            WSACS::AuthResponse wsacs_auth_response;
             NetworkEvent external_event;
         };
     };
     int send_internal_event(InternalEvent ev);
+    int send_internal_event(InternalEventType evtyp);
 
 } // namespace Network

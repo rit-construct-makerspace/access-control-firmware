@@ -22,10 +22,6 @@ menu "Shlug Configuration"
                 
     config USB_TASK_STACK_SIZE
         int "stack size of network task"
-    
-    config WSACS_TASK_STACK_SIZE
-        int "stack size of WSACS task"
-        
         
     endmenu
     
