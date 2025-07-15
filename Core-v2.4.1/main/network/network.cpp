@@ -182,6 +182,13 @@ namespace Network {
 
             case NetworkEventType::StateChange:
                 ESP_LOGI(TAG, "need to state change report to wsacs (maybe)");
+                std::string bad = "Changed state from ";
+                bad+=io_state_to_string(event.state_change.from);
+                bad += " -> ";
+                bad+=io_state_to_string(event.state_change.to);
+                char * msg = new char[bad.size()+1];
+                strcpy(msg, bad.c_str());
+                WSACS::send_event(WSACS::Event::message(msg));
                 break;
         }
     }

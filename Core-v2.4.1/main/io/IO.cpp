@@ -254,6 +254,7 @@ void handle_card_detected(IOEvent event) {
             Buzzer::send_effect(SoundEffect::LOCKOUT);
             break;
         case IOState::WELCOMING:
+            prior_request_state = IOState::WELCOMING;
             go_to_state(IOState::AWAIT_AUTH);
             Network::send_event({
                 .type = NetworkEventType::AuthRequest,
@@ -428,6 +429,9 @@ void handle_network_command(IOEvent current_event) {
                                     .who = cur_tag,
                                 },
                         });
+                        break;
+                    case IOState::WELCOMED:
+                        go_to_state(IOState::WELCOMED);
                         break;
                     default:
                         // Ignore it

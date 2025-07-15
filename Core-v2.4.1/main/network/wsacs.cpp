@@ -16,7 +16,7 @@
 #include <freertos/timers.h>
 
 static const char* TAG = "wsacs";
-// #define DEV_SERVER "calcarea.student.rit.edu"
+#define DEV_SERVER "calcarea.student.rit.edu"
 
 QueueHandle_t wsacs_queue;
 TaskHandle_t wsacs_thread;
@@ -52,7 +52,7 @@ void handle_auth_response(const char* auth, int verified) {
         ESP_LOGE(TAG, "Can't auth bc bad UID: %.14s", auth);
         verified = 0;
     }
-    ESP_LOGI(TAG, "Handling auth response: %s - %d", auth, verified);
+    ESP_LOGI(TAG, "Handling auth response: %s - %d: %s", auth, verified, io_state_to_string(outstanding_tostate));
 
     Network::send_internal_event(Network::InternalEvent{
         .type = Network::InternalEventType::WSACSAuthResponse,
@@ -177,7 +177,6 @@ void keepalive_timer_callback() {
         WSACS::send_event({WSACS::EventType::TryConnect});
         return;
     }
-    ESP_LOGI(TAG, "Sending keepalive");
 
     IOState state = IOState::IDLE;
     if (!IO::get_state(state)) {
@@ -204,7 +203,7 @@ void send_opening_message() {
     cJSON_AddStringToObject(msg, "SerialNumber", Hardware::get_serial_number());
 #ifdef DEV_SERVER
     cJSON_AddStringToObject(
-        msg, "Key", "6de6833db7f7d4050687c83667c0a64af9b44f83d0b187ab35f35d0620e05b31e59a255ffb26fe4d9376d825430aad7c");
+        msg, "Key", "07edfd78f2a97d0d2c46c1cb4504fbe343a9bb6ec7f2a64b41d2c7d4f6fcca7f63f78220b70230e3f022e395fe0eb436");
 #else
     cJSON_AddStringToObject(msg, "Key", Storage::get_key().c_str());
 
