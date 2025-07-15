@@ -4,7 +4,7 @@
       "Device": "ACS Core",
       "Config": "2.3.2-LE",
       "Version": "1.4.0",
-      "URL": "https://github.com/rit-construct-makerspace/access-control-firmware/releases/download/Core-V1.4.0/core232le.lts.bin"
+      "URL": "https://github.com/rit-construct-makerspace/access-control-firmware/releases/download/Core-V1.4.0/core232le.bin"
     },
     {
       "Device": "Sign In",
