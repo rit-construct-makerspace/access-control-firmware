@@ -88,7 +88,10 @@ void SignIn(void *pvParameters){
           USBSerial.print(" ");
           USBSerial.print(uid[i], HEX);
         }
-        UID.concat(String(uid[i], HEX));
+        char buf[3] = {0};
+        snprintf(buf, sizeof(buf), "%02x", uid[i]);
+        UID += String(buf);
+
       }
       if(DebugMode){
         USBSerial.println();
