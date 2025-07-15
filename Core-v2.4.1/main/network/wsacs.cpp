@@ -202,7 +202,7 @@ void keepalive_timer_callback() {
 
 void send_opening_message() {
     if (ws_handle == NULL) {
-        ESP_LOGE(TAG, "Programming error");
+        ESP_LOGE(TAG, "Programming error. No WS handle when sending opening message");
         return;
     }
     cJSON* msg = cJSON_CreateObject();

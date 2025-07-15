@@ -147,26 +147,37 @@ const char* reset_reason_to_str(esp_reset_reason_t res) {
     return "UNKNOWN";
 }
 
+
+bool already_sent_reset_reason = false;
 void consider_reset_reason() {
+    if (already_sent_reset_reason){
+        return;
+    }
+    already_sent_reset_reason = true;
     esp_reset_reason_t reason = esp_reset_reason();
     ESP_LOGI(TAG, "Reset cause: %s", reset_reason_to_str(reason));
     if (reason == ESP_RST_PANIC) {
         ESP_LOGE(TAG, "Upload coredump");
     }
-    std::string bad = "Reset reason ";
-    bad += reset_reason_to_str(reason);
-    char* msg = new char[bad.size() + 1];
-    strcpy(msg, bad.c_str());
+    std::string str = "Reset reason ";
+    str += reset_reason_to_str(reason);
+    char* msg = new char[str.size() + 1];
+    strcpy(msg, str.c_str());
     Network::send_event({.type = NetworkEventType::Message, .message = msg});
 }
 
 static const AuthRequest invalid_auth = {.requester = CardTagID{}, .to_state = IOState::RESTART};
 static AuthRequest outstanding_auth = invalid_auth;
 static TimerHandle_t wsacs_timeout_timer_handle;
+static TimerHandle_t watchdog_timer_handle;
 
 namespace Network {
     // TODO make this think about things harder and do stuff if we're falling offline
     void network_watchdog_feed() {
+        xTimerReset(watchdog_timer_handle, pdMS_TO_TICKS(100));
+    }
+    void network_watchdog_expiry_fn(TimerHandle_t) {
+        Network::send_internal_event({.type = InternalEventType::ServerDown});
     }
 
     void handle_external_event(NetworkEvent event) {
@@ -189,13 +200,12 @@ namespace Network {
                 break;
 
             case NetworkEventType::StateChange:
-                ESP_LOGI(TAG, "need to state change report to wsacs (maybe)");
-                std::string bad = "Changed state from ";
-                bad += io_state_to_string(event.state_change.from);
-                bad += " -> ";
-                bad += io_state_to_string(event.state_change.to);
-                char* msg = new char[bad.size() + 1];
-                strcpy(msg, bad.c_str());
+                std::string str = "Changed state from ";
+                str += io_state_to_string(event.state_change.from);
+                str += " -> ";
+                str += io_state_to_string(event.state_change.to);
+                char* msg = new char[str.size() + 1];
+                strcpy(msg, str.c_str());
                 WSACS::send_event(WSACS::Event::message(msg));
                 break;
         }
@@ -214,7 +224,12 @@ namespace Network {
                 handle_external_event(event.external_event);
             } else if (event.type == InternalEventType::ServerUp) {
                 consider_reset_reason(); // upload it
+                xTimerStart(watchdog_timer_handle, pdMS_TO_TICKS(100));
+
                 wsacs_successive_failures = 0;
+                if (waiting_for_initial_connect) {
+                    waiting_for_initial_connect = false;
+                }
             } else if (event.type == InternalEventType::ServerDown) {
                 wsacs_successive_failures += 1;
                 // Quick falloff, might be able to recover
@@ -247,6 +262,7 @@ namespace Network {
                                         .requested = false,
                                     }});
                 } else {
+                    network_watchdog_expiry_fn(watchdog_timer_handle); // equiv to failing watchdog
                     IO::send_event({
                         .type = IOEventType::NETWORK_COMMAND,
                         .network_command = {.type = NetworkCommandEventType::DENY,
@@ -309,10 +325,15 @@ namespace Network {
         WSACS::init();
         is_online_mutex = xSemaphoreCreateMutex();
 
+        // Timeout when we ask the server things
         wsacs_timeout_timer_handle =
             xTimerCreate("wsacs_timeout", pdMS_TO_TICKS(5 * 1000), pdFALSE, NULL,
                          [](TimerHandle_t) { send_internal_event({.type = InternalEventType::WSACSTimedOut}); });
         xTimerStart(wsacs_timeout_timer_handle, pdMS_TO_TICKS(100));
+
+        // timeout for ping ponging
+        watchdog_timer_handle =
+            xTimerCreate("watchdog_timeout", pdMS_TO_TICKS(30 * 1000), pdFALSE, NULL, network_watchdog_expiry_fn);
 
         xTaskCreate(network_thread_fn, "network", CONFIG_NETWORK_TASK_STACK_SIZE, nullptr, 0, &network_task);
 
