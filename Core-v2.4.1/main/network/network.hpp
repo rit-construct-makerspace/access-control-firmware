@@ -25,6 +25,9 @@ namespace Network {
     enum class InternalEventType {
         NetifUp,
         NetifDown,
+        
+        ServerUp,
+        ServerDown,
 
         ServerSetTime,
         ServerSetState,

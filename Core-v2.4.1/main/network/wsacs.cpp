@@ -26,6 +26,11 @@ TimerHandle_t keep_alive_timer = NULL;
 esp_websocket_client_handle_t ws_handle = NULL;
 esp_websocket_client_config_t cfg{};
 
+static bool is_conn = false;
+bool WSACS::is_connected(){
+    return is_conn;
+}
+
 uint64_t get_next_seqnum() {
     uint64_t i = seqnum;
     seqnum++;
@@ -46,13 +51,13 @@ void handle_server_state_change(const char* state) {
 
 IOState outstanding_tostate = IOState::IDLE; // todo, should be sent by the server
 
-void handle_auth_response(const char* auth, int verified) {
+void handle_auth_response(const char* auth, int verified, const char *error) {
     std::optional<CardTagID> requester = CardTagID::from_string(auth);
     if (!requester.has_value()) {
         ESP_LOGE(TAG, "Can't auth bc bad UID: %.14s", auth);
         verified = 0;
     }
-    ESP_LOGI(TAG, "Handling auth response: %s - %d: %s", auth, verified, io_state_to_string(outstanding_tostate));
+    ESP_LOGI(TAG, "Handling auth response: %s - %d: %s - %s", auth, verified, io_state_to_string(outstanding_tostate), error ? error : "no error");
 
     Network::send_internal_event(Network::InternalEvent{
         .type = Network::InternalEventType::WSACSAuthResponse,
@@ -131,7 +136,8 @@ void handle_incoming_ws_text(const char* data, size_t len) {
             verified = cJSON_GetNumberValue(cJSON_GetObjectItem(obj, "Verified"));
         }
         const char* auth = cJSON_GetStringValue(cJSON_GetObjectItem(obj, "Auth"));
-        handle_auth_response(auth, verified);
+        const char* error = cJSON_GetStringValue(cJSON_GetObjectItem(obj, "Error"));
+        handle_auth_response(auth, verified, error);
     }
 
     if (cJSON_HasObjectItem(obj, "Identify")) {
@@ -248,7 +254,6 @@ static void websocket_event_handler(void* handler_args, esp_event_base_t base, i
             WSACS::send_event(WSACS::EventType::ServerConnect);
             break;
         case WEBSOCKET_EVENT_DISCONNECTED:
-            WSACS::send_event({WSACS::EventType::ServerDisconnect});
             if (data->error_handle.esp_ws_handshake_status_code != 0) {
                 ESP_LOGE(TAG, "HTTP STATUS CODE: %d", data->error_handle.esp_ws_handshake_status_code);
             }
@@ -279,6 +284,7 @@ static void websocket_event_handler(void* handler_args, esp_event_base_t base, i
             break;
         case WEBSOCKET_EVENT_FINISH:
             ESP_LOGI(TAG, "WEBSOCKET_EVENT_FINISH");
+            WSACS::send_event({WSACS::EventType::ServerDisconnect});
             break;
     }
 }
@@ -306,7 +312,7 @@ void connect_to_server() {
 #endif
 
     cfg.network_timeout_ms = 10000;
-    cfg.reconnect_timeout_ms = 1000;
+    cfg.reconnect_timeout_ms = 10000;
 
     ws_handle = esp_websocket_client_init(&cfg);
     if (ws_handle == NULL) {
@@ -335,13 +341,16 @@ void wsacs_thread_fn(void*) {
                 break;
 
             case EventType::ServerConnect:
-                ESP_LOGI(TAG, "Sending openning");
                 seqnum = 0;
                 send_opening_message();
+                Network::send_internal_event({.type = Network::InternalEventType::ServerUp});
+                is_conn = true;
                 break;
 
             case EventType::ServerDisconnect:
                 handle_disconnect();
+                Network::send_internal_event({.type = Network::InternalEventType::ServerDown});
+                is_conn = false;
                 break;
 
             case EventType::KeepAliveTimer:

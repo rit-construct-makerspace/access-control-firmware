@@ -38,6 +38,8 @@ namespace WSACS {
         };
     };
 
+    bool is_connected();
+
     /**
      * send an event to the websocket handler
      * Both external (from network) and internal (from esp networking stack)
