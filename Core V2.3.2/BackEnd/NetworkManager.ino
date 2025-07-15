@@ -90,11 +90,13 @@ void NetworkManager(void *pvParameters){
             continue;
           }
           StartupNetworkMessage = 0;
-          Message = "NetworkManager test on initial boot.";
+          LogKey = "InitialWebsocketCheck";
+          LogValue = "test";
         } else{
-          Message = "Internet is OK but no websocket. Can you hear me?";
+          LogKey = "WebsocketCheck";
+          LogValue = "test";
         }
-        ReadyToSend = 1;
+        LogReadyToSend = 1;
       }
       else{
         InternetOK = 0;

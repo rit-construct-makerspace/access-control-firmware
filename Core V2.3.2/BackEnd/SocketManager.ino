@@ -348,7 +348,13 @@ void SocketManager(void *pvParameters) {
       WSSend = 1;
       ReadyToSend = 0;
       WritingMessage = 0;
+    } else if (LogReadyToSend && !WSSend){
+      wsresp["Log"][LogKey] = LogValue; 
+      WSSend = 1;
+      LogReadyToSend = 0;
+      WritingMessage = 0;
     }
+    
     //3: The state changed
     if(ChangeStatus && !WSSend){
       wsresp["State"] = State;
