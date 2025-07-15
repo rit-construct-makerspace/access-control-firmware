@@ -92,7 +92,7 @@ void NetworkManager(void *pvParameters){
           StartupNetworkMessage = 0;
           LogKey = "InitialWebsocketCheck";
           LogValue = "test";
-        else{
+        } else{
           LogKey = "WebsocketCheck";
           LogValue = "test";
         }
