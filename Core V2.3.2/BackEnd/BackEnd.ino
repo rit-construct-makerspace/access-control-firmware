@@ -27,7 +27,7 @@ USBConfig: Allows programatic changing of settings over USB
 */
 
 //Settings
-#define Version "1.3.9"
+#define Version "1.4.0"
 #define Hardware "2.3.2-LE"
 #define MAX_DEVICES 5 //How many possible temperature sensors to scan for
 #define OTA_URL "https://raw.githubusercontent.com/rit-construct-makerspace/access-control-firmware/refs/heads/main/otadirectory.json"

@@ -15,7 +15,7 @@ March 2025
 */
 
 //Settings:
-#define Version "1.2.1U"
+#define Version "1.2.2U"
 #define Hardware "2.4.1-LE"
 #define OTA_URL "https://raw.githubusercontent.com/rit-construct-makerspace/access-control-firmware/refs/heads/main/otadirectory.json"
 #define HIGH_TONE 2500
