@@ -9,8 +9,8 @@
     {
       "Device": "Sign In",
       "Config": "2.4.1-LE",
-      "Version": "1.2.1",
-      "URL": "https://github.com/rit-construct-makerspace/access-control-firmware/releases/download/SignIn-V1.2.1/signin241le.bin"
+      "Version": "1.2.2",
+      "URL": "https://github.com/rit-construct-makerspace/access-control-firmware/releases/download/SignIn-V1.2.2/signin241le.bin"
     }
   ]
 }
