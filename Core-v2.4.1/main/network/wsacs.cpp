@@ -13,7 +13,6 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
 #include <freertos/task.h>
-#include "esp_log.h"
 #include <freertos/timers.h>
 
 static const char* TAG = "wsacs";
@@ -185,16 +184,32 @@ namespace WSACS {
         int err = esp_websocket_client_send_text(ws_handle, text, len, pdMS_TO_TICKS(100));
         if (err != len) {
             ESP_LOGE(TAG, "Failed to send WS message: %d", err);
+            Network::send_internal_event(Network::InternalEventType::ServerDown);
         }
         cJSON_free((void*)text);
         return ESP_OK;
     }
 
-    void send_keepalive_message() {
+    static IOState last_valid_state = IOState::STARTUP;
+    bool is_serverable_state(IOState st) {
+        switch (st) {
+            case IOState::IDLE:
+            case IOState::ALWAYS_ON:
+            case IOState::FAULT:
+            case IOState::LOCKOUT:
+            case IOState::WELCOMING:
+            case IOState::UNLOCKED:
+            case IOState::STARTUP:
+                return true;
+            default:
+                return false;
+        }
+    }
+    void send_status_message() {
         cJSON* msg = NULL;
         if (ws_handle == NULL) {
             // try reconnecting
-            Network::send_internal_event(Network::InternalEventType::NetifUp);
+            ESP_LOGW(TAG, "Trying to keepalive on no connection? not doing anything");
             return;
         }
 
@@ -203,11 +218,14 @@ namespace WSACS {
             ESP_LOGE(TAG, "Couldn't get state for status message");
             return;
         }
+        if (is_serverable_state(state)) {
+            last_valid_state = state;
+        }
         int temp = 33;
 
         msg = cJSON_CreateObject();
 
-        cJSON_AddStringToObject(msg, "State", io_state_to_string(state));
+        cJSON_AddStringToObject(msg, "State", io_state_to_string(last_valid_state));
         cJSON_AddNumberToObject(msg, "Temp", (double)temp);
         send_cjson(msg);
 
@@ -292,6 +310,9 @@ namespace WSACS {
                 // TODO check close code
                 if (data->op_code == 0x1) { // Opcode 0x1 indicates text data
                     handle_incoming_ws_text(data->data_ptr, data->data_len);
+                } else if (data->op_code == 0x8) { // WS_TRANSPORT_OPCODES_CLOSE
+                    ESP_LOGE(TAG, "Websocket closed");
+                    Network::send_internal_event(Network::InternalEventType::ServerDown);
                 }
                 break;
             case WEBSOCKET_EVENT_ERROR:
@@ -306,24 +327,34 @@ namespace WSACS {
                     ESP_LOGE(TAG, "captured as transport's socket errno: %d",
                              data->error_handle.esp_transport_sock_errno);
                 }
+                Network::send_internal_event(Network::InternalEventType::ServerDown);
                 break;
             case WEBSOCKET_EVENT_FINISH:
                 ESP_LOGI(TAG, "WEBSOCKET_EVENT_FINISH");
-                Network::send_internal_event(Network::InternalEventType::ServerDown);
                 break;
         }
     }
     static void handle_disconnect() {
-        ESP_LOGW(TAG, "Destroying old ws client");
-        esp_websocket_client_destroy(ws_handle);
-        ws_handle = NULL;
         seqnum = 0;
     }
 
     esp_err_t try_connect() {
-        if (ws_handle != NULL) {
-            handle_disconnect();
+        seqnum = 0;
+        if (esp_websocket_client_is_connected(ws_handle)) {
+            // Already up
+            return ESP_OK;
         }
+        esp_websocket_client_stop(ws_handle);
+
+        esp_err_t err = esp_websocket_client_start(ws_handle);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "Couldnt open ws: %s", esp_err_to_name(err));
+            return err;
+        }
+        return ESP_OK;
+    }
+
+    esp_err_t init() {
 #ifdef DEV_SERVER
         std::string websocket_url = "ws://" DEV_SERVER "/api/ws";
         cfg.uri = websocket_url.c_str();
@@ -337,7 +368,7 @@ namespace WSACS {
 #endif
 
         cfg.network_timeout_ms = 10000;
-        cfg.reconnect_timeout_ms = 10000;
+        cfg.reconnect_timeout_ms = 3000;
 
         ws_handle = esp_websocket_client_init(&cfg);
         if (ws_handle == NULL) {
@@ -345,11 +376,7 @@ namespace WSACS {
             return ESP_ERR_INVALID_ARG;
         }
         esp_websocket_register_events(ws_handle, WEBSOCKET_EVENT_ANY, websocket_event_handler, (void*)ws_handle);
-        esp_err_t err = esp_websocket_client_start(ws_handle);
-        if (err != ESP_OK) {
-            ESP_LOGE(TAG, "Couldnt open ws: %s", esp_err_to_name(err));
-            return err;
-        }
+
         return ESP_OK;
     }
 

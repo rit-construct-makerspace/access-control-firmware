@@ -12,6 +12,8 @@ namespace Network {
      * anything not to do with networking should use this
      */
     int send_event(NetworkEvent ev);
+    // shorthand for content less eventtype
+    int send_event(NetworkEventType ev);
     /**
      * @return true if we're connected to the server
      * @return false if not
@@ -20,6 +22,7 @@ namespace Network {
 
     // Called when network events happen that indicate online
     void network_watchdog_feed();
+
     // Used only by tasks on the network side of things to
     // communicate with the main network handler
     enum class InternalEventType {
@@ -37,9 +40,6 @@ namespace Network {
         WSACSTimedOut,
 
         KeepAliveTime,
-
-        // From timer
-        NetworkWatchdogExpire,
 
         // From weirdos in IO
         ExternalEvent,

@@ -495,9 +495,7 @@ void io_thread_fn(void*) {
                         go_to_state(IOState::RESTART);
                         break;
                     case ButtonEventType::RELEASED:
-                        Network::send_event({
-                            .type = NetworkEventType::PleaseRestart,
-                        });
+                        Network::send_event(NetworkEventType::PleaseRestart);
                         break;
                     default:
                         ESP_LOGI(TAG, "Unknown button event type recieved");
