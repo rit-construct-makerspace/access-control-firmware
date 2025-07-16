@@ -24,6 +24,8 @@ namespace Network {
     // Called when network events happen that indicate online
     void network_watchdog_feed();
 
+    // mark as complete so we dont time out and deny
+    void mark_wsacs_request_complete();
     // Used only by tasks on the network side of things to
     // communicate with the main network handler
     enum class InternalEventType {

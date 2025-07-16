@@ -211,7 +211,9 @@ namespace Network {
                 break;
         }
     }
-
+    void mark_wsacs_request_complete(){
+        outstanding_auth = {};
+    }
     void network_thread_fn(void* p) {
         wifi_init_sta();
 
@@ -286,7 +288,7 @@ namespace Network {
                     break;
             }
         }
-        return;
+        return; 
     }
 
     bool send_internal_event(InternalEvent ev) {

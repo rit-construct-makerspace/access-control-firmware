@@ -17,7 +17,7 @@
 #include <freertos/timers.h>
 
 static const char* TAG = "wsacs";
-// #define DEV_SERVER "calcarea.student.rit.edu"
+#define DEV_SERVER "calcarea.student.rit.edu"
 
 esp_websocket_client_handle_t ws_handle = NULL;
 esp_websocket_client_config_t cfg{};
@@ -62,7 +62,7 @@ namespace WSACS {
         }
         ESP_LOGI(TAG, "Handling auth response: %s - %d: %s - %s", auth, verified,
                  io_state_to_string(outstanding_tostate), error ? error : "no error");
-
+        Network::mark_wsacs_request_complete();
         if (verified) {
             IO::send_event({
                 .type = IOEventType::NETWORK_COMMAND,
@@ -180,7 +180,7 @@ namespace WSACS {
 
         char* text = cJSON_Print(obj);
         size_t len = strnlen(text, 5000);
-        ESP_LOGD(TAG, "Sending message %s", text);
+        ESP_LOGI(TAG, "Sending message %s", text);
 
         int err = esp_websocket_client_send_text(ws_handle, text, len, pdMS_TO_TICKS(100));
         if (err != len) {
@@ -335,9 +335,6 @@ namespace WSACS {
                 ESP_LOGI(TAG, "WEBSOCKET_EVENT_FINISH");
                 break;
         }
-    }
-    static void handle_disconnect() {
-        seqnum = 0;
     }
 
     esp_err_t try_connect() {
