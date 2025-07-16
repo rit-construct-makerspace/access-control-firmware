@@ -111,7 +111,9 @@ void ReadCard(void *pvParameters) {
             Serial.print(uid[i], HEX);
             Serial.print(" ");
           }
-          UID += String(uid[i], HEX);
+          char buf[3] = {0};
+          snprintf(buf, sizeof(buf), "%02x", uid[i]);
+          UID += String(buf);
         }
         if(readreserved){
           xSemaphoreGive(DebugMutex);

@@ -27,7 +27,7 @@ USBConfig: Allows programatic changing of settings over USB
 */
 
 //Settings
-#define Version "1.3.9"
+#define Version "1.4.0"
 #define Hardware "2.3.2-LE"
 #define MAX_DEVICES 5 //How many possible temperature sensors to scan for
 #define OTA_URL "https://raw.githubusercontent.com/rit-construct-makerspace/access-control-firmware/refs/heads/main/otadirectory.json"
@@ -70,6 +70,9 @@ bool ReadFailed;                         //set to 1 if a card was not read prope
 bool WritingMessage;                     //set to 1 to indicate a message is being written, for eventual sending to the server.
 String Message;                          //String containing error message to report via API
 bool ReadyToSend;                        //set to 1 to indicate "Message" is ready to send.
+String LogKey;                           //String containing a key to be reported via log API
+String LogValue;                           //String containing a key to be reported via log API
+bool LogReadyToSend;                     //set to 1 to indicate "Log" is ready to send.
 bool RegularStatus;                      //Used to indicate it is time to send the regular status message.
 bool TemperatureStatus;                  //Set to 1 to indicate to send a temperature status report.
 bool StartupStatus;                      //Set to 1 to indicate to send a report that the system has powered on and completed startup..
@@ -498,10 +501,11 @@ void loop(){
             SocketText = "";
             NextSocketTry = millis64();
             if(SocketRetry > 0){
-              if(!ReadyToSend){
+              if(!LogReadyToSend){
                 //No message pending, so send one
-                Message = "Had to retry sending last " + String(SocketRetry) + " times.";
-                ReadyToSend = 1;
+                LogKey = "RetryLast";
+                LogValue = String(SocketRetry);
+                LogReadyToSend = 1;
               }
             }
             SocketRetry = 0;

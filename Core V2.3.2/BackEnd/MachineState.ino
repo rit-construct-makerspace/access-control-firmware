@@ -129,7 +129,7 @@ void MachineState(void *pvParameters) {
     }
 
     //Restart the machine if not in use and nightlyflag set.
-    if((State != "AlwaysOn") && (State != "Unlocked") && NightlyFlag){
+    if((State != "Unlocked") && NightlyFlag){
       settings.putString("LastState", State);
       delay(10);
       //Set the front LED blue
