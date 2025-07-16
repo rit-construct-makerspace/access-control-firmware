@@ -179,7 +179,7 @@ namespace WSACS {
 
         char* text = cJSON_Print(obj);
         size_t len = strnlen(text, 5000);
-        ESP_LOGI(TAG, "Sending message %s", text);
+        ESP_LOGD(TAG, "Sending message %s", text);
 
         int err = esp_websocket_client_send_text(ws_handle, text, len, pdMS_TO_TICKS(100));
         if (err != len) {
