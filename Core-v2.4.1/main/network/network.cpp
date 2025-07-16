@@ -162,7 +162,9 @@ void consider_reset_reason() {
     str += reset_reason_to_str(reason);
     char* msg = new char[str.size() + 1];
     strcpy(msg, str.c_str());
-    Network::send_event({.type = NetworkEventType::Message, .message = msg});
+    if (!Network::send_event({.type = NetworkEventType::Message, .message = msg})) {
+        delete[] msg; // if couldnt send to thread, it gets dropped
+    }
 }
 
 static std::optional<AuthRequest> outstanding_auth = {};
@@ -287,21 +289,20 @@ namespace Network {
         return;
     }
 
-    int send_internal_event(InternalEvent ev) {
-        xQueueSend(network_event_queue, &ev, pdMS_TO_TICKS(100));
-        return 0;
+    bool send_internal_event(InternalEvent ev) {
+        return xQueueSend(network_event_queue, &ev, pdMS_TO_TICKS(100)) == pdTRUE;
     }
-    int send_internal_event(InternalEventType evtyp) {
+    bool send_internal_event(InternalEventType evtyp) {
         return send_internal_event({.type = evtyp, .netif_up_ip = {0}});
     }
 
-    int send_event(NetworkEvent ev) {
+    bool send_event(NetworkEvent ev) {
         return send_internal_event(InternalEvent{
             .type = InternalEventType::ExternalEvent,
             .external_event = ev,
         });
     }
-    int send_event(NetworkEventType ev) {
+    bool send_event(NetworkEventType ev) {
         return send_event({.type = ev, ._ = 0});
     }
 

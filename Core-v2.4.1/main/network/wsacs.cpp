@@ -7,6 +7,7 @@
 #include "esp_websocket_client.h"
 #include "io/Buzzer.hpp"
 #include "io/IO.hpp"
+#include "io/Temperature.hpp"
 #include "network.hpp"
 #include "network/network.hpp"
 #include "storage.hpp"
@@ -172,7 +173,7 @@ namespace WSACS {
         cJSON_Delete(obj);
     }
 
-    // will add sequence number and to string it (ONLY CALL ON WEBSOCKET THREAD)
+    // will add sequence number and to string it (ONLY CALL ON THREAD THAT OWNS WEBSOCKET)
     esp_err_t send_cjson(cJSON* obj) {
 
         cJSON_AddNumberToObject(obj, "Seq", (double)get_next_seqnum());
@@ -221,7 +222,8 @@ namespace WSACS {
         if (is_serverable_state(state)) {
             last_valid_state = state;
         }
-        int temp = 33;
+        float temp = 33;
+        Temperature::get_temp(temp);
 
         msg = cJSON_CreateObject();
 

@@ -10,10 +10,11 @@ namespace Network {
     /**
      * Send an event to the network task
      * anything not to do with networking should use this
+     * @return true if submitted to queue. False otherwise
      */
-    int send_event(NetworkEvent ev);
+    bool send_event(NetworkEvent ev);
     // shorthand for content less eventtype
-    int send_event(NetworkEventType ev);
+    bool send_event(NetworkEventType ev);
     /**
      * @return true if we're connected to the server
      * @return false if not
@@ -53,7 +54,7 @@ namespace Network {
             NetworkEvent external_event;
         };
     };
-    int send_internal_event(InternalEvent ev);
-    int send_internal_event(InternalEventType evtyp);
+    bool send_internal_event(InternalEvent ev);
+    bool send_internal_event(InternalEventType evtyp);
 
 } // namespace Network
