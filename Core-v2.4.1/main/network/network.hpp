@@ -43,6 +43,7 @@ namespace Network {
         WSACSTimedOut,
 
         KeepAliveTime,
+        OtaUpdate,
 
         // From weirdos in IO
         ExternalEvent,
@@ -53,6 +54,8 @@ namespace Network {
             esp_ip4_addr_t netif_up_ip;
             IOState server_set_state;
             uint64_t server_set_time;
+            OTATag ota_tag;
+
             NetworkEvent external_event;
         };
     };

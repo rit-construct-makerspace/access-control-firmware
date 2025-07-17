@@ -169,6 +169,17 @@ namespace WSACS {
                 Buzzer::send_effect(network_song);
             }
         }
+        if (cJSON_HasObjectItem(obj, "OTAVer")) {
+            cJSON* ota_ver = cJSON_GetObjectItem(obj, "OTAVer");
+            if (ota_ver->type & cJSON_String) {
+                Network::InternalEvent ie{.type = Network::InternalEventType::OtaUpdate, .ota_tag = {}};
+                strncpy(ie.ota_tag.data(), cJSON_GetStringValue(ota_ver), sizeof(ie.ota_tag));
+                Network::send_internal_event(ie);
+            } else {
+                ESP_LOGW(TAG, "Invalid type for OTAVer tag: %d", ota_ver->type);
+            }
+        }
+
         cJSON_Delete(obj);
     }
 

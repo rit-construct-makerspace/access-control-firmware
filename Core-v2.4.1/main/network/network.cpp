@@ -289,6 +289,9 @@ namespace Network {
                                         }});
                     }
                     break;
+                case InternalEventType::OtaUpdate:
+                    ESP_LOGI(TAG, "Do OTA Update");
+                    break;
             }
         }
         return;
