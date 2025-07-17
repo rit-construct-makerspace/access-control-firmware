@@ -244,6 +244,8 @@ namespace WSACS {
         cJSON_Delete(msg);
     }
 
+
+    static bool already_asked_for_state_this_boot = false;
     void send_opening_message() {
         if (ws_handle == NULL) {
             ESP_LOGE(TAG, "Programming error. No WS handle when sending opening message");
@@ -264,10 +266,15 @@ namespace WSACS {
         cJSON_AddStringToObject(msg, "HWVersion", Hardware::get_edition_string());
         cJSON_AddStringToObject(msg, "FWVersion", "testing");
         cJSON* req_arr = cJSON_AddArrayToObject(msg, "Request");
-        cJSON* req0 = cJSON_CreateString("State");
-        cJSON* req1 = cJSON_CreateString("Time");
+        cJSON* req0 = cJSON_CreateString("Time");
         cJSON_AddItemToArray(req_arr, req0);
-        cJSON_AddItemToArray(req_arr, req1);
+        if (!already_asked_for_state_this_boot) {
+            // Only need to ask on first boot, if we just dropped a connection for a sec
+            // we shouldnt go back to idle or anything
+            cJSON* req1 = cJSON_CreateString("State");
+            cJSON_AddItemToArray(req_arr, req1);
+            already_asked_for_state_this_boot = true;
+        }
         cJSON_AddStringToObject(msg, "FWVersion", "testing");
 
         send_cjson(msg);
