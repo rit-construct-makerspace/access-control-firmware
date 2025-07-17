@@ -10,8 +10,11 @@ namespace Network {
     /**
      * Send an event to the network task
      * anything not to do with networking should use this
+     * @return true if submitted to queue. False otherwise
      */
-    int send_event(NetworkEvent ev);
+    bool send_event(NetworkEvent ev);
+    // shorthand for content less eventtype
+    bool send_event(NetworkEventType ev);
     /**
      * @return true if we're connected to the server
      * @return false if not
@@ -20,20 +23,28 @@ namespace Network {
 
     // Called when network events happen that indicate online
     void network_watchdog_feed();
+
+    // mark as complete so we dont time out and deny
+    void mark_wsacs_request_complete();
     // Used only by tasks on the network side of things to
     // communicate with the main network handler
     enum class InternalEventType {
+        // From Wifi Handler
         NetifUp,
         NetifDown,
 
-        ServerSetTime,
-        ServerSetState,
+        TryConnect,
 
-        WSACSAuthResponse,
+        // From WS handler
+        ServerUp,
+        ServerDown,
+
+        // From timer
         WSACSTimedOut,
 
-        NetworkWatchdogExpire,
+        KeepAliveTime,
 
+        // From weirdos in IO
         ExternalEvent,
     };
     struct InternalEvent {
@@ -42,10 +53,10 @@ namespace Network {
             esp_ip4_addr_t netif_up_ip;
             IOState server_set_state;
             uint64_t server_set_time;
-            WSACS::AuthResponse wsacs_auth_response;
             NetworkEvent external_event;
         };
     };
-    int send_internal_event(InternalEvent ev);
+    bool send_internal_event(InternalEvent ev);
+    bool send_internal_event(InternalEventType evtyp);
 
 } // namespace Network

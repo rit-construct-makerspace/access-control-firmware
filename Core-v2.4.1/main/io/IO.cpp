@@ -254,6 +254,7 @@ void handle_card_detected(IOEvent event) {
             Buzzer::send_effect(SoundEffect::LOCKOUT);
             break;
         case IOState::WELCOMING:
+            prior_request_state = IOState::WELCOMING;
             go_to_state(IOState::AWAIT_AUTH);
             Network::send_event({
                 .type = NetworkEventType::AuthRequest,
@@ -429,6 +430,9 @@ void handle_network_command(IOEvent current_event) {
                                 },
                         });
                         break;
+                    case IOState::WELCOMED:
+                        go_to_state(IOState::WELCOMED);
+                        break;
                     default:
                         // Ignore it
                         return;
@@ -491,9 +495,7 @@ void io_thread_fn(void*) {
                         go_to_state(IOState::RESTART);
                         break;
                     case ButtonEventType::RELEASED:
-                        Network::send_event({
-                            .type = NetworkEventType::PleaseRestart,
-                        });
+                        Network::send_event(NetworkEventType::PleaseRestart);
                         break;
                     default:
                         ESP_LOGI(TAG, "Unknown button event type recieved");
