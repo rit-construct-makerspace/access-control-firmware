@@ -202,14 +202,15 @@ namespace Network {
 
             case NetworkEventType::StateChange:
                 if (event.state_change.from != event.state_change.to) {
-                    std::string str = "Changed state from ";
-                    str += io_state_to_string(event.state_change.from);
-                    str += " -> ";
-                    str += io_state_to_string(event.state_change.to);
-                    char* msg = new char[str.size() + 1];
-                    strcpy(msg, str.c_str());
-                    WSACS::send_message(msg);
+                    break;
                 }
+                std::string str = "Changed state from ";
+                str += io_state_to_string(event.state_change.from);
+                str += " -> ";
+                str += io_state_to_string(event.state_change.to);
+                char* msg = new char[str.size() + 1];
+                strcpy(msg, str.c_str());
+                WSACS::send_message(msg);
                 break;
         }
     }
