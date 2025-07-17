@@ -244,7 +244,11 @@ namespace WSACS {
 #ifdef DEV_SERVER
         cJSON_AddStringToObject(
             msg, "Key",
-            "07edfd78f2a97d0d2c46c1cb4504fbe343a9bb6ec7f2a64b41d2c7d4f6fcca7f63f78220b70230e3f022e395fe0eb436");
+            "a916844975e547d6dcbaeb42af9a7fff311dafe04084c52ee26a4132e0fbeb64d3f10074f55274c507694b8947b7ddf0");
+
+        // cJSON_AddStringToObject(
+            // msg, "Key",
+            // "07edfd78f2a97d0d2c46c1cb4504fbe343a9bb6ec7f2a64b41d2c7d4f6fcca7f63f78220b70230e3f022e395fe0eb436");
 #else
         cJSON_AddStringToObject(msg, "Key", Storage::get_key().c_str());
 

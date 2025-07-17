@@ -201,17 +201,19 @@ namespace Network {
                 break;
 
             case NetworkEventType::StateChange:
-                std::string str = "Changed state from ";
-                str += io_state_to_string(event.state_change.from);
-                str += " -> ";
-                str += io_state_to_string(event.state_change.to);
-                char* msg = new char[str.size() + 1];
-                strcpy(msg, str.c_str());
-                WSACS::send_message(msg);
+                if (event.state_change.from != event.state_change.to) {
+                    std::string str = "Changed state from ";
+                    str += io_state_to_string(event.state_change.from);
+                    str += " -> ";
+                    str += io_state_to_string(event.state_change.to);
+                    char* msg = new char[str.size() + 1];
+                    strcpy(msg, str.c_str());
+                    WSACS::send_message(msg);
+                }
                 break;
         }
     }
-    void mark_wsacs_request_complete(){
+    void mark_wsacs_request_complete() {
         outstanding_auth = {};
     }
     void network_thread_fn(void* p) {
@@ -288,7 +290,7 @@ namespace Network {
                     break;
             }
         }
-        return; 
+        return;
     }
 
     bool send_internal_event(InternalEvent ev) {
