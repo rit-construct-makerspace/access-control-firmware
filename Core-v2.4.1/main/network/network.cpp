@@ -201,6 +201,9 @@ namespace Network {
                 break;
 
             case NetworkEventType::StateChange:
+                if (event.state_change.from != event.state_change.to) {
+                    break;
+                }
                 std::string str = "Changed state from ";
                 str += io_state_to_string(event.state_change.from);
                 str += " -> ";
@@ -211,7 +214,7 @@ namespace Network {
                 break;
         }
     }
-    void mark_wsacs_request_complete(){
+    void mark_wsacs_request_complete() {
         outstanding_auth = {};
     }
     void network_thread_fn(void* p) {
@@ -288,7 +291,7 @@ namespace Network {
                     break;
             }
         }
-        return; 
+        return;
     }
 
     bool send_internal_event(InternalEvent ev) {
