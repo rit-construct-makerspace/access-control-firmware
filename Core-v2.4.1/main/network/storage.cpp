@@ -170,7 +170,11 @@ namespace Storage {
     }
 
     std::string get_key() {
+#ifdef DEV_SERVER
+        return "07edfd78f2a97d0d2c46c1cb4504fbe343a9bb6ec7f2a64b41d2c7d4f6fcca7f63f78220b70230e3f022e395fe0eb436";
+#else
         return cached_server_key;
+#endif
     }
 
     uint8_t get_max_temp() {

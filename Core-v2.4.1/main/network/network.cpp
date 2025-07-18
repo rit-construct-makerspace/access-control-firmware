@@ -7,6 +7,7 @@
 #include "sdkconfig.h"
 #include "storage.hpp"
 #include <string.h>
+#include "http_manager.hpp"
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
@@ -253,7 +254,7 @@ namespace Network {
                 case InternalEventType::ServerUp:
                     is_online_value = true;
                     WSACS::send_opening_message();
-                    vTaskDelay(10);
+                    vTaskDelay(20);
                     consider_reset_reason(); // upload it
                     xTimerStart(watchdog_timer_handle, pdMS_TO_TICKS(100));
 
@@ -291,6 +292,7 @@ namespace Network {
                     break;
                 case InternalEventType::OtaUpdate:
                     ESP_LOGI(TAG, "Do OTA Update");
+                    OTA::begin(event.ota_tag);
                     break;
             }
         }
@@ -342,6 +344,7 @@ namespace Network {
 
         is_online_mutex = xSemaphoreCreateMutex();
         WSACS::init();
+        HTTPManager::init();
 
         // Timeout when we ask the server things
         wsacs_timeout_timer_handle =

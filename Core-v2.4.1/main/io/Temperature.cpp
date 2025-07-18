@@ -62,9 +62,14 @@ void sensor_read() {
         s_temperature[i] = temp_temp;
     }
 }
-
+extern bool ok_to_rmt_read;
 void temp_thread_fn(void*) {
+    vTaskDelay(100000);
     while (true) {
+        if (!ok_to_rmt_read) {
+            vTaskDelay(100);
+            continue;
+        }
         sensor_read();
 
         float max = 1.0;
