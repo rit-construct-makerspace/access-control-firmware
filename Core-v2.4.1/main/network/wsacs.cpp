@@ -15,6 +15,7 @@
 #include <freertos/queue.h>
 #include <freertos/task.h>
 #include <freertos/timers.h>
+#include "ota.hpp"
 
 static const char* TAG = "wsacs";
 
@@ -242,6 +243,9 @@ namespace WSACS {
 
         cJSON_AddStringToObject(msg, "State", io_state_to_string(last_valid_state));
         cJSON_AddNumberToObject(msg, "Temp", (double)temp);
+        if (OTA::next_app_version()!=""){
+            cJSON_AddStringToObject(msg, "FEVer", OTA::next_app_version().c_str());
+        }
         send_cjson(msg);
 
         cJSON_Delete(msg);
@@ -265,7 +269,9 @@ namespace WSACS {
         cJSON_AddStringToObject(msg, "HWType", "Core");
 
         cJSON_AddStringToObject(msg, "HWVersion", Hardware::get_edition_string());
-        cJSON_AddStringToObject(msg, "FWVersion", "testing");
+        cJSON_AddStringToObject(msg, "BEVer", OTA::running_app_version().c_str());
+        cJSON_AddStringToObject(msg, "FEVer", OTA::next_app_version().c_str());
+
         cJSON* req_arr = cJSON_AddArrayToObject(msg, "Request");
         cJSON* req0 = cJSON_CreateString("Time");
         cJSON_AddItemToArray(req_arr, req0);
@@ -275,7 +281,6 @@ namespace WSACS {
             cJSON* req1 = cJSON_CreateString("State");
             cJSON_AddItemToArray(req_arr, req1);
         }
-        cJSON_AddStringToObject(msg, "FWVersion", "testing");
 
         send_cjson(msg);
         cJSON_Delete(msg);

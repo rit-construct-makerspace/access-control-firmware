@@ -4,7 +4,10 @@
 
 namespace OTA {
     void begin(OTATag tag);
-    void finish();
-
     void mark_valid();
+
+    void init();
+    std::string running_app_version();
+    std::string next_app_version();
+    
 } // namespace OTA

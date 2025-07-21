@@ -343,6 +343,7 @@ namespace Network {
         }
 
         is_online_mutex = xSemaphoreCreateMutex();
+        OTA::init();
         WSACS::init();
         HTTPManager::init();
 

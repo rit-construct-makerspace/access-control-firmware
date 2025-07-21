@@ -11,6 +11,16 @@ namespace OTA {
     static const esp_partition_t* active_ota_part = NULL;
     static esp_ota_handle_t ota_handle = 0;
 
+    std::string active_version = "";
+    std::string next_version = "";
+
+    std::string running_app_version() {
+        return active_version;
+    }
+    std::string next_app_version() {
+        return next_version;
+    }
+
     void begin(OTATag tag) {
         const esp_partition_t* running_part = esp_ota_get_running_partition();
         esp_app_desc_t running_description;
@@ -19,7 +29,7 @@ namespace OTA {
             ESP_LOGE(TAG, "Failed to get information about currently running app");
         } else {
             ESP_LOGI(TAG, "========   CURRENT PROJECT   ========");
-            ESP_LOGI(TAG, "Project: %.32s", running_description.project_name);
+            ESP_LOGI(TAG, "Project: %.32s ", running_description.project_name);
             ESP_LOGI(TAG, "Version: %.32s", running_description.version);
             ESP_LOGI(TAG, "%.16s %.16s", running_description.date, running_description.time);
             ESP_LOGI(TAG, "ESP IDF Version %.32s", running_description.idf_ver);
@@ -51,7 +61,7 @@ namespace OTA {
         HTTPManager::Transfer xfer = {
             .type = HTTPManager::OperationType::GET,
             .start =
-                [](void*vp_url, const char** url) {
+                [](void* vp_url, const char** url) {
                     *url = ((std::string*)vp_url)->data();
                     return ESP_OK;
                 },
@@ -65,11 +75,11 @@ namespace OTA {
                     return ESP_OK;
                 },
             .finish =
-                [](void*vp, esp_err_t err) {
+                [](void* vp, esp_err_t err) {
                     if (err != ESP_OK) {
-                        std::string smsg = std::string("Failed to download OTA update: ")+esp_err_to_name(err);
+                        std::string smsg = std::string("Failed to download OTA update: ") + esp_err_to_name(err);
                         ESP_LOGE(TAG, "%s", smsg.c_str());
-                        char *msg = new char[smsg.size()];
+                        char* msg = new char[smsg.size()];
                         strcpy(msg, smsg.data());
                         Network::send_event(NetworkEvent{
                             .type = NetworkEventType::Message,
@@ -79,9 +89,9 @@ namespace OTA {
                     }
                     err = esp_ota_end(ota_handle);
                     if (err != ESP_OK) {
-                        std::string smsg = std::string("Failed to install OTA update: ")+esp_err_to_name(err);
+                        std::string smsg = std::string("Failed to install OTA update: ") + esp_err_to_name(err);
                         ESP_LOGE(TAG, "%s", smsg.c_str());
-                        char *msg = new char[smsg.size()];
+                        char* msg = new char[smsg.size()];
                         strcpy(msg, smsg.data());
                         Network::send_event(NetworkEvent{
                             .type = NetworkEventType::Message,
@@ -89,18 +99,49 @@ namespace OTA {
                         });
                         return;
                     }
+                    const esp_partition_t* running_part = esp_ota_get_running_partition();
+                    const esp_partition_t* active_ota_part = esp_ota_get_next_update_partition(running_part);
+                    esp_app_desc_t new_desc = {0};
+                    err = esp_ota_get_partition_description(active_ota_part, &new_desc);
+                    if (err != ESP_OK) {
+                        ESP_LOGW(TAG, "Failed to get ota partition description");
+                    } else {
+                        ESP_LOGI(TAG, "========   UPDATED PROJECT   ========");
+                        ESP_LOGI(TAG, "Project: %.32s ", new_desc.project_name);
+                        ESP_LOGI(TAG, "Version: %.32s", new_desc.version);
+                        ESP_LOGI(TAG, "%.16s %.16s", new_desc.date, new_desc.time);
+                        ESP_LOGI(TAG, "ESP IDF Version %.32s", new_desc.idf_ver);
+                        next_version = new_desc.version;
+                    }
+
                     esp_ota_set_boot_partition(esp_ota_get_next_update_partition(NULL));
                     delete (std::string*)(vp);
                 },
             .user_data = (void*)ptr_url,
         };
         HTTPManager::queue_transfer(xfer);
-    } // namespace OTA
+    }
+    void mark_valid() {
+        esp_err_t err = esp_ota_mark_app_valid_cancel_rollback();
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "Unable to mark app as valid?: %s", esp_err_to_name(err));
+        }
+    }
 
-    // void feed_bytes(uint8_t* buf, std::size_t buflen) {
-    // }
-
-    void finish() {
+    void init() {
+        const esp_partition_t* running_part = esp_ota_get_running_partition();
+        esp_app_desc_t running_description;
+        esp_err_t err = esp_ota_get_partition_description(running_part, &running_description);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to get information about currently running app");
+        } else {
+            ESP_LOGI(TAG, "========   CURRENT PROJECT   ========");
+            ESP_LOGI(TAG, "Project: %.32s ", running_description.project_name);
+            ESP_LOGI(TAG, "Version: %.32s", running_description.version);
+            ESP_LOGI(TAG, "%.16s %.16s", running_description.date, running_description.time);
+            ESP_LOGI(TAG, "ESP IDF Version %.32s", running_description.idf_ver);
+            active_version = std::string{running_description.version};
+        }
     }
 
 } // namespace OTA
