@@ -31,6 +31,7 @@ namespace WSACS {
         seqnum++;
         return i;
     }
+    static bool already_got_state_from_server_for_this_boot = false;
 
     void handle_server_state_change(const char* state) {
 
@@ -40,6 +41,8 @@ namespace WSACS {
             return;
         }
         ESP_LOGI(TAG, "Received request to %s", io_state_to_string(iostate.value()));
+        already_got_state_from_server_for_this_boot = true;
+
         IO::send_event({
             .type = IOEventType::NETWORK_COMMAND,
             .network_command =
@@ -244,8 +247,6 @@ namespace WSACS {
         cJSON_Delete(msg);
     }
 
-
-    static bool already_asked_for_state_this_boot = false;
     void send_opening_message() {
         if (ws_handle == NULL) {
             ESP_LOGE(TAG, "Programming error. No WS handle when sending opening message");
@@ -268,12 +269,11 @@ namespace WSACS {
         cJSON* req_arr = cJSON_AddArrayToObject(msg, "Request");
         cJSON* req0 = cJSON_CreateString("Time");
         cJSON_AddItemToArray(req_arr, req0);
-        if (!already_asked_for_state_this_boot) {
+        if (!already_got_state_from_server_for_this_boot) {
             // Only need to ask on first boot, if we just dropped a connection for a sec
             // we shouldnt go back to idle or anything
             cJSON* req1 = cJSON_CreateString("State");
             cJSON_AddItemToArray(req_arr, req1);
-            already_asked_for_state_this_boot = true;
         }
         cJSON_AddStringToObject(msg, "FWVersion", "testing");
 

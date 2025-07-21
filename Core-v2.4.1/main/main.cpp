@@ -5,10 +5,10 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "io/IO.hpp"
+#include "network/http_manager.hpp"
 #include "network/network.hpp"
 #include "network/storage.hpp"
 #include "network/usb.hpp"
-#include "network/http_manager.hpp"
 
 #include "esp_log.h"
 void set_log_levels() {
@@ -25,13 +25,4 @@ extern "C" void app_main(void) {
     Storage::init();
     IO::init();
     Network::init();
-
-    vTaskDelay(500);
-    
-    // HTTPManager::init("make.rit.edu");
-    
-    Network::send_internal_event({
-        .type = Network::InternalEventType::OtaUpdate,
-        .ota_tag = {'C', 'o', 'r', 'e', '-', 'V', '1', '.', '4', '.', '0', 0},
-    });
 }
