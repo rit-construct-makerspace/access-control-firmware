@@ -253,7 +253,7 @@ namespace Network {
                 case InternalEventType::ServerUp:
                     is_online_value = true;
                     WSACS::send_opening_message();
-                    vTaskDelay(10);
+                    vTaskDelay(20);
                     consider_reset_reason(); // upload it
                     xTimerStart(watchdog_timer_handle, pdMS_TO_TICKS(100));
 
