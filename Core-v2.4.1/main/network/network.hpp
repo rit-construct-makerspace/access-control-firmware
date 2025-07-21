@@ -45,6 +45,7 @@ namespace Network {
         KeepAliveTime,
         OtaUpdate,
 
+        PollRestart,
         // From weirdos in IO
         ExternalEvent,
     };

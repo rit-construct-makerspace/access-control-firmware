@@ -3,6 +3,8 @@
 #include "esp_log.h"
 #include "esp_wifi.h"
 #include "io/IO.hpp"
+#include "io/Button.hpp"
+
 #include "ota.hpp"
 #include "sdkconfig.h"
 #include "storage.hpp"
@@ -293,6 +295,22 @@ namespace Network {
                 case InternalEventType::OtaUpdate:
                     ESP_LOGI(TAG, "Do OTA Update");
                     OTA::begin(event.ota_tag);
+                    break;
+                case InternalEventType::PollRestart:
+                    for(int i = 0; i < 500; i++){
+                        if (!Button::is_held()){
+                            esp_restart();
+                        }
+                        vTaskDelay(pdMS_TO_TICKS(10));
+                    }
+                    // 5 seconds passed
+                    IO::send_event({
+                        .type = IOEventType::NETWORK_COMMAND,
+                        .network_command{
+                            .type = NetworkCommandEventType::COMMAND_STATE,
+                            .commanded_state = IOState::FAULT,
+                        },
+                    });
                     break;
             }
         }

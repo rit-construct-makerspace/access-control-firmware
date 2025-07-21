@@ -54,6 +54,9 @@ namespace WSACS {
                     .for_user = CardTagID{},
                 },
         });
+        if (iostate.value() == IOState::RESTART){
+            Network::send_internal_event(Network::InternalEventType::PollRestart);
+        }
     }
 
     IOState outstanding_tostate = IOState::IDLE; // todo, should be sent by the server
