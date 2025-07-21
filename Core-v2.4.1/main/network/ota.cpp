@@ -128,20 +128,51 @@ namespace OTA {
         }
     }
 
+    const char* image_state_to_str(esp_ota_img_states_t state) {
+        switch (state) {
+            case ESP_OTA_IMG_NEW:
+                return "NEW";
+                break;
+            case ESP_OTA_IMG_PENDING_VERIFY:
+                return "PENDING_VERIFY";
+                break;
+            case ESP_OTA_IMG_VALID:
+                return "VALID";
+                break;
+            case ESP_OTA_IMG_INVALID:
+                return "INVALID";
+                break;
+            case ESP_OTA_IMG_ABORTED:
+                return "ABORTED";
+                break;
+            default:
+                return "UNDEFINED";
+                break;
+        }
+    }
+
     void init() {
+        ESP_LOGI(TAG, "========   CURRENT PROJECT   ========");
         const esp_partition_t* running_part = esp_ota_get_running_partition();
         esp_app_desc_t running_description;
         esp_err_t err = esp_ota_get_partition_description(running_part, &running_description);
         if (err != ESP_OK) {
-            ESP_LOGE(TAG, "Failed to get information about currently running app");
+            ESP_LOGE(TAG, "  Failed to get information about app");
         } else {
-            ESP_LOGI(TAG, "========   CURRENT PROJECT   ========");
-            ESP_LOGI(TAG, "Project: %.32s ", running_description.project_name);
-            ESP_LOGI(TAG, "Version: %.32s", running_description.version);
-            ESP_LOGI(TAG, "%.16s %.16s", running_description.date, running_description.time);
-            ESP_LOGI(TAG, "ESP IDF Version %.32s", running_description.idf_ver);
+            ESP_LOGI(TAG, "  Project: %.32s ", running_description.project_name);
+            ESP_LOGI(TAG, "  Version: %.32s", running_description.version);
+            ESP_LOGI(TAG, "  %.16s %.16s", running_description.date, running_description.time);
+            ESP_LOGI(TAG, "  ESP IDF Version %.32s", running_description.idf_ver);
             active_version = std::string{running_description.version};
         }
+        esp_ota_img_states_t state;
+        err = esp_ota_get_state_partition(running_part, &state);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "  Failed to get state of app");
+        } else {
+            ESP_LOGI(TAG, "  Image State: %s", image_state_to_str(state));
+        }
+        ESP_LOGI(TAG, "=====================================");
     }
 
 } // namespace OTA
