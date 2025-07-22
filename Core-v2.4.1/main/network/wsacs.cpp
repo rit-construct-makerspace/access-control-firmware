@@ -25,15 +25,15 @@ esp_websocket_client_config_t cfg{};
 SoundEffect::Effect network_song = {.length = 0, .notes = NULL};
 
 namespace WSACS {
-    uint64_t seqnum = 0;
-    bool received_first_message = false;
+    static bool received_first_message = false;
+    static bool already_got_state_from_server_for_this_boot = false;
 
+    uint64_t seqnum = 0;
     uint64_t get_next_seqnum() {
         uint64_t i = seqnum;
         seqnum++;
         return i;
     }
-    static bool already_got_state_from_server_for_this_boot = false;
 
     void handle_server_state_change(const char* state) {
 
