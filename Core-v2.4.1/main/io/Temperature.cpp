@@ -64,10 +64,9 @@ void sensor_read() {
 }
 extern bool ok_to_rmt_read;
 void temp_thread_fn(void*) {
-    vTaskDelay(100000);
     while (true) {
         if (!ok_to_rmt_read) {
-            vTaskDelay(100);
+            vTaskDelay(pdMS_TO_TICKS(1000));
             continue;
         }
         sensor_read();

@@ -1,11 +1,15 @@
 #include "ota.hpp"
 #include "esp_log.h"
 #include "esp_ota_ops.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "network.hpp"
+#include "storage.hpp"
 #include "string.h"
 
 #include "http_manager.hpp"
 
+extern bool ok_to_rmt_read;
 namespace OTA {
     static const char* TAG = "ota";
     static const esp_partition_t* active_ota_part = NULL;
@@ -22,6 +26,10 @@ namespace OTA {
     }
 
     void begin(OTATag tag) {
+        // pause time sensitive temperature
+        ok_to_rmt_read = false;
+        vTaskDelay(pdMS_TO_TICKS(1000));
+
         const esp_partition_t* running_part = esp_ota_get_running_partition();
         esp_app_desc_t running_description;
         esp_err_t err = esp_ota_get_partition_description(running_part, &running_description);
@@ -41,7 +49,7 @@ namespace OTA {
         }
         ESP_LOGI(TAG, "Updating to %.32s", tag.data());
 
-        err = esp_ota_begin(active_ota_part, OTA_SIZE_UNKNOWN, &ota_handle);
+        err = esp_ota_begin(active_ota_part, OTA_WITH_SEQUENTIAL_WRITES, &ota_handle);
         if (err != ESP_OK) {
             ESP_LOGE(TAG, "Failed to start OTA: %s", esp_err_to_name(err));
             return;
@@ -76,6 +84,8 @@ namespace OTA {
                 },
             .finish =
                 [](void* vp, esp_err_t err) {
+                    ok_to_rmt_read = true;
+
                     if (err != ESP_OK) {
                         std::string smsg = std::string("Failed to download OTA update: ") + esp_err_to_name(err);
                         ESP_LOGE(TAG, "%s", smsg.c_str());

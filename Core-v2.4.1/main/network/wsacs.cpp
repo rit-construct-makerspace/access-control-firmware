@@ -283,6 +283,8 @@ namespace WSACS {
             // we shouldnt go back to idle or anything
             cJSON* req1 = cJSON_CreateString("State");
             cJSON_AddItemToArray(req_arr, req1);
+            cJSON* req2 = cJSON_CreateString("OTATag");
+            cJSON_AddItemToArray(req_arr, req2);
         }
 
         send_cjson(msg);

@@ -27,7 +27,7 @@ namespace HTTPManager {
     esp_err_t _http_event_handle(esp_http_client_event_t* evt) {
         static int recv = 0;
 
-            const control_message start = control_message::Start;
+        const control_message start = control_message::Start;
         switch (evt->event_id) {
             case HTTP_EVENT_ERROR:
                 ESP_LOGI(TAG, "HTTP_EVENT_ERROR");
@@ -73,7 +73,6 @@ namespace HTTPManager {
 
     esp_err_t execute_get(Transfer xfer) {
         const char* url = NULL;
-        ok_to_rmt_read = false;
         esp_err_t err = xfer.start(xfer.user_data, &url);
         if (err != ESP_OK) {
             ESP_LOGE(TAG, "Failed to start transfer: %s", esp_err_to_name(err));
@@ -97,11 +96,11 @@ namespace HTTPManager {
             if (xQueueReceive(http_control_queue, &cm, pdMS_TO_TICKS(500)) != pdTRUE) {
                 continue;
             }
-            if (cm == control_message::Start){
+            if (cm == control_message::Start) {
                 break;
             }
         }
-        if (cm != Start){
+        if (cm != Start) {
             ESP_LOGE(TAG, "Never connected to server, cant download file");
             return ESP_FAIL;
         }
@@ -183,7 +182,7 @@ namespace HTTPManager {
         perf_q = xQueueCreate(1, sizeof(int)); // to signal to http executor to start going
 
         transfer_request_queue = xQueueCreate(2, sizeof(Transfer)); // to request a OTA download
-        http_control_queue = xQueueCreate(2, sizeof(control_message)); 
+        http_control_queue = xQueueCreate(2, sizeof(control_message));
         http_data_buf = xStreamBufferCreate(4096, 3584); // transfers real data from network to its destination
         xTaskCreate(thread_fn, "http_loader", 4096, client, 0, &http_thread);
 
