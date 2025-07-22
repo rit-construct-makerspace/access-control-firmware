@@ -4,7 +4,7 @@
 #include <optional>
 #include <string>
 
-#define DEV_SERVER "calcarea.student.rit.edu"
+// #define DEV_SERVER "calcarea.student.rit.edu"
 
 enum class CardTagType {
     FOUR = 4,
