@@ -36,7 +36,8 @@ namespace Network {
         TryConnect,
 
         // From WS handler
-        ServerUp,
+        ServerUp, // websocket is open, time to auth
+        ServerAuthed, // after auth, make accepts us
         ServerDown,
 
         // From timer

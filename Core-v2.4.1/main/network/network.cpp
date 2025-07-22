@@ -254,9 +254,10 @@ namespace Network {
                     // else network watchdog will try it
                     break;
                 case InternalEventType::ServerUp:
-                    is_online_value = true;
                     WSACS::send_opening_message();
-                    vTaskDelay(20);
+                    break;
+                case InternalEventType::ServerAuthed:
+                    is_online_value = true;
                     consider_reset_reason(); // upload it
                     xTimerStart(watchdog_timer_handle, pdMS_TO_TICKS(100));
 

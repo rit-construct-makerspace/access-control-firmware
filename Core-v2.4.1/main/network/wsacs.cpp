@@ -26,6 +26,7 @@ SoundEffect::Effect network_song = {.length = 0, .notes = NULL};
 
 namespace WSACS {
     uint64_t seqnum = 0;
+    bool received_first_message = false;
 
     uint64_t get_next_seqnum() {
         uint64_t i = seqnum;
@@ -130,6 +131,10 @@ namespace WSACS {
     }
 
     void handle_incoming_ws_text(const char* data, size_t len) {
+        if (!received_first_message){
+            Network::send_internal_event(Network::InternalEventType::ServerAuthed);
+            received_first_message = true;
+        }
         if (len == 0) {
             ESP_LOGE(TAG, "ws message with 0 length. Protocol Error");
             return;
@@ -366,6 +371,7 @@ namespace WSACS {
 
     esp_err_t try_connect() {
         seqnum = 0;
+        received_first_message = false;
         if (esp_websocket_client_is_connected(ws_handle)) {
             // Already up
             return ESP_OK;
