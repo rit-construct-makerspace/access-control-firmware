@@ -108,8 +108,6 @@ void wifi_init_sta(void) {
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
     ESP_ERROR_CHECK(esp_wifi_start());
-
-    ESP_LOGI(TAG, "wifi thinking.");
 }
 
 const char* reset_reason_to_str(esp_reset_reason_t res) {

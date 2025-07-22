@@ -264,12 +264,12 @@ namespace WSACS {
             ESP_LOGE(TAG, "Programming error. No WS handle when sending opening message");
             return;
         }
-        cJSON* msg = cJSON_CreateObject();
+        cJSON* msg = cJSON_CreateObject();   
         cJSON_AddStringToObject(msg, "SerialNumber", Hardware::get_serial_number());
 #ifdef DEV_SERVER
         cJSON_AddStringToObject(
             msg, "Key",
-            "07edfd78f2a97d0d2c46c1cb4504fbe343a9bb6ec7f2a64b41d2c7d4f6fcca7f63f78220b70230e3f022e395fe0eb436");
+            "a51d88105fd1dd678c8789809184a0f19ba52eec2bf681adccd12f8fa6dbef936c1492d67d65084337b9f4b9522228fc");
 #else
         cJSON_AddStringToObject(msg, "Key", Storage::get_key().c_str());
 

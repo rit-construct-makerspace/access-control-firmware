@@ -176,7 +176,12 @@ namespace HTTPManager {
         client = esp_http_client_init(&config);
 
         esp_http_client_set_header(client, "shlug-sn", Hardware::get_serial_number());
+#ifdef DEV_SERVER
+        std::string key =
+            "a51d88105fd1dd678c8789809184a0f19ba52eec2bf681adccd12f8fa6dbef936c1492d67d65084337b9f4b9522228fc";
+#else
         std::string key = Storage::get_key();
+#endif
         esp_http_client_set_header(client, "shlug-key", key.c_str());
 
         perf_q = xQueueCreate(1, sizeof(int)); // to signal to http executor to start going
