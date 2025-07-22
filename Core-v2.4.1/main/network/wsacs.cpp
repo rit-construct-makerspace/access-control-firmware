@@ -21,7 +21,7 @@ static const char* TAG = "wsacs";
 
 esp_websocket_client_handle_t ws_handle = NULL;
 esp_websocket_client_config_t cfg{};
-
+static bool has_sent_opening_msg = false;
 SoundEffect::Effect network_song = {.length = 0, .notes = NULL};
 
 namespace WSACS {
@@ -198,18 +198,22 @@ namespace WSACS {
     // will add sequence number and to string it (ONLY CALL ON THREAD THAT OWNS WEBSOCKET)
     esp_err_t send_cjson(cJSON* obj) {
 
-        cJSON_AddNumberToObject(obj, "Seq", (double)get_next_seqnum());
+        if (has_sent_opening_msg) {
+            cJSON_AddNumberToObject(obj, "Seq", (double)get_next_seqnum());
+            char* text = cJSON_Print(obj);
+            size_t len = strnlen(text, 5000);
+            ESP_LOGI(TAG, "Sending message %s", text);
 
-        char* text = cJSON_Print(obj);
-        size_t len = strnlen(text, 5000);
-        ESP_LOGI(TAG, "Sending message %s", text);
-
-        int err = esp_websocket_client_send_text(ws_handle, text, len, pdMS_TO_TICKS(100));
-        if (err != len) {
-            ESP_LOGE(TAG, "Failed to send WS message: %d", err);
-            Network::send_internal_event(Network::InternalEventType::ServerDown);
-        }
+            int err = esp_websocket_client_send_text(ws_handle, text, len, pdMS_TO_TICKS(100));
+            if (err != len) {
+                ESP_LOGE(TAG, "Failed to send WS message: %d", err);
+                Network::send_internal_event(Network::InternalEventType::ServerDown);
+            }
         cJSON_free((void*)text);
+        } else {
+            ESP_LOGW(TAG, "Dropping message that would've been sent before opening (potential seqnum: %d)\n",
+                     (int)seqnum);
+        }
         return ESP_OK;
     }
 
@@ -260,6 +264,7 @@ namespace WSACS {
     }
 
     void send_opening_message() {
+        has_sent_opening_msg = true;
         if (ws_handle == NULL) {
             ESP_LOGE(TAG, "Programming error. No WS handle when sending opening message");
             return;
