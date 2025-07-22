@@ -202,7 +202,7 @@ namespace Network {
                 break;
 
             case NetworkEventType::StateChange:
-                if (event.state_change.from != event.state_change.to) {
+                if (event.state_change.from == event.state_change.to) {
                     break;
                 }
                 std::string str = "Changed state from ";
