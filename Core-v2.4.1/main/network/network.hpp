@@ -36,14 +36,17 @@ namespace Network {
         TryConnect,
 
         // From WS handler
-        ServerUp,
+        ServerUp, // websocket is open, time to auth
+        ServerAuthed, // after auth, make accepts us
         ServerDown,
 
         // From timer
         WSACSTimedOut,
 
         KeepAliveTime,
+        OtaUpdate,
 
+        PollRestart,
         // From weirdos in IO
         ExternalEvent,
     };
@@ -53,6 +56,8 @@ namespace Network {
             esp_ip4_addr_t netif_up_ip;
             IOState server_set_state;
             uint64_t server_set_time;
+            OTATag ota_tag;
+
             NetworkEvent external_event;
         };
     };

@@ -15,9 +15,9 @@
 #include <freertos/queue.h>
 #include <freertos/task.h>
 #include <freertos/timers.h>
+#include "ota.hpp"
 
 static const char* TAG = "wsacs";
-// #define DEV_SERVER "calcarea.student.rit.edu"
 
 esp_websocket_client_handle_t ws_handle = NULL;
 esp_websocket_client_config_t cfg{};
@@ -25,8 +25,10 @@ static bool has_sent_opening_msg = false;
 SoundEffect::Effect network_song = {.length = 0, .notes = NULL};
 
 namespace WSACS {
-    uint64_t seqnum = 0;
+    static bool received_first_message = false;
+    static bool already_got_state_from_server_for_this_boot = false;
 
+    uint64_t seqnum = 0;
     uint64_t get_next_seqnum() {
         uint64_t i = seqnum;
         seqnum++;
@@ -41,6 +43,8 @@ namespace WSACS {
             return;
         }
         ESP_LOGI(TAG, "Received request to %s", io_state_to_string(iostate.value()));
+        already_got_state_from_server_for_this_boot = true;
+
         IO::send_event({
             .type = IOEventType::NETWORK_COMMAND,
             .network_command =
@@ -51,6 +55,9 @@ namespace WSACS {
                     .for_user = CardTagID{},
                 },
         });
+        if (iostate.value() == IOState::RESTART){
+            Network::send_internal_event(Network::InternalEventType::PollRestart);
+        }
     }
 
     IOState outstanding_tostate = IOState::IDLE; // todo, should be sent by the server
@@ -124,6 +131,10 @@ namespace WSACS {
     }
 
     void handle_incoming_ws_text(const char* data, size_t len) {
+        if (!received_first_message){
+            Network::send_internal_event(Network::InternalEventType::ServerAuthed);
+            received_first_message = true;
+        }
         if (len == 0) {
             ESP_LOGE(TAG, "ws message with 0 length. Protocol Error");
             return;
@@ -170,6 +181,17 @@ namespace WSACS {
                 Buzzer::send_effect(network_song);
             }
         }
+        if (cJSON_HasObjectItem(obj, "OTATag")) {
+            cJSON* ota_ver = cJSON_GetObjectItem(obj, "OTATag");
+            if (ota_ver->type & cJSON_String) {
+                Network::InternalEvent ie{.type = Network::InternalEventType::OtaUpdate, .ota_tag = {}};
+                strncpy(ie.ota_tag.data(), cJSON_GetStringValue(ota_ver), sizeof(ie.ota_tag));
+                Network::send_internal_event(ie);
+            } else {
+                ESP_LOGW(TAG, "Invalid type for OTATag tag: %d", ota_ver->type);
+            }
+        }
+
         cJSON_Delete(obj);
     }
 
@@ -233,6 +255,9 @@ namespace WSACS {
 
         cJSON_AddStringToObject(msg, "State", io_state_to_string(last_valid_state));
         cJSON_AddNumberToObject(msg, "Temp", (double)temp);
+        if (OTA::next_app_version()!=""){
+            cJSON_AddStringToObject(msg, "FEVer", OTA::next_app_version().c_str());
+        }
         send_cjson(msg);
 
         cJSON_Delete(msg);
@@ -244,12 +269,12 @@ namespace WSACS {
             ESP_LOGE(TAG, "Programming error. No WS handle when sending opening message");
             return;
         }
-        cJSON* msg = cJSON_CreateObject();
+        cJSON* msg = cJSON_CreateObject();   
         cJSON_AddStringToObject(msg, "SerialNumber", Hardware::get_serial_number());
 #ifdef DEV_SERVER
         cJSON_AddStringToObject(
             msg, "Key",
-            "a916844975e547d6dcbaeb42af9a7fff311dafe04084c52ee26a4132e0fbeb64d3f10074f55274c507694b8947b7ddf0");
+            "a51d88105fd1dd678c8789809184a0f19ba52eec2bf681adccd12f8fa6dbef936c1492d67d65084337b9f4b9522228fc");
 #else
         cJSON_AddStringToObject(msg, "Key", Storage::get_key().c_str());
 
@@ -257,13 +282,21 @@ namespace WSACS {
         cJSON_AddStringToObject(msg, "HWType", "Core");
 
         cJSON_AddStringToObject(msg, "HWVersion", Hardware::get_edition_string());
-        cJSON_AddStringToObject(msg, "FWVersion", "testing");
+        cJSON_AddStringToObject(msg, "BEVer", OTA::running_app_version().c_str());
+        cJSON_AddStringToObject(msg, "FEVer", OTA::next_app_version().c_str());
+        cJSON_AddStringToObject(msg, "FWVersion", OTA::running_app_version().c_str());
+
         cJSON* req_arr = cJSON_AddArrayToObject(msg, "Request");
-        cJSON* req0 = cJSON_CreateString("State");
-        cJSON* req1 = cJSON_CreateString("Time");
+        cJSON* req0 = cJSON_CreateString("Time");
         cJSON_AddItemToArray(req_arr, req0);
-        cJSON_AddItemToArray(req_arr, req1);
-        cJSON_AddStringToObject(msg, "FWVersion", "testing");
+        if (!already_got_state_from_server_for_this_boot) {
+            // Only need to ask on first boot, if we just dropped a connection for a sec
+            // we shouldnt go back to idle or anything
+            cJSON* req1 = cJSON_CreateString("State");
+            cJSON_AddItemToArray(req_arr, req1);
+            cJSON* req2 = cJSON_CreateString("OTATag");
+            cJSON_AddItemToArray(req_arr, req2);
+        }
 
         send_cjson(msg);
         cJSON_Delete(msg);
@@ -344,7 +377,7 @@ namespace WSACS {
 
     esp_err_t try_connect() {
         seqnum = 0;
-        has_sent_opening_msg = false;
+        received_first_message = false;
         if (esp_websocket_client_is_connected(ws_handle)) {
             // Already up
             return ESP_OK;
@@ -371,7 +404,6 @@ namespace WSACS {
         cfg.cert_pem = Storage::get_server_certs();
         cfg.cert_len = 0; // use strlen
 #endif
-
         cfg.network_timeout_ms = 10000;
         cfg.reconnect_timeout_ms = 3000;
 

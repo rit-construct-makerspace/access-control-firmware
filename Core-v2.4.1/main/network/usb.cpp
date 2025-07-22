@@ -102,7 +102,7 @@ void usb_thread_fn(void*) {
     while (!rts_ever) {
         vTaskDelay(pdMS_TO_TICKS(100));
     }
-    ESP_LOGI(TAG, "dtr: %d, rts: %d", dtr, rts);
+
     while (1) {
         size_t read = xStreamBufferReceive(debug_stream_buffer, (void*)usb_buf, CONFIG_TINYUSB_CDC_RX_BUFSIZE,
                                            pdMS_TO_TICKS(100));

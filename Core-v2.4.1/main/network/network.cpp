@@ -2,11 +2,14 @@
 #include "esp_err.h"
 #include "esp_log.h"
 #include "esp_wifi.h"
+#include "io/IO.hpp"
+#include "io/Button.hpp"
+
+#include "ota.hpp"
 #include "sdkconfig.h"
 #include "storage.hpp"
 #include <string.h>
-
-#include "io/IO.hpp"
+#include "http_manager.hpp"
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
@@ -105,8 +108,6 @@ void wifi_init_sta(void) {
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
     ESP_ERROR_CHECK(esp_wifi_start());
-
-    ESP_LOGI(TAG, "wifi thinking.");
 }
 
 const char* reset_reason_to_str(esp_reset_reason_t res) {
@@ -251,9 +252,10 @@ namespace Network {
                     // else network watchdog will try it
                     break;
                 case InternalEventType::ServerUp:
-                    is_online_value = true;
                     WSACS::send_opening_message();
-                    vTaskDelay(20);
+                    break;
+                case InternalEventType::ServerAuthed:
+                    is_online_value = true;
                     consider_reset_reason(); // upload it
                     xTimerStart(watchdog_timer_handle, pdMS_TO_TICKS(100));
 
@@ -288,6 +290,26 @@ namespace Network {
                                             .type = NetworkCommandEventType::DENY,
                                         }});
                     }
+                    break;
+                case InternalEventType::OtaUpdate:
+                    ESP_LOGI(TAG, "Do OTA Update");
+                    OTA::begin(event.ota_tag);
+                    break;
+                case InternalEventType::PollRestart:
+                    for(int i = 0; i < 500; i++){
+                        if (!Button::is_held()){
+                            esp_restart();
+                        }
+                        vTaskDelay(pdMS_TO_TICKS(10));
+                    }
+                    // 5 seconds passed
+                    IO::send_event({
+                        .type = IOEventType::NETWORK_COMMAND,
+                        .network_command{
+                            .type = NetworkCommandEventType::COMMAND_STATE,
+                            .commanded_state = IOState::FAULT,
+                        },
+                    });
                     break;
             }
         }
@@ -338,7 +360,9 @@ namespace Network {
         }
 
         is_online_mutex = xSemaphoreCreateMutex();
+        OTA::init();
         WSACS::init();
+        HTTPManager::init();
 
         // Timeout when we ask the server things
         wsacs_timeout_timer_handle =
