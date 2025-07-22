@@ -284,6 +284,7 @@ namespace WSACS {
         cJSON_AddStringToObject(msg, "HWVersion", Hardware::get_edition_string());
         cJSON_AddStringToObject(msg, "BEVer", OTA::running_app_version().c_str());
         cJSON_AddStringToObject(msg, "FEVer", OTA::next_app_version().c_str());
+        cJSON_AddStringToObject(msg, "FWVersion", OTA::running_app_version().c_str());
 
         cJSON* req_arr = cJSON_AddArrayToObject(msg, "Request");
         cJSON* req0 = cJSON_CreateString("Time");
@@ -403,7 +404,6 @@ namespace WSACS {
         cfg.cert_pem = Storage::get_server_certs();
         cfg.cert_len = 0; // use strlen
 #endif
-
         cfg.network_timeout_ms = 10000;
         cfg.reconnect_timeout_ms = 3000;
 
