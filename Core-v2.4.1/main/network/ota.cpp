@@ -63,7 +63,7 @@ namespace OTA {
         ota_url += DEV_SERVER;
         ota_url += ":3000/api/files/ota/" + std::string(tag.data(), tag.size()) + "/Core.bin";
 #else
-        std::string ota_url = "https://";
+        std::string ota_url = "http://";
         ota_url += Storage::get_server();
         ota_url += "/api/files/ota/" + std::string(tag.data(), tag.size()) + "/Core.bin";
 #endif
