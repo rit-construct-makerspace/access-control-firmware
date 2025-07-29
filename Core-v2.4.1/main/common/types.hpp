@@ -129,7 +129,7 @@ struct IOEvent {
 
 using WifiSSID = std::array<uint8_t, 32>;
 using WifiPassword = std::array<uint8_t, 64>;
-using OTATag = std::array<char, 15>;
+using OTATag = std::array<char, 32>;
 
 enum class StateChangeReason {
     ButtonPress,
