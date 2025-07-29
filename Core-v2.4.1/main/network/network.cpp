@@ -2,14 +2,14 @@
 #include "esp_err.h"
 #include "esp_log.h"
 #include "esp_wifi.h"
-#include "io/IO.hpp"
 #include "io/Button.hpp"
+#include "io/IO.hpp"
 
+#include "http_manager.hpp"
 #include "ota.hpp"
 #include "sdkconfig.h"
 #include "storage.hpp"
 #include <string.h>
-#include "http_manager.hpp"
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
@@ -285,10 +285,15 @@ namespace Network {
                         // do it from storage
                         xTimerStop(wsacs_timeout_timer_handle, pdMS_TO_TICKS(100));
                         outstanding_auth = {};
-                        IO::send_event({.type = IOEventType::NETWORK_COMMAND,
-                                        .network_command = {
-                                            .type = NetworkCommandEventType::DENY,
-                                        }});
+                        IO::send_event({
+                            .type = IOEventType::NETWORK_COMMAND,
+                            .network_command =
+                                {
+                                    .type = NetworkCommandEventType::DENY,
+                                    .requested = true,
+                                    .for_user = {},
+                                },
+                        });
                     }
                     break;
                 case InternalEventType::OtaUpdate:
@@ -296,8 +301,8 @@ namespace Network {
                     OTA::begin(event.ota_tag);
                     break;
                 case InternalEventType::PollRestart:
-                    for(int i = 0; i < 500; i++){
-                        if (!Button::is_held()){
+                    for (int i = 0; i < 500; i++) {
+                        if (!Button::is_held()) {
                             esp_restart();
                         }
                         vTaskDelay(pdMS_TO_TICKS(10));
@@ -308,6 +313,8 @@ namespace Network {
                         .network_command{
                             .type = NetworkCommandEventType::COMMAND_STATE,
                             .commanded_state = IOState::FAULT,
+                            .requested = false,
+                            .for_user = {},
                         },
                     });
                     break;
@@ -327,6 +334,12 @@ namespace Network {
         return send_internal_event(InternalEvent{
             .type = InternalEventType::ExternalEvent,
             .external_event = ev,
+        });
+    }
+    bool send_message(char* msg) {
+        return send_event(NetworkEvent{
+            .type = NetworkEventType::Message,
+            .message = msg,
         });
     }
     bool send_event(NetworkEventType ev) {

@@ -26,6 +26,10 @@ namespace OTA {
     }
 
     void begin(OTATag tag) {
+        if (std::string{tag.data(), tag.size()} == active_version){
+            Network::send_message(new char []("Not OTA updating to equal version"));
+        }
+
         // pause time sensitive temperature
         ok_to_rmt_read = false;
         vTaskDelay(pdMS_TO_TICKS(1000));
@@ -65,6 +69,8 @@ namespace OTA {
 #endif
 
         std::string* ptr_url = new std::string(ota_url);
+        next_version = ">" + std::string{tag.data(), tag.size()};
+                    
 
         HTTPManager::Transfer xfer = {
             .type = HTTPManager::OperationType::GET,
@@ -83,30 +89,26 @@ namespace OTA {
                     return ESP_OK;
                 },
             .finish =
-                [](void* vp, esp_err_t err) {
+                [](void* vp_url, esp_err_t err) {
                     ok_to_rmt_read = true;
 
                     if (err != ESP_OK) {
+                        next_version = "!" + next_version; // will show !> version to show error on pending version
                         std::string smsg = std::string("Failed to download OTA update: ") + esp_err_to_name(err);
                         ESP_LOGE(TAG, "%s", smsg.c_str());
                         char* msg = new char[smsg.size()];
                         strcpy(msg, smsg.data());
-                        Network::send_event(NetworkEvent{
-                            .type = NetworkEventType::Message,
-                            .message = msg,
-                        });
+                        Network::send_message(msg);
                         return;
                     }
                     err = esp_ota_end(ota_handle);
                     if (err != ESP_OK) {
+                        next_version = "!" + next_version; // will show !> version to show error on pending version
                         std::string smsg = std::string("Failed to install OTA update: ") + esp_err_to_name(err);
                         ESP_LOGE(TAG, "%s", smsg.c_str());
                         char* msg = new char[smsg.size()];
                         strcpy(msg, smsg.data());
-                        Network::send_event(NetworkEvent{
-                            .type = NetworkEventType::Message,
-                            .message = msg,
-                        });
+                        Network::send_message(msg);
                         return;
                     }
                     const esp_partition_t* running_part = esp_ota_get_running_partition();
@@ -125,7 +127,7 @@ namespace OTA {
                     }
 
                     esp_ota_set_boot_partition(esp_ota_get_next_update_partition(NULL));
-                    delete (std::string*)(vp);
+                    delete (std::string*)(vp_url);
                 },
             .user_data = (void*)ptr_url,
         };

@@ -15,6 +15,8 @@ namespace Network {
     bool send_event(NetworkEvent ev);
     // shorthand for content less eventtype
     bool send_event(NetworkEventType ev);
+    // shorthand for sent event type message
+    bool send_message(char *);
     /**
      * @return true if we're connected to the server
      * @return false if not
