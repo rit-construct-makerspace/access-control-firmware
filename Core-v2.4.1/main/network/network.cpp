@@ -262,6 +262,7 @@ namespace Network {
                     wsacs_successive_failures = 0;
                     if (waiting_for_initial_connect) {
                         waiting_for_initial_connect = false;
+                        OTA::mark_valid();
                     }
                     break;
                 case InternalEventType::KeepAliveTime:

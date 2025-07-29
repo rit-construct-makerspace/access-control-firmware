@@ -137,6 +137,9 @@ namespace OTA {
         esp_err_t err = esp_ota_mark_app_valid_cancel_rollback();
         if (err != ESP_OK) {
             ESP_LOGW(TAG, "Unable to mark app as valid?: %s", esp_err_to_name(err));
+        } else {
+            ESP_LOGI(TAG, "Marked OTA as valid");
+            Network::send_message(new char[]("Successfully reached server. Marking OTA valid"));
         }
     }
 
