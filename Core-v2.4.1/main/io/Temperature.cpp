@@ -41,8 +41,6 @@ void sensor_detect() {
             ds18b20_config_t ds_cfg = {};
 
             if (ds18b20_new_device(&next_onewire_device, &ds_cfg, &s_ds18b20s[num_ds_detcted]) == ESP_OK) {
-                ESP_LOGI(TAG, "Found a DS18B20[%d], address: %016llX", onewire_device_found,
-                         next_onewire_device.address);
                 num_ds_detcted++;
             } else {
                 ESP_LOGI(TAG, "Found an unknown device, address: %016llX", next_onewire_device.address);
@@ -61,19 +59,22 @@ void sensor_read() {
     for (int i = 0; i < num_ds_detcted; i++) {
         ds18b20_trigger_temperature_conversion(s_ds18b20s[i]);
         ds18b20_get_temperature(s_ds18b20s[i], &temp_temp);
-        ESP_LOGI(TAG, "temperature read from DS18B20[%d]: %.2fC", i, temp_temp);
         s_temperature[i] = temp_temp;
     }
 }
-
+extern bool ok_to_rmt_read;
 void temp_thread_fn(void*) {
     while (true) {
+        if (!ok_to_rmt_read) {
+            vTaskDelay(pdMS_TO_TICKS(1000));
+            continue;
+        }
         sensor_read();
 
         float max = 1.0;
         float min = 100.0f;
 
-        for (int i = 0; i < MAX_ONEWIRE_DEVICES; i++) {
+        for (int i = 0; i < num_ds_detcted; i++) {
             if (s_temperature[i] > max) {
                 max = s_temperature[i];
             }

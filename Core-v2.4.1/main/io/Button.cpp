@@ -16,15 +16,18 @@ TaskHandle_t button_thread;
 
 static const char* TAG = "Button";
 
+bool Button::is_held() {
+    return !gpio_get_level(BUTTON_PIN);
+}
+
 void button_thread_fn(void*) {
     int iterations_held = 0;
     int restart_threshold = 60; // 3 seconds
-    int status;
     while (true) {
 
-        status = !gpio_get_level(BUTTON_PIN);
+        bool held = Button::is_held();
 
-        if (status == 1) {
+        if (held) {
             iterations_held++;
             if (iterations_held > restart_threshold) {
                 IO::send_event({

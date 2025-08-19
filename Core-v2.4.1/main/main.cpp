@@ -5,6 +5,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "io/IO.hpp"
+#include "network/http_manager.hpp"
 #include "network/network.hpp"
 #include "network/storage.hpp"
 #include "network/usb.hpp"

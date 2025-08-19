@@ -2,11 +2,14 @@
 #include "esp_err.h"
 #include "esp_log.h"
 #include "esp_wifi.h"
+#include "io/Button.hpp"
+#include "io/IO.hpp"
+
+#include "http_manager.hpp"
+#include "ota.hpp"
 #include "sdkconfig.h"
 #include "storage.hpp"
 #include <string.h>
-
-#include "io/IO.hpp"
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
@@ -26,12 +29,16 @@ static SemaphoreHandle_t is_online_mutex;
 static bool is_online_value = false;
 static int wifi_retry_count = 0;
 
-void set_is_online(bool new_online) {
+static bool waiting_for_initial_connect = true;
+static int wsacs_successive_failures = 0;
+
+void set_is_networked(bool new_online) {
     if (xSemaphoreTake(is_online_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
         is_online_value = new_online;
         xSemaphoreGive(is_online_mutex);
     }
 }
+
 bool Network::is_online() {
     if (is_online_mutex == NULL) {
         return false;
@@ -41,7 +48,6 @@ bool Network::is_online() {
         xSemaphoreGive(is_online_mutex);
         return is_o;
     }
-    ESP_LOGE(TAG, "Failed to get mutex for esp");
     return false;
 }
 
@@ -57,13 +63,13 @@ static void on_wifi_event(void* arg, esp_event_base_t event_base, int32_t event_
             ESP_LOGI(TAG, "retry to connect to the AP");
         } else {
             ESP_LOGE(TAG, "WiFi Failed....");
-            set_is_online(false);
+            set_is_networked(false);
         }
         ESP_LOGI(TAG, "connect to the AP fail");
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t* event = (ip_event_got_ip_t*)event_data;
         ESP_LOGI(TAG, "got ip: " IPSTR, IP2STR(&event->ip_info.ip));
-        set_is_online(true);
+        set_is_networked(true);
 
         Network::send_internal_event({
             .type = Network::InternalEventType::NetifUp,
@@ -102,8 +108,6 @@ void wifi_init_sta(void) {
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
     ESP_ERROR_CHECK(esp_wifi_start());
-
-    ESP_LOGI(TAG, "wifi thinking.");
 }
 
 const char* reset_reason_to_str(esp_reset_reason_t res) {
@@ -144,34 +148,51 @@ const char* reset_reason_to_str(esp_reset_reason_t res) {
     return "UNKNOWN";
 }
 
+bool already_sent_reset_reason = false;
 void consider_reset_reason() {
+    if (already_sent_reset_reason) {
+        return;
+    }
+    already_sent_reset_reason = true;
     esp_reset_reason_t reason = esp_reset_reason();
     ESP_LOGI(TAG, "Reset cause: %s", reset_reason_to_str(reason));
     if (reason == ESP_RST_PANIC) {
         ESP_LOGE(TAG, "Upload coredump");
     }
+    std::string str = "Restart Reason ";
+    str += reset_reason_to_str(reason);
+    char* msg = new char[str.size() + 1];
+    strcpy(msg, str.c_str());
+    if (!Network::send_event({.type = NetworkEventType::Message, .message = msg})) {
+        delete[] msg; // if couldnt send to thread, it gets dropped
+    }
 }
 
-static const AuthRequest invalid_auth = {.requester = CardTagID{}, .to_state = IOState::RESTART};
-static AuthRequest outstanding_auth = invalid_auth;
-static TimerHandle_t auth_timer_handle;
+static std::optional<AuthRequest> outstanding_auth = {};
+
+static TimerHandle_t wsacs_timeout_timer_handle = NULL;
+static TimerHandle_t watchdog_timer_handle = NULL;
+static TimerHandle_t keep_alive_timer = NULL;
 
 namespace Network {
     // TODO make this think about things harder and do stuff if we're falling offline
     void network_watchdog_feed() {
+        xTimerReset(watchdog_timer_handle, pdMS_TO_TICKS(100));
+    }
+    void network_watchdog_expiry_fn(TimerHandle_t) {
+        send_internal_event(InternalEventType::ServerDown);
     }
 
     void handle_external_event(NetworkEvent event) {
         switch (event.type) {
             case NetworkEventType::AuthRequest:
                 outstanding_auth = event.auth_request;
-                // do fancier things in case this fails (ask storage)
-                xTimerStart(auth_timer_handle, pdMS_TO_TICKS(100));
-                WSACS::send_event(WSACS::Event::auth_req(event.auth_request));
+                xTimerStart(wsacs_timeout_timer_handle, pdMS_TO_TICKS(100));
+                WSACS::send_auth_request(event.auth_request);
                 break;
 
             case NetworkEventType::Message:
-                WSACS::send_event(WSACS::Event::message(event.message));
+                WSACS::send_message(event.message);
                 break;
 
             case NetworkEventType::PleaseRestart:
@@ -181,11 +202,22 @@ namespace Network {
                 break;
 
             case NetworkEventType::StateChange:
-                ESP_LOGI(TAG, "need to state change report to wsacs (maybe)");
+                if (event.state_change.from == event.state_change.to) {
+                    break;
+                }
+                std::string str = "Changed state from ";
+                str += io_state_to_string(event.state_change.from);
+                str += " -> ";
+                str += io_state_to_string(event.state_change.to);
+                char* msg = new char[str.size() + 1];
+                strcpy(msg, str.c_str());
+                WSACS::send_message(msg);
                 break;
         }
     }
-
+    void mark_wsacs_request_complete() {
+        outstanding_auth = {};
+    }
     void network_thread_fn(void* p) {
         wifi_init_sta();
 
@@ -194,72 +226,125 @@ namespace Network {
             if (xQueueReceive(network_event_queue, (void*)&event, portMAX_DELAY) == pdFALSE) {
                 continue;
             }
+            switch (event.type) {
+                case InternalEventType::ExternalEvent:
+                    handle_external_event(event.external_event);
+                    break;
+                case InternalEventType::NetifUp:
+                    send_internal_event(InternalEventType::TryConnect);
+                    break;
+                case InternalEventType::NetifDown:
+                    ESP_LOGW(TAG, "That sucks, netif down");
+                    break;
+                case InternalEventType::TryConnect:
+                    WSACS::try_connect();
+                    break;
+                case InternalEventType::ServerDown:
+                    is_online_value = false;
+                    wsacs_successive_failures += 1;
+                    // Quick falloff, might be able to recover
+                    if (wsacs_successive_failures < 10) {
+                        send_internal_event(InternalEventType::TryConnect);
+                    } else {
+                        send_internal_event(InternalEventType::TryConnect);
+                        ESP_LOGI(TAG, "still cant connect to srever attmpet: %d", wsacs_successive_failures);
+                    }
+                    // else network watchdog will try it
+                    break;
+                case InternalEventType::ServerUp:
+                    WSACS::send_opening_message();
+                    break;
+                case InternalEventType::ServerAuthed:
+                    is_online_value = true;
+                    consider_reset_reason(); // upload it
+                    xTimerStart(watchdog_timer_handle, pdMS_TO_TICKS(100));
 
-            if (event.type == InternalEventType::ExternalEvent) {
-                handle_external_event(event.external_event);
-            } else if (event.type == InternalEventType::NetifUp) {
-                ESP_LOGD(TAG, "Wifi up, tell wsacs to connect");
-                WSACS::send_event({WSACS::EventType::TryConnect});
-            } else if (event.type == InternalEventType::ServerSetState) {
-                IO::send_event({
-                    .type = IOEventType::NETWORK_COMMAND,
-                    .network_command =
-                        {
+                    wsacs_successive_failures = 0;
+                    if (waiting_for_initial_connect) {
+                        waiting_for_initial_connect = false;
+                        OTA::mark_valid();
+                    }
+                    break;
+                case InternalEventType::KeepAliveTime:
+                    if (is_online_value) {
+                        WSACS::send_status_message();
+                    }
+                    break;
+                case InternalEventType::WSACSTimedOut:
+                    if (waiting_for_initial_connect) {
+                        waiting_for_initial_connect = false;
+                        is_online_value = false;
+                        // TODO LOAD FROM FLASH
+                        IO::send_event({.type = IOEventType::NETWORK_COMMAND,
+                                        .network_command = {
+                                            .type = NetworkCommandEventType::COMMAND_STATE,
+                                            .commanded_state = IOState::IDLE,
+                                            .requested = false,
+                                            .for_user = {},
+                                        }});
+                    } else if (outstanding_auth.has_value()) {
+                        // do it from storage
+                        xTimerStop(wsacs_timeout_timer_handle, pdMS_TO_TICKS(100));
+                        outstanding_auth = {};
+                        IO::send_event({
+                            .type = IOEventType::NETWORK_COMMAND,
+                            .network_command =
+                                {
+                                    .type = NetworkCommandEventType::DENY,
+                                    .requested = true,
+                                    .for_user = {},
+                                },
+                        });
+                    }
+                    break;
+                case InternalEventType::OtaUpdate:
+                    ESP_LOGI(TAG, "Do OTA Update");
+                    OTA::begin(event.ota_tag);
+                    break;
+                case InternalEventType::PollRestart:
+                    for (int i = 0; i < 500; i++) {
+                        if (!Button::is_held()) {
+                            esp_restart();
+                        }
+                        vTaskDelay(pdMS_TO_TICKS(10));
+                    }
+                    // 5 seconds passed
+                    IO::send_event({
+                        .type = IOEventType::NETWORK_COMMAND,
+                        .network_command{
                             .type = NetworkCommandEventType::COMMAND_STATE,
-                            .commanded_state = event.server_set_state,
+                            .commanded_state = IOState::FAULT,
                             .requested = false,
-                            .for_user = CardTagID{},
+                            .for_user = {},
                         },
-                });
-            } else if (event.type == InternalEventType::WSACSTimedOut) {
-                IO::send_event({
-                    .type = IOEventType::NETWORK_COMMAND,
-                    .network_command = {.type = NetworkCommandEventType::DENY,
-                                        .commanded_state = event.wsacs_auth_response.to_state,
-                                        .requested = true,
-                                        .for_user = event.wsacs_auth_response.user},
-                });
-
-            } else if (event.type == InternalEventType::WSACSAuthResponse) {
-                xTimerStop(auth_timer_handle, pdMS_TO_TICKS(100));
-                if (event.wsacs_auth_response.verified) {
-                    IO::send_event({
-                        .type = IOEventType::NETWORK_COMMAND,
-                        .network_command =
-                            {
-                                .type = NetworkCommandEventType::COMMAND_STATE,
-                                .commanded_state = event.wsacs_auth_response.to_state,
-                                .requested = true,
-                                .for_user = event.wsacs_auth_response.user,
-                            },
                     });
-                } else {
-                    IO::send_event({
-                        .type = IOEventType::NETWORK_COMMAND,
-                        .network_command =
-                            {
-                                .type = NetworkCommandEventType::DENY,
-                                .commanded_state = event.wsacs_auth_response.to_state,
-                                .requested = true,
-                                .for_user = event.wsacs_auth_response.user,
-                            },
-                    });
-                }
+                    break;
             }
         }
         return;
     }
 
-    int send_internal_event(InternalEvent ev) {
-        xQueueSend(network_event_queue, &ev, pdMS_TO_TICKS(100));
-        return 0;
+    bool send_internal_event(InternalEvent ev) {
+        return xQueueSend(network_event_queue, &ev, pdMS_TO_TICKS(100)) == pdTRUE;
+    }
+    bool send_internal_event(InternalEventType evtyp) {
+        return send_internal_event({.type = evtyp, .netif_up_ip = {0}});
     }
 
-    int send_event(NetworkEvent ev) {
+    bool send_event(NetworkEvent ev) {
         return send_internal_event(InternalEvent{
             .type = InternalEventType::ExternalEvent,
             .external_event = ev,
         });
+    }
+    bool send_message(char* msg) {
+        return send_event(NetworkEvent{
+            .type = NetworkEventType::Message,
+            .message = msg,
+        });
+    }
+    bool send_event(NetworkEventType ev) {
+        return send_event({.type = ev, ._ = 0});
     }
 
     int init() {
@@ -271,15 +356,43 @@ namespace Network {
 
         network_event_queue = xQueueCreate(5, sizeof(Network::InternalEvent));
 
-        WSACS::init();
-        is_online_mutex = xSemaphoreCreateMutex();
+        auto keepalive_func = [](TimerHandle_t) {
+            Network::send_internal_event({Network::InternalEventType::KeepAliveTime});
+        };
 
-        auth_timer_handle = xTimerCreate("wsacs_timeout", pdMS_TO_TICKS(5 * 1000), pdFALSE, NULL, [](TimerHandle_t) {
-            send_internal_event({.type = InternalEventType::WSACSTimedOut});
-        });
+        keep_alive_timer = xTimerCreate("wsacs keepalive", pdMS_TO_TICKS(10 * 1000), true, NULL, keepalive_func);
+        if (xTimerStart(keep_alive_timer, pdMS_TO_TICKS(100)) == pdFAIL) {
+            ESP_LOGE(TAG, "Couldnt start keepalive timer");
+            // todo crash
+            return -1;
+        }
+
+        if (keep_alive_timer == NULL) {
+            ESP_LOGE(TAG, "Fail and die timer edition");
+            // todo crash
+            return -1;
+        }
+
+        is_online_mutex = xSemaphoreCreateMutex();
+        OTA::init();
+        WSACS::init();
+        HTTPManager::init();
+
+        // Timeout when we ask the server things
+        wsacs_timeout_timer_handle =
+            xTimerCreate("wsacs_timeout", pdMS_TO_TICKS(3 * 1000), pdTRUE, NULL,
+                         [](TimerHandle_t) { send_internal_event(InternalEventType::WSACSTimedOut); });
+        xTimerStart(wsacs_timeout_timer_handle, pdMS_TO_TICKS(100));
+
+        // timeout for ping ponging
+        watchdog_timer_handle =
+            xTimerCreate("watchdog_timeout", pdMS_TO_TICKS(30 * 1000), pdFALSE, NULL, network_watchdog_expiry_fn);
+
         xTaskCreate(network_thread_fn, "network", CONFIG_NETWORK_TASK_STACK_SIZE, nullptr, 0, &network_task);
 
-        consider_reset_reason();
+        esp_reset_reason_t reason = esp_reset_reason();
+        ESP_LOGI(TAG, "Reset cause: %s", reset_reason_to_str(reason));
+
         return 0;
     }
 
