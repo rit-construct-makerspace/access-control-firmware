@@ -138,6 +138,8 @@ void MachineState(void *pvParameters) {
       Internal.println("S 0");
       Internal.flush();
       //Tell the server we are shutting down, and close the socket.
+      //1.4.1: Turned off nightly message.
+      /*
       while(ReadyToSend){
         //Wait for any current message to go
         delay(10);
@@ -147,6 +149,7 @@ void MachineState(void *pvParameters) {
       while(ReadyToSend){
         delay(10);
       }
+      */
       DisconnectWebsocket = 1;
       while(DisconnectWebsocket){
         delay(10);
@@ -166,6 +169,9 @@ void MachineState(void *pvParameters) {
       ResetLED = 0;
     } else{
       ResetLED = 1;
+      //ALSO: Turn off identify tone if playing. Makes it easy to ID
+      //TODO: This doesn't inform the server so we get a desync between what the server thinks and actuality.
+      Identify = 0;
     }
     if(millis64() >= ButtonTime){
       //It has been 3 seconds, restart.
