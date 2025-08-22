@@ -386,12 +386,12 @@ void setup(){
   }
 
   //Set the inital state
-  //If the ESP32 performed a controlled restart, such as to install an OTA update or try to fix a wireless issue, 
   Serial.print(F("Reset Reason: "));
   print_reset_reason(rtc_get_reset_reason(0));
   if(rtc_get_reset_reason(0) != POWERON_RESET){
     //Reset for a reason other than power on reset.
-    State = settings.getString("LastState");
+    //1.4.2: Machine always goes to "Startup", and waits for the server to set an initial state.
+    //State = settings.getString("LastState");
     if(State == "" || State == NULL || State == "Restart"){
       //There wasn't a state to retrieve?
       State = "Startup";
