@@ -308,7 +308,10 @@ void SocketManager(void *pvParameters) {
     //0: We just (re)connected
     if(SendWSReconnect && !WSSend){
       wsresp["Key"] = Key;
-      wsresp["State"] = State;
+      if(!State.equals("Restart") && !State.equals("Startup")){
+        //We only include the state if it is not restart or startup.
+        wsresp["State"] = State;
+      }
       wsresp["FWVersion"] = Version;
       wsresp["HWVersion"] = Hardware;
       wsresp["HWType"] = "ACS Core";
@@ -357,7 +360,10 @@ void SocketManager(void *pvParameters) {
     
     //3: The state changed
     if(ChangeStatus && !WSSend){
-      wsresp["State"] = State;
+      if(!State.equals("Restart") && !State.equals("Startup")){
+        //We only include the state if it is not restart or startup.
+        wsresp["State"] = State;
+      }
       wsresp["UID"] = UID;
       wsresp["StateSource"] = StateSource;
       WSSend = 1;
@@ -365,7 +371,10 @@ void SocketManager(void *pvParameters) {
     }
     //4: It is time for a regular report
     if(RegularStatus && !WSSend){
-      wsresp["State"] = State;
+      if(!State.equals("Restart") && !State.equals("Startup")){
+        //We only include the state if it is not restart or startup.
+        wsresp["State"] = State;
+      }
       wsresp["UID"] = UID;
       if(rtc.getYear() < 2016){
         //Time is not correct
@@ -525,6 +534,10 @@ void StartWebsocket(){
   //This function starts the websocket
   //socket.beginSslWithBundle(Server.c_str(), 443, "/api/ws", NULL, 0, "");
   socket.begin(Server.c_str(), 80, "/api/ws");
+  if(DebugMode){
+    Serial.print(F("Connecting to websocket URL: "));
+    Serial.println(Server);
+  }
   socket.onEvent(webSocketEvent);
   socket.setReconnectInterval(5000); //Attempt to reconnect every 5 seconds if we lose connection
 }

@@ -27,7 +27,7 @@ DebugLED: Turns on/off the debugLED on the frontend
 void InternalWrite(void *pvParameters) {
   xTaskCreate(PollTimer, "PollTimer", 1024, NULL, 2, NULL);
   while(1){
-    //Check every 30mS
+    //Check every 3mS
     vTaskDelay(3 / portTICK_PERIOD_MS);
     Internal.flush();
     //First, check for any of the flags indicating there's a new message to send;

@@ -27,7 +27,7 @@ USBConfig: Allows programatic changing of settings over USB
 */
 
 //Settings
-#define Version "1.4.1"
+#define Version "1.4.5"
 #define Hardware "2.3.2-LE"
 #define MAX_DEVICES 5 //How many possible temperature sensors to scan for
 #define OTA_URL "https://raw.githubusercontent.com/rit-construct-makerspace/access-control-firmware/refs/heads/main/otadirectory.json"
@@ -62,8 +62,8 @@ int Frequency;                           //How often an update should be sent
 bool Button;                             //state of the frontend button.
 bool Switch1;                            //State of card detect switch 1
 bool Switch2;                            //state of card detect switch 2
-bool Key1;                               //state of keyswitch input 1
-bool Key2;                               //state of keyswitch input 2
+bool Key1 = 1;                           //state of keyswitch input 1
+bool Key2 = 1;                           //state of keyswitch input 2
 String UID;                              //UID of the card detected in the system
 bool CardPresent;                        //1 if a card has been detected and successfuly read.
 bool ReadFailed;                         //set to 1 if a card was not read properly.
@@ -86,7 +86,7 @@ uint64_t SessionStart;                   //Time in millis when a session started
 uint64_t SessionTime;                    //How long a user has been using a machine for
 uint64_t LastSessionTime;                //Duration of the last session.
 bool LogoffSent;                         //Flag to indicate that the system has sent the message to end a session, so data can be cleared.
-String State = "Lockout";                //Plaintext indication of the state of the system for status reports. Idle, Unlocked, AlwayOn, or Lockout.
+String State = "Startup";                //Plaintext indication of the state of the system for status reports. Idle, Unlocked, AlwayOn, or Lockout.
 bool CardVerified;                       //Flag set to 1 once the results of the ID check are complete and CardStatus is valid.
 bool CardStatus;                         //Set to 1 if a card is authorized to use the machine, 0 if not,
 bool InternalVerified;                   //Set to 1 when the card has been verified against the internal list, and InternalStatus is valid.
@@ -145,6 +145,7 @@ bool SecondMessageFail;                  //Tracks how many outgoing messages hav
 bool NightlyFlag;                        //Flag indicates it is past 4am and time to restart next time in an OK state.
 uint64_t NextNetworkCheck;               //Time when we next check the network for connectivity
 bool SecondNetworkFail;                  //Bool to check if we have had network issues in the past.
+bool FirstPoll = 0;                      //Tracks if the first poll from the frontend has happened yet.
 
 //Libraries:
 #include <OneWireESP32.h>         //Version 2.0.2 | Source: https://github.com/junkfix/esp32-ds18b20

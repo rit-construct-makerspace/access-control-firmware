@@ -15,8 +15,12 @@ ReadFailed: set to 1 if a card was not read properly repeatedly, indicating it i
 void MachineState(void *pvParameters) {
   uint64_t LastKeyState = 0;
   uint64_t ButtonTime = millis64() + 5000;
-  bool OldKey1 = 0;
-  bool OldKey2 = 0;
+  while(Key1 && Key2){
+    //Both keys set to 1 never can actually happen. This means we haven't read new states from the frontend yet.
+    delay(10);
+  }
+  bool OldKey1 = Key1;
+  bool OldKey2 = Key2;
   String OldState = State; //Stores the last state of the system.
   while(1){
     //Only needs to run every 2 milliseconds

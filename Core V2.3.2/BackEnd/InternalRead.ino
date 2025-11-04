@@ -104,6 +104,7 @@ void InternalRead(void *pvParameters){
           xSemaphoreGive(DebugMutex);
         }
       }
+      FirstPoll = 1; //Let other tasks know we are talking to the frontend
     }
   }
 }
