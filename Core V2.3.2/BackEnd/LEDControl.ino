@@ -63,19 +63,20 @@ void LEDControl(void *pvParameters) {
       //Animation 6: Solid White
       LEDAnimation = 6;
     }
-    if(State.equals("Unlocked") || State.equals("AlwaysOn")){
+    if(State.equals("Unlocked") || State.equals("AlwaysOn") || (GamerStep == 1)){
       //Animation 2: Solid Green
       LEDAnimation = 2;
     }
-    if((LEDAnimation == 2) && NoNetwork){
+    if((LEDAnimation == 2) && NoNetwork && !GamerMode){
       //Animation 5: Cycle green/white
+      //Check we aren't in gamer mode to cause issues with startup.
       LEDAnimation = 5;
     }
-    if((CardVerified && !CardStatus && CardPresent) || (State.equals("Lockout")) || (ReadFailed && CardUnread)){
+    if((CardVerified && !CardStatus && CardPresent) || (State.equals("Lockout")) || (ReadFailed && CardUnread) || (GamerStep == 0)){
       //Animation 1: Solid Red
       LEDAnimation = 1;
     }
-    if(State.equals("Startup")){
+    if((!GamerMode && State.equals("Startup")) || (GamerStep == 2)){
       //Animation 7: Solid Blue
       LEDAnimation = 7;
     }

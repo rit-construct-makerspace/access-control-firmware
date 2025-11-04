@@ -14,7 +14,6 @@ ReadFailed: set to 1 if a card was not read properly repeatedly, indicating it i
 
 void MachineState(void *pvParameters) {
   uint64_t LastKeyState = 0;
-  uint64_t ButtonTime = millis64() + 5000;
   while(Key1 && Key2){
     //Both keys set to 1 never can actually happen. This means we haven't read new states from the frontend yet.
     delay(10);
@@ -166,32 +165,5 @@ void MachineState(void *pvParameters) {
       ESP.restart();
     }
 
-    //Check the button on the front panel. If it has been held down for more than 5 seconds, restart. 
-    //Constantly set the reset time 5 seconds in the future when the button isn't pressed.
-    if(Button){
-      ButtonTime = millis64() + 3000;
-      ResetLED = 0;
-    } else{
-      ResetLED = 1;
-      //ALSO: Turn off identify tone if playing. Makes it easy to ID
-      //TODO: This doesn't inform the server so we get a desync between what the server thinks and actuality.
-      Identify = 0;
-    }
-    if(millis64() >= ButtonTime){
-      //It has been 3 seconds, restart.
-      xSemaphoreTake(StateMutex, portMAX_DELAY);
-      settings.putString("LastState", State);
-      delay(10);
-      State = "Restart";
-      //Turn off the internal write task so that it doesn't overwrite the restart led color.
-      vTaskSuspend(xHandle);
-      delay(100);
-      Serial.println(F("RESTARTING. Source: Button."));
-      settings.putString("ResetReason","Restart-Button");
-      Internal.println("L 255,0,0");
-      Internal.println("S 0");
-      Internal.flush();
-      ESP.restart();
-    }
   }
 }

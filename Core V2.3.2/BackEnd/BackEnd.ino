@@ -27,7 +27,7 @@ USBConfig: Allows programatic changing of settings over USB
 */
 
 //Settings
-#define Version "1.4.5"
+#define Version "1.4.6"
 #define Hardware "2.3.2-LE"
 #define MAX_DEVICES 5 //How many possible temperature sensors to scan for
 #define OTA_URL "https://raw.githubusercontent.com/rit-construct-makerspace/access-control-firmware/refs/heads/main/otadirectory.json"
@@ -146,6 +146,9 @@ bool NightlyFlag;                        //Flag indicates it is past 4am and tim
 uint64_t NextNetworkCheck;               //Time when we next check the network for connectivity
 bool SecondNetworkFail;                  //Bool to check if we have had network issues in the past.
 bool FirstPoll = 0;                      //Tracks if the first poll from the frontend has happened yet.
+bool GamerMode = 1;                      //While 1, cycle through the R-G-B startup lighting sequence.
+byte GamerStep = 0;                      //Stores current step of the GamerMode startup lighting sequence
+unsigned long GamerModeTime = 0;         //Stores the next time we should increment the GamerMode lighting animation
 
 //Libraries:
 #include <OneWireESP32.h>         //Version 2.0.2 | Source: https://github.com/junkfix/esp32-ds18b20
@@ -203,7 +206,6 @@ JsonDocument usbjson;
 HTTPClient http;
 ESP32OTAPull ota;
 TaskHandle_t xHandle;
-TaskHandle_t xHandle2;
 ESP32Time rtc;
 
 WebSocketsClient socket;
@@ -234,8 +236,24 @@ void setup(){
 
   Internal.begin(115200, SERIAL_8N1, TOESP, TOTINY);
 
-  //Flash the lights on the front to indicate we are in startup
-  xTaskCreate(GamerMode, "GamerMode", 2048, NULL, 5, &xHandle2);
+  if(TXINTERRUPT){
+    Serial.begin(115200, SERIAL_8N1, 44, DB9INT);
+  } else{
+    Serial.begin(115200);
+  }
+  Serial.println(F("STARTUP"));
+
+  //Start LED Control, Internal Write, Internal Read, and Reset Button Monitor
+  //This allows the reset button to work on startup.
+  xTaskCreate(LEDControl, "LEDControl", 1024, NULL, 5, NULL);
+  Serial.println(F("LED Control Started."));
+  //InternalWrite has a handle to allow it to be suspended before a restart (disables lighting changes)
+  xTaskCreate(InternalWrite, "InternalWrite", 2048, NULL, 5, &xHandle);
+  Serial.println(F("Internal Write Started."));
+  xTaskCreate(InternalRead, "InternalRead", 1500, NULL, 5, NULL);
+  Serial.println(F("Internal Read Started."));
+  xTaskCreate(ResetButton, "ResetButton", 2048, NULL, 5, NULL);
+  Serial.println(F("Reset Button Started."));
 
   delay(5000); 
 
@@ -244,13 +262,6 @@ void setup(){
     Serial.println(F("USB Settings Input Started."));
     xTaskCreate(USBConfig, "USBConfig", 4096, NULL, 2, NULL);
   #endif
-
-  if(TXINTERRUPT){
-    Serial.begin(115200, SERIAL_8N1, 44, DB9INT);
-  } else{
-    Serial.begin(115200);
-  }
-  Serial.println(F("STARTUP"));
 
   //First, load all settings from memory
   settings.begin("settings", false);
@@ -341,26 +352,17 @@ void setup(){
   settings.putString("ResetReason","Unknown");
 
   //Check to make sure we can connect to the NFC reader and it isn't damaged.
+  retry : 
   pinMode(NFCPWR, OUTPUT);
   pinMode(NFCRST, OUTPUT);
   digitalWrite(NFCPWR, HIGH);
   digitalWrite(NFCRST, HIGH);
   delay(100);
-  bool StartupFault;
-  retry : 
   nfc.begin();
   uint32_t versiondata = nfc.getFirmwareVersion();
   if (!versiondata) {
     Serial.println("Didn't find PN532 board. Trying again...");
     delay(250);
-    vTaskDelete(xHandle2); //Delete the Gamer mode lights
-    if(StartupFault){
-      Internal.println(F("L 255,0,0"));
-    } else{
-      Internal.println(F("L 0,0,0"));
-    }
-    Internal.flush();
-    StartupFault =! StartupFault;
     goto retry;
   }
   digitalWrite(NFCRST, LOW);
@@ -369,9 +371,11 @@ void setup(){
     Serial.println(F("NFC Setup")); 
   }
   //Load up the SPIFFS file of verified IDs, format/create if it is not there.
+  retrySPIFFS:
   if(!SPIFFS.begin(1)){ //Format SPIFFS if fails
     Serial.println("SPIFFS Mount Failed");
-    while(1);
+    delay(250);
+    goto retrySPIFFS;
   }
   if(SPIFFS.exists("/validids.txt")){
     Serial.println(F("Valid ID List already exists."));
@@ -435,18 +439,14 @@ void setup(){
   }
 
   //Disable the startup lights
-  vTaskDelete(xHandle2);
+  GamerMode = 0;
 
   //Lastly, create all tasks and begin operating normally.
   vTaskSuspendAll();
   xTaskCreate(RegularReport, "RegularReport", 1024, NULL, 6, NULL); 
   xTaskCreate(Temperature, "Temperature", 2048, NULL, 5, NULL);
   xTaskCreate(USBConfig, "USBConfig", 2048, NULL, 5, NULL);
-  xTaskCreate(InternalRead, "InternalRead", 1500, NULL, 5, NULL);
   xTaskCreate(ReadCard, "ReadCard", 2048, NULL, 5, NULL);
-  //InternalWrite has a handle to allow it to be suspended before a restart (disables lighting changes)
-  xTaskCreate(InternalWrite, "InternalWrite", 2048, NULL, 5, &xHandle);
-  xTaskCreate(LEDControl, "LEDControl", 1024, NULL, 5, NULL);
   xTaskCreate(BuzzerControl, "BuzzerControl", 1024, NULL, 5, NULL);
   xTaskCreate(MachineState, "MachineState", 2048, NULL, 5, NULL);
   xTaskCreate(SocketManager, "SocketManager", 4096, NULL, 3, NULL);
@@ -602,18 +602,6 @@ void ReadyMessage(String ToSend){
   Message = ToSend;
   ReadyToSend = 1;
   xSemaphoreGive(MessageMutex);
-}
-
-void GamerMode(void *pvParameters){
-  //This task simply blinks the front LED red-green-blue, aka gamer mode, to indicate startup in progress.
-  while(1){
-    Internal.println("L 255,0,0");
-    delay(LEDFlashTime);
-    Internal.println("L 0,255,0");
-    delay(LEDFlashTime);
-    Internal.println("L 0,0,255");
-    delay(LEDFlashTime);
-  }
 }
 
 void RegularReport(void *pvParameters){
