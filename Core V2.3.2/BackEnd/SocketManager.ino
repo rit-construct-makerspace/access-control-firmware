@@ -533,6 +533,16 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
 void StartWebsocket(){
   //This function starts the websocket
   //socket.beginSslWithBundle(Server.c_str(), 443, "/api/ws", NULL, 0, "");
+  if(ConnectRandomMax > 0){
+    long WebsocketDelay = random(1, ConnectRandomMax);
+    if(DebugMode){
+      Serial.print(F("Delaying connect to server by "));
+      Serial.print(WebsocketDelay);
+      Serial.println(F(" milliseconds to prevent overburdening server."));
+    }
+    delay(WebsocketDelay);
+  }
+
   socket.begin(Server.c_str(), 80, "/api/ws");
   if(DebugMode){
     Serial.print(F("Connecting to websocket URL: "));
