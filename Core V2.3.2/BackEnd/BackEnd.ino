@@ -45,6 +45,7 @@ USBConfig: Allows programatic changing of settings over USB
 #define TXINTERRUPT 0 //Set to 1 to route UART0 TX to the DB9 interrupt pin, to allow external loggers to capture crash data.
 //#define WebsocketUART //Uncomment to get messages from uart as if it is a websocket for testing. Also disables USB config to prevent issues there.
 #define DebugMode 1 //Set to 1 for verbose output via UART, /!\ WARNING /!\ can dump sensitive information
+#define ConnectRandomMax 3000 //Up to how many milliseconds to delay on connect/reconnect to the server, to prevent DDOSing it. Set to 0 to disable.
 
 //Global Variables:
 bool TemperatureUpdate;                  //1 when writing new information, to indicate other devices shouldn't read temperature-related info
@@ -481,7 +482,8 @@ void loop(){
             SocketRetry = SocketRetry + 1;
             //Set the time to retry
             //Try 200ms later on the first fail, 400ms next, etc.
-            NextSocketTry = millis64() + (SocketRetry * 400);
+            //Randomize by up to 50mS to prevent overburden 
+            NextSocketTry = millis64() + (SocketRetry * 400) + random(0, 50);
             if(SocketRetry >= 15){
               //We've failed way too many times
               NoNetwork = 1;
