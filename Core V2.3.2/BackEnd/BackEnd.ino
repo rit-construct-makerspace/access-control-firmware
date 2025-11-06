@@ -150,6 +150,9 @@ bool FirstPoll = 0;                      //Tracks if the first poll from the fro
 bool GamerMode = 1;                      //While 1, cycle through the R-G-B startup lighting sequence.
 byte GamerStep = 0;                      //Stores current step of the GamerMode startup lighting sequence
 unsigned long GamerModeTime = 0;         //Stores the next time we should increment the GamerMode lighting animation
+String StartupIssue = "None";            //Stores any issues that happen during startup for future logging and reporting. 
+bool TriggerRestart = 0;                 //Set to 1 to execute a restart.
+bool StartupFailed = 0;                  //1 if something went wrong on startup
 
 //Libraries:
 #include <OneWireESP32.h>         //Version 2.0.2 | Source: https://github.com/junkfix/esp32-ds18b20
@@ -236,6 +239,10 @@ void setup(){
   MessageMutex = xSemaphoreCreateMutex();
 
   Internal.begin(115200, SERIAL_8N1, TOESP, TOTINY);
+  Internal.println("B 0");
+  delay(50);
+  Internal.flush();
+  Internal.println("B 0");
 
   if(TXINTERRUPT){
     Serial.begin(115200, SERIAL_8N1, 44, DB9INT);
@@ -268,6 +275,7 @@ void setup(){
   settings.begin("settings", false);
   Server = settings.getString("Server");
   if(Server == NULL){
+    StartupIssue = "No Server/Config?";
     Serial.println(F("CAN'T FIND SETTINGS - FRESH INSTALL?"));
     Serial.println(F("HOLDING FOR UPDATE FOREVER..."));
     //Nuke the rest of this process - we can't do anything without our config.
@@ -309,6 +317,10 @@ void setup(){
   }
   rtc.offset = TimezoneHr * 3600;
 
+  uint32_t versiondata;
+  byte NFCStartupCount = 0;
+  int otaresp;
+
   //Go through and delete any keys we no longer use from old versions. 
   DeleteOld("SecurityCode");
   DeleteOld("MachineName");
@@ -328,6 +340,11 @@ void setup(){
   //Reset NoNetwork to its default value of 1
   NoNetwork = 1;
 
+  //If we make it here, we know the network came online
+    if(StartupIssue == "None"){
+    StartupIssue = "OTA";
+  }
+
   //Set the ResetReason to OTA in case we restart now
   ResetReason = settings.getString("ResetReason");
   settings.putString("ResetReason","OTA-Update");
@@ -343,16 +360,20 @@ void setup(){
   if(DebugMode){
     ota.EnableSerialDebug();
   }
-  int otaresp = ota.CheckForOTAUpdate(OTA_URL, Version);
+  otaresp = ota.CheckForOTAUpdate(OTA_URL, Version);
   if(DebugMode){
     Serial.print(F("OTA Response Code: ")); Serial.println(otaresp);
     Serial.println(errtext(otaresp));
     Serial.println(F("We're still here, so there must not have been an update."));
   }
   
+  if(StartupIssue == "OTA"){
+    StartupIssue = "None";
+  }
   settings.putString("ResetReason","Unknown");
 
   //Check to make sure we can connect to the NFC reader and it isn't damaged.
+  NFCStartupCount = 0;
   retry : 
   pinMode(NFCPWR, OUTPUT);
   pinMode(NFCRST, OUTPUT);
@@ -360,23 +381,37 @@ void setup(){
   digitalWrite(NFCRST, HIGH);
   delay(100);
   nfc.begin();
-  uint32_t versiondata = nfc.getFirmwareVersion();
+  versiondata = nfc.getFirmwareVersion();
   if (!versiondata) {
-    Serial.println("Didn't find PN532 board. Trying again...");
     delay(250);
+    NFCStartupCount++;
+    if(NFCStartupCount >= 10){
+      Serial.println(F("NFC Setup Failed."));
+      StartupIssue = "NFC Board Not Detected";
+      goto SkipNFC;
+    }
     goto retry;
   }
+  SkipNFC:
   digitalWrite(NFCRST, LOW);
   digitalWrite(NFCPWR, LOW);
   if(DebugMode){
     Serial.println(F("NFC Setup")); 
   }
+
   //Load up the SPIFFS file of verified IDs, format/create if it is not there.
+  byte SPIFFSFail;
   retrySPIFFS:
   if(!SPIFFS.begin(1)){ //Format SPIFFS if fails
     Serial.println("SPIFFS Mount Failed");
     delay(250);
-    goto retrySPIFFS;
+    SPIFFSFail++;
+    if(SPIFFSFail<= 5){
+      goto retrySPIFFS;
+    }
+    if(StartupIssue == "None"){
+      StartupIssue = "SPIFFS Mount";
+    }
   }
   if(SPIFFS.exists("/validids.txt")){
     Serial.println(F("Valid ID List already exists."));
@@ -440,7 +475,9 @@ void setup(){
   }
 
   //Disable the startup lights
-  GamerMode = 0;
+  if(!StartupFailed){
+    GamerMode = 0;
+  }
 
   //Lastly, create all tasks and begin operating normally.
   vTaskSuspendAll();
@@ -454,6 +491,18 @@ void setup(){
   xTaskResumeAll();
 
   Serial.println(F("Setup done."));
+  StartupIssue += " - Finished";
+  if(!StartupIssue.equals("None - Finished")){
+    //Something went wrong in startup. Trigger a report
+    StartupFailed = 1;
+  } else{
+    //We didn't run into any issues.
+    if(settings.getString("StartupIssue") != "None"){
+      settings.putString("StartupIssue", "None");
+    }
+    StartupFailed = 0;
+  }
+
 }
 
 void loop(){
@@ -531,6 +580,7 @@ void loop(){
 
 void callback_percent(int offset, int totallength) {
   //Used to display percentage of OTA installation
+
   static int prev_percent = -1;
   int percent = 100 * offset / totallength;
   if (percent != prev_percent && DebugMode) {
@@ -616,12 +666,16 @@ void RegularReport(void *pvParameters){
 
 void OTAWatchdog(void *pvParameters){
   while(1){
+
+    delay(1);
+
     //This task reverts an OTA if not marked valid in 60 seconds.
     if(!OTATimeout && (millis64() >= 60000)){
       OTATimeout = 1;
       const esp_partition_t *running_partition = esp_ota_get_running_partition();
       esp_ota_img_states_t ota_state;
       esp_ota_get_state_partition(running_partition, &ota_state);
+
       if(ota_state == ESP_OTA_IMG_PENDING_VERIFY){
         Serial.println(F("OTA update timer failed after 60 seconds."));
         Serial.println(F("Reverting firmware."));
@@ -629,7 +683,67 @@ void OTAWatchdog(void *pvParameters){
         esp_ota_mark_app_invalid_rollback_and_reboot();
       } else{
         Serial.println(F("OTA update timer passed. Disabling."));
-        vTaskSuspend(NULL);
+        //If we made it here, we may also need to trigger a startup failure
+        if(!StartupIssue.equals("None - Finished") && !StartupIssue.equals("OTA")){
+          StartupFailed = 1;
+        }
+      }
+    }
+    if(!StartupFailed && OTATimeout){
+      vTaskSuspend(NULL);
+    }
+    if(StartupFailed){
+      //The startup sequence failed. Report it to the server. 
+      if(DebugMode){
+        Serial.println(F("Processing startup failure."));
+      }
+      //First, check if this issue matches the issue we already have from last time
+      String OldStartupIssue = settings.getString("StartupIssue");
+      if(DebugMode){
+        Serial.print(F("Old Issue: ")); Serial.println(OldStartupIssue);
+        Serial.print(F("New Issue: ")); Serial.println(StartupIssue);
+      }
+      if(OldStartupIssue.indexOf("Reported") == -1){
+      //This is an issue we have not yet reported yet.
+      if(DebugMode){
+        Serial.println(F("New Startup Issue Detected."));
+      }
+      while(NoNetwork){
+        //Delay for a bit, hopefully we get a network connection...
+        delay(100);
+        if(millis64() >= 60000){
+          //We've waited 60 seconds for a network connection. Gotta move on.
+          break;
+        }
+      }
+        if(!NoNetwork){
+          //Need a network connection to report things
+          if(DebugMode){
+            Serial.println("Have a network connection, reporting issue.");
+          }
+          while(ReadyToSend){
+            delay(2);
+          }
+          Message = "Startup Failed. Reason: " + StartupIssue;
+          ReadyToSend = 1;
+          while(ReadyToSend){
+            delay(2);
+          }
+          //Once we make it here, the issue has been reported.
+          StartupIssue += " Reported";
+          if(DebugMode){
+            Serial.println(F("Startup issue reported."));
+          }
+        }
+        //Save the appended issue to preferences, and restart. 
+        settings.putString("StartupIssue", StartupIssue); 
+      } else if(DebugMode){
+        Serial.println(F("Appears this is is a reported issue"));
+      }
+      TriggerRestart = 1;
+      while(1){
+        delay(10);
+        //Waiting for the restart.  
       }
     }
   }

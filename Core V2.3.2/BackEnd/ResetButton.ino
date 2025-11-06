@@ -36,7 +36,7 @@ void ResetButton(void *pvParameters){
     }
 
 
-    if(millis64() >= ButtonTime){
+    if(millis64() >= ButtonTime || TriggerRestart){
       //It has been 3 seconds, restart.
       xSemaphoreTake(StateMutex, portMAX_DELAY);
       settings.putString("LastState", State);
@@ -46,10 +46,15 @@ void ResetButton(void *pvParameters){
       vTaskSuspend(xHandle);
       delay(100);
       Serial.println(F("RESTARTING. Source: Button."));
-      settings.putString("ResetReason","Restart-Button");
+      if(TriggerRestart){
+        settings.putString("ResetReason","Internal-Trigger");
+      } else{
+        settings.putString("ResetReason","Restart-Button");
+      }
       Internal.println("L 255,0,0");
-      Internal.println("S 0");
+      Internal.println("B 0");
       Internal.flush();
+      delay(10);
       ESP.restart();
     }
   }
