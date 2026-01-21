@@ -120,6 +120,20 @@ void MachineState(void *pvParameters) {
       }
     }
 
+    //Check if we should lockout based on LockWhenIdle
+    if(State == "Idle" && LockWhenIdle){
+      State = "Lockout";
+      StateSource = "LockWhenIdle, bypassed Idle state";
+      if(DebugMode){
+        Serial.println(F("Executed LockWhenIdle command."));
+      }
+      if(ReadyToSend){
+        delay(1);
+      }
+      Message = "Idle state bypassed due to LockWhenIdle.";
+      ReadyToSend = 1;
+    }
+
     //Release the semaphore;
     xSemaphoreGive(StateMutex);
 

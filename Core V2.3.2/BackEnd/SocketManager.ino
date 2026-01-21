@@ -77,6 +77,13 @@ void SocketManager(void *pvParameters) {
           //Set the Identify mode, to easily find a shlug
           Identify = wsin["Identify"].as<bool>();
         }
+        if(kv.key() == "LockWhenIdle"){
+          //Set or un-set the LockWhenIdle state, which will put the machine in lockout when it would normally be in idle.
+          LockWhenIdle = wsin["LockWhenIdle"].as<bool>();
+          if(DebugMode){
+            Serial.print(F("Set LockWhenIdle to: ")); Serial.println(LockWhenIdle);
+          }
+        }
         if(kv.key() == "State"){
           //Immediately set the state of the machine to this
           bool ServerStateSet = 0;
@@ -296,6 +303,9 @@ void SocketManager(void *pvParameters) {
             }      
             if(wsin["Request"][i] == "Frequency"){
               wsresp["Frequency"] = Frequency;
+            }
+            if(wsin["Request"][i] == "LockWhenIdle"){
+              wsresp["LockWhenIdle"] = LockWhenIdle;
             }                                    
           }
           //Prime us to send the response:
