@@ -44,7 +44,7 @@ USBConfig: Allows programatic changing of settings over USB
 #define BAD_INPUT_THRESHOLD 5 //If the wrong password or a bad JSON is loaded more than this many times, delete all information as a safety.
 #define TXINTERRUPT 0 //Set to 1 to route UART0 TX to the DB9 interrupt pin, to allow external loggers to capture crash data.
 //#define WebsocketUART //Uncomment to get messages from uart as if it is a websocket for testing. Also disables USB config to prevent issues there.
-#define DebugMode 0 //Set to 1 for verbose output via UART, /!\ WARNING /!\ can dump sensitive information
+#define DebugMode 1 //Set to 1 for verbose output via UART, /!\ WARNING /!\ can dump sensitive information
 #define ConnectRandomMax 3000 //Up to how many milliseconds to delay on connect/reconnect to the server, to prevent DDOSing it. Set to 0 to disable.
 
 //Global Variables:
