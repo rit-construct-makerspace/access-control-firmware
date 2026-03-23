@@ -98,5 +98,56 @@ void USBConfig(void *pvParameters){
       Serial.println(F("Serial Number:"));
       Serial.println(SerialNumber);
     }
+    if(Input.charAt(0) == '(' ){
+      //OneWire configuration command
+      //Format: (OneWire,[address],[type],[class],[high temp])
+      String payload = Input.substring(1, Input.length() - 1);
+      int firstComma  = payload.indexOf(',');
+      int secondComma = payload.indexOf(',', firstComma + 1);
+      int thirdComma  = payload.indexOf(',', secondComma + 1);
+      int fourthComma = payload.indexOf(',', thirdComma + 1);
+
+      if (firstComma != -1 && fourthComma != -1) {
+        String cmd = payload.substring(0, firstComma);
+        
+        if (cmd.equalsIgnoreCase("OneWire")) {
+          // 1. Sanitize Address String (Remove colons, spaces, or dashes)
+          String rawAddr = payload.substring(firstComma + 1, secondComma);
+          String cleanAddr = "";
+          for(short i = 0; i < rawAddr.length(); i++) {
+            char c = rawAddr.charAt(i);
+            if(isxdigit(c)) { // Only keep 0-9, A-F
+              cleanAddr += c;
+            }
+          }
+
+          // Validation: Ensure we have exactly 16 hex chars (8 bytes)
+          if(cleanAddr.length() != 16) {
+            Serial.println(F("Error: Invalid Address length after cleaning!"));
+            return; 
+          }
+
+          byte targetAddr[8];
+          for (int i = 0; i < 8; i++) {
+            String part = cleanAddr.substring(i * 2, (i * 2) + 2);
+            targetAddr[i] = (byte) strtoul(part.c_str(), NULL, 16);
+          }
+
+          // 2. Parse Numeric Values
+          byte newType      = (byte)payload.substring(secondComma + 1, thirdComma).toInt();
+          uint32_t newClass = (uint32_t)payload.substring(thirdComma + 1, fourthComma).toInt();
+          byte newHigh      = (byte)payload.substring(fourthComma + 1).toInt();
+
+          // 3. Execution
+          if(xSemaphoreTake(OneWireMutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
+            writeAndVerify(targetAddr, newType, newClass, newHigh);
+            xSemaphoreGive(OneWireMutex);
+            Serial.println(F("Success: EEPROM Updated and Bus Unlocked."));
+          } else {
+            Serial.println(F("Error: Bus Timeout."));
+          }
+        }
+      }
+    }
   }
 }

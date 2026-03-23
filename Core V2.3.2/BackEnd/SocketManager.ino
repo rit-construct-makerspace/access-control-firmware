@@ -7,6 +7,9 @@ This task is responsible for sending and receiving all network traffic via webso
 
 */
 
+bool SendInfoMessage = 1; //this starts as a 1 when code starts, set to 0 once the message goes through once
+bool ServerStateSet = 0; //Used to track if we changed states when the server commanded it.
+
 void SocketManager(void *pvParameters) {    
   JsonDocument wsresp;
   #ifndef WebsocketUART
@@ -19,6 +22,8 @@ void SocketManager(void *pvParameters) {
 
   Serial.println("Websocket Initial Connection.");
   
+  unsigned long long LastFromWS = 0;
+
   while (1) {
     delay(50);
 
@@ -44,7 +49,7 @@ void SocketManager(void *pvParameters) {
         ReadyToSend = 1;
       }
       NewFromWS = 0;
-      bool alreadyAuth = 0;
+      LastFromWS = millis64();
       if(DebugMode){
         Serial.println(F("We got a websocket message:"));
         Serial.println(WSIncoming);
@@ -52,84 +57,114 @@ void SocketManager(void *pvParameters) {
       JsonDocument wsin;
       //Get all the info from the incoming message
       deserializeJson(wsin, WSIncoming);
-      //Iterate through all keys to update accordingly
-      for (JsonPair kv : wsin.as<JsonObject>()) {
-        if((kv.key() == "Verified") || (kv.key() == "Auth") || (kv.key() == "Role") || kv.key() == "Reason"){
-          //These are all the keys we expect when we are dealing with an authentication response
-          if(!alreadyAuth){
-            //We haven't processed this yet
+      //Determine how to act based on the key at the top-level;
+      if(wsin.containsKey("authTo")){
+        //The JSON payload contains information about an attempted auth request from a card recently inserted.
+
+        //Needs a rewrite...
+        //bool IsAuthed true false
+        //String AuthID is the card tag we should have
+        bool IsAuthed = wsin["authTo"]["channels"][0]["approved"].as<bool>();
+        String AuthID = wsin["authTo"]["cardTagID"].as<String>();
+
+        if(IsAuthed){
+          //Access request approved!
+          //Before we accept it, let's make sure the AuthID matches the current ID;
+          if(AuthID == UID){
+            CardStatus = 1;
+            CardVerified = 1;
             if(DebugMode){
-              Serial.println(F("Appears to be an authentication message."));
+              Serial.println(F("Access Granted."));
             }
-            alreadyAuth = 1;
-            authUser(wsin);
-          }
-        }
-        if(kv.key() == "Key"){
-          //There's a new key to set
-          settings.putString("Key", wsin["Key"].as<String>());
-          Key = settings.getString("Key");
-          if(DebugMode){
-            Serial.println(F("New key saved and updated."));
-          }
-        }
-        if(kv.key() == "Identify"){
-          //Set the Identify mode, to easily find a shlug
-          Identify = wsin["Identify"].as<bool>();
-        }
-        if(kv.key() == "LockWhenIdle"){
-          //Set or un-set the LockWhenIdle state, which will put the machine in lockout when it would normally be in idle.
-          LockWhenIdle = wsin["LockWhenIdle"].as<bool>();
-          if(DebugMode){
-            Serial.print(F("Set LockWhenIdle to: ")); Serial.println(LockWhenIdle);
-          }
-        }
-        if(kv.key() == "State"){
-          //Immediately set the state of the machine to this
-          bool ServerStateSet = 0;
-          String WSState = wsin["State"].as<String>();
-          if(State.equalsIgnoreCase(WSState)){
+            if(!InternalStatus){
+              //Card was not authorized based on the internal list. Must not be on the list. Adding.
+              File file = SPIFFS.open("/validids.txt",FILE_APPEND);
+              file.println(UID);
+              file.close();
+              InternalVerified = 1;
+              VerifiedBeep = 1;
+              InternalStatus = 1;
+            }
+          } else{
             if(DebugMode){
-              Serial.println(F("State change to same state. Ignoring."));
+              Serial.println(F("Access was granted, but card IDs mismatch!"));
             }
-          } 
-          else{
-            if(WSState.equalsIgnoreCase("Restart")){
-              //The system has ordered an immediate restart of the device.
-              if(DebugMode){
-                Serial.println(F("Restart Ordered."));
-              }
-              xSemaphoreTake(StateMutex, portMAX_DELAY);
-              settings.putString("LastState", State);
-              xSemaphoreGive(StateMutex);
-              delay(10);
-              State = "Restart";
-              ServerStateSet = 1;
+          }
+        } 
+        else{
+          //Access request denied!
+          CardStatus = 0;
+          CardVerified = 1;
+          InternalStatus = 0;
+          InternalVerified = 1;
+          if(DebugMode){
+            Serial.print(F("Access Denied."));
+          }
+        }
+      }
+      if(wsin.containsKey("info")){
+        //The JSON payload contains responses to our information request we send on startup.
+        JsonObject infoObj = wsin["info"];
+        if(infoObj.containsKey("time")){
+          //The message has the unix time for us.
+          unsigned long long millisecondTime = infoObj["time"].as<unsigned long long>();
+          rtc.setTime(millisecondTime/1000);
+          if(DebugMode){
+            Serial.print(F("Time set to: "));
+            Serial.println(rtc.getDateTime(true));
+          }
+        }
+        if(infoObj.containsKey("state")){
+          //The message has the state we should be in, we should change to it if we are in a startup state only.
+          if(State == "Startup"){
+            //take the incoming API state and change it to our internal state
+            String IncomingState = APIStateToInternal(infoObj["state"][0]["state"]);
+            if(IncomingState != "Fault"){
+              State = IncomingState;
               ChangeBeep = 1;
-              while(ChangeBeep){
-                //Wait for the change beep to happen
-                delay(10);
-              }
-              delay(100);
-              settings.putString("LastState",State);
-              //Turn off the internal write task so that it doesn't overwrite the restart led color.
-              vTaskSuspend(xHandle);
-              delay(100);
-              settings.putString("ResetReason","Server-Ordered");
-              Internal.println("L 255,0,0");
-              delay(10);
-              Internal.println("S 0");
-              delay(10);
-              Internal.flush();
-              delay(10);
-              ESP.restart();
-            }
-            //If the state is fault, we do not accept anything but restart.
-            if(State == "Fault"){
+              StateSource = "COMMANDED";
               if(DebugMode){
-                Serial.println(F("Unable to change state from Fault. Must restart."));
+                Serial.print(F("Set state to "));
+                Serial.print(State);
+                Serial.println(F("from 'info' message on startup"));
               }
+            } 
+            else{
+              State = "Lockout";
+              ChangeBeep = 1;
+              StateSource = "COMMANDED";
+              if(DebugMode){
+                Serial.println(F("Ignoring command to fault state on startup."));
+              } 
+            }
+          } else{
+            if(DebugMode){
+              Serial.println(F("Ignoring state from info payload, not in startup state to accept it."));
+            }
+          }
+        }
+      }
+      if(wsin.containsKey("command")){
+        //The JSON payload contains information on a command, such as setting flags or states.
+        JsonObject commandObj = wsin["command"];
+        //Need to check for each of the possible command keys;
+        if(commandObj.containsKey("toState")){
+          //Command to set a state
+          String WSState = commandObj["toState"][0]["state"];
+          //First, convert the WSState to the internal state syntax.
+          WSState = APIStateToInternal(WSState);
+          //Compare the commanded state to the current state.
+          if(State == WSState){
+            if(DebugMode){
+              Serial.println(F("Ignoring state change command, same as current."));
+            }
+          } else{
+            //This is a new state command.
+            if(State == "Fault"){
+              //We do not permit commanding out of a fault state.
+              Serial.println(F("Commanded state ignored, in fault mode!"));
             } else{
+              //We should swap to this state.
               if(WSState.equalsIgnoreCase("Fault")){
                 //Ordered to an irreversible fault state
                 Fault = 1;
@@ -168,201 +203,216 @@ void SocketManager(void *pvParameters) {
                 State = "AlwaysOn";
                 ServerStateSet = 1;
               }
-              if(WSState.equalsIgnoreCase("Startup")){
-                State = "Startup";
-                ServerStateSet = 1;
-              }
-              if(ServerStateSet){
-                if(DebugMode){
-                  Serial.print(F("State remotely set to: "));
-                  Serial.println(State);
-                }
-                ChangeBeep = 1;
-                StateSource = "Server";
-              } else{
-                if(DebugMode){
-                  Serial.print(F("Got an unexpected state set: "));
-                  Serial.println(WSState);
-                }
-                Message = "Got unexpected state set: " + WSState;
-                ReadyToSend = 1;
-              }
             }
           }
-        }
-        if(kv.key() == "Time"){
-          //Set the time to this (unix seconds)
-          rtc.setTime(wsin["Time"].as<unsigned long long>());
-          if(DebugMode){
-            Serial.print(F("RTC time set to: "));
-            Serial.println(rtc.getDateTime(true));
-          }
-        }
-        if(kv.key() == "Timezone"){
-          //Set the timezone in hours offset
-          int TimezoneHr = wsin["Timezone"].as<int>();
-          settings.putString("Timezone",String(TimezoneHr));
-          rtc.offset = TimezoneHr * 3600;
-          if(DebugMode){
-            Serial.print(F("Set timezone to: "));
-            Serial.print(TimezoneHr);
-            Serial.println(F(" from UTC"));
-          }
-        }
-        if(kv.key() == "TempLimit"){
-          //Set the temperature limit
-          TempLimit = wsin["TempLimit"].as<unsigned int>();
-          settings.putString("TempLimit",String(TempLimit));
-          if(DebugMode){
-            Serial.print(F("Set Temperature Limit to: "));
-            Serial.print(TempLimit);
-            Serial.println(F(" degrees C."));
-          }
-        }
-        if(kv.key() == "Brightness"){
-          //Set the overall brightness
-          Brightness = wsin["Brightness"].as<byte>();
-          settings.putString("Brightness",String(Brightness));
-          if(DebugMode){
-            Serial.print(F("Brightness set to:"));
-            Serial.print(Brightness);
-            Serial.println(F(" / 255."));
-          }
-        }
-        //TODO Eventually check for UseEthernet and UseWiFi here. or NetworkMode.
-        if(kv.key() == "Frequency"){
-          Frequency = wsin["Frequency"].as<unsigned int>();
-          settings.putString("Frequency", String(Frequency));
-          if(DebugMode){
-            Serial.print(F("Regular message frequency set to once every: "));
-            Serial.print(Frequency);
-            Serial.println(F(" seconds."));
-          }
-        }
-        if(kv.key() == "NoBuzzer"){
-          NoBuzzer = wsin["NoBuzzer"].as<bool>();
-          settings.putString("NoBuzzer",String(NoBuzzer));
-          if(DebugMode){
-            if(NoBuzzer){
-              Serial.println(F("Buzzer Disabled"));
-            } else{
-              Serial.println(F("Buzzer Enabled"));
-            }
-          }
-        }
-        if(kv.key() == "Request"){
-          //The server has requested some values from us.
-          //We send back the sequence number in the response, so the server knows what the response is in regards to
-          wsresp["Seq"] = wsin["Seq"];
-          //Extract each element of the array;
-          size_t N = wsin["Request"].size();
-          for (size_t i=0; i < N; i++){
+          if(ServerStateSet){
             if(DebugMode){
-              Serial.print(F("Server Requested: "));
-              Serial.println(wsin["Request"][i].as<String>());
+              Serial.print(F("State remotely set to: "));
+              Serial.println(State);
             }
-            //Go through all possible requests and fulfill them:
-            if(wsin["Request"][i] == "UID"){
-              wsresp["UID"] = UID;
-            }
-            if(wsin["Request"][i] == "Message"){
-              wsresp["Message"] = Message;
-            }
-            if(wsin["Request"][i] == "Key"){
-              wsresp["Key"] = Key;
-            }
-            if(wsin["Request"][i] == "FWVersion"){
-              wsresp["FWVersion"] == Version;
-            }
-            if(wsin["Request"][i] == "HWVersion"){
-              wsresp["HWversion"] = Hardware;
-            }
-            if(wsin["Request"][i] == "HWType"){
-              wsresp["HWType"] = "ACS Core";
-            }
-            if(wsin["Request"][i] == "State"){
-              wsresp["State"] = State;
-            }
-            if(wsin["Request"][i] == "Timezone"){
-              wsresp["Timezone"] = settings.getString("Timezone");
-            }
-            if(wsin["Request"][i] == "TempLimit"){
-              wsresp["TempLimit"] = TempLimit;
-            }
-            if(wsin["Request"][i] == "Brightness"){
-              wsresp["Brightness"] = Brightness;
-            }
-            if(wsin["Request"][i] == "NetworkMode"){
-              //Report what network mode we are in - sanitize it to how the server expects
-              wsresp["WifiAllowed"] = UseWiFi;
-              wsresp["EthernetAllowed"] = UseEthernet;
-              wsresp["EthernetPresent"] = EthernetPresent;
-            }
-            if(wsin["Request"][i] == "NoBuzzer"){
-              wsresp["NoBuzzer"] = NoBuzzer;
-            }      
-            if(wsin["Request"][i] == "Frequency"){
-              wsresp["Frequency"] = Frequency;
-            }
-            if(wsin["Request"][i] == "LockWhenIdle"){
-              wsresp["LockWhenIdle"] = LockWhenIdle;
-            }                                    
+            ChangeBeep = 1;
+            StateSource = "COMMANDED";
           }
-          //Prime us to send the response:
-          WSSend = 1;
+        }
+        if(commandObj.containsKey("action")){
+          //Command to execute an action
+          //There are 3 possible actions supported;
+          if(commandObj["action"] == "RESTART"){
+            //Restart the device immediately
+            if(DebugMode){
+              Serial.println(F("Restart Ordered."));
+            }
+            xSemaphoreTake(StateMutex, portMAX_DELAY);
+            settings.putString("LastState", State);
+            xSemaphoreGive(StateMutex);
+            delay(10);
+            State = "Restart";
+            ServerStateSet = 1;
+            ChangeBeep = 1;
+            while(ChangeBeep){
+              //Wait for the change beep to happen
+              delay(10);
+            }
+            delay(100);
+            //Turn off the internal write task so that it doesn't overwrite the restart led color.
+            vTaskSuspend(xHandle);
+            delay(100);
+            settings.putString("ResetReason","Server-Ordered");
+            Internal.println("L 255,0,0");
+            delay(10);
+            Internal.println("S 0");
+            delay(10);
+            Internal.flush();
+            delay(10);
+            ESP.restart();
+          }
+          if(commandObj["action"] == "SEAL"){
+            //Lock the current configuration as a valid setup
+            if(!SealBroken){
+              if(DebugMode){
+                Serial.println(F("Seal commanded, but seal also intact."));
+              }
+            } else{
+              //Re-seal the deployment as it currently stands.
+              Serial.println(F("Commiting current bus to memory..."));
+              ReSealBus = 1;
+              while(ReSealBus){
+                delay(1);
+              }
+              //If we make it here, the seal is all set to.
+              //Time for a restart to commit this all.
+              if(DebugMode){
+                Serial.println(F("Restart Ordered."));
+              }
+              xSemaphoreTake(StateMutex, portMAX_DELAY);
+              settings.putString("LastState", State);
+              xSemaphoreGive(StateMutex);
+              delay(10);
+              State = "Restart";
+              ServerStateSet = 1;
+              ChangeBeep = 1;
+              while(ChangeBeep){
+                //Wait for the change beep to happen
+                delay(10);
+              }
+              delay(100);
+              //Turn off the internal write task so that it doesn't overwrite the restart led color.
+              vTaskSuspend(xHandle);
+              delay(100);
+              settings.putString("ResetReason","Server-Ordered");
+              Internal.println("L 255,0,0");
+              delay(10);
+              Internal.println("S 0");
+              delay(10);
+              Internal.flush();
+              delay(10);
+              ESP.restart();
+            }
+          }
+          if(commandObj["action"] == "IDENTIFY"){
+            //Identify the device
+            if(DebugMode){
+              Serial.println(F("Server commanded identify."));
+            }
+            Identify = 1;
+          }
+        }
+        if(commandObj.containsKey("identifyChannel")){
+          //This is technically meant to identify the unique channel of an access control system, we use it instead to identify the device since we are a one-channel-only device.
+          Identify = 1;
+        }
+        if(commandObj.containsKey("flags")){
+          //sets control flags
+          JsonObject flagObj = commandObj["flags"].as<JsonObject>();
+          if(flagObj.containsKey("lockWhenIdle")){
+            LockWhenIdle = flagObj["lockWhenIdle"].as<bool>();
+          }
+          if(flagObj.containsKey("restartWhenIdle")){
+            RestartWhenIdle = flagObj["restartWhenIdle"].as<bool>();
+          }
+          //Respond with a config message, so the server knows we set flags;
+          SendWSReconnect = 1;
         }
       }
     }
+
+    //Check how long it has been since we heard a non-ping message from the websocket. If it has been a while, prompt the server by sending the startup messages again.
+    if(LastFromWS + 15000 <= millis64()){
+      SendInfoMessage = 1;
+      LastFromWS = LastFromWS + 5000; //Give a 1 second delay so we don't spam this.
+      if(DebugMode){
+        Serial.println(F("Haven't heard from the server in a while, sending Config Info message to prompt it to do something."));
+      }
+    }
+
     //There are very few reasons we need to send a message. 
     //Check if each is the case:
+
+    //Need to convert our current state to the style the WSACS API expects;
+    String APIState = InternalStateToAPI(State);
+
     //0: We just (re)connected
     if(SendWSReconnect && !WSSend){
-      wsresp["Key"] = Key;
-      if(!State.equals("Restart") && !State.equals("Startup")){
-        //We only include the state if it is not restart or startup.
-        wsresp["State"] = State;
+
+      JsonObject status = wsresp["status"].to<JsonObject>();
+      status["currentCardTag"] = UID;
+      JsonObject config = status["config"].to<JsonObject>();
+      JsonArray channels = config["channels"].to<JsonArray>();
+      JsonObject channelsObject = channels.createNestedObject();
+      channelsObject["id"] = 0;
+      channelsObject["tempDuration"] = 0;
+      config["inputMode"] = "INSERT";
+      JsonObject deployment = config["deployment"].to<JsonObject>();
+      deployment["SN"] = SerialNumber;
+      JsonArray components = deployment["components"].to<JsonArray>();
+      //Need to iterate through each connected device on the bus, and add at as a nested object within the components array
+      //Each object should have the key "SN" for the OneWire address, "type" for the type. Type has to be a string of the type, we can set it to always be "SWITCH_1_CHANNEL" by sending 0b001
+      //First, let's make sure that the buffer of addresses is up to date;
+      AddressBufferValid = 0;
+      UpdateAddressBuffer = 1;
+      while(!AddressBufferValid){
+        delay(1);
       }
-      wsresp["FWVersion"] = Version;
-      wsresp["HWVersion"] = Hardware;
-      wsresp["HWType"] = "ACS Core";
-      if(devices == 0){
-        //The Onewire manager hasn't finished finding IDs yet
-        delay(50);
+      //This does suck since it means that it will wait a few seconds for the next temperature loop to iterate.
+      //The address buffer has been updated if we make it here.
+      for (int i = 0; i < liveAddressCount; i++) {
+        JsonObject deviceObj = components.createNestedObject();
+        // Convert the 8-byte address to a Hex String for JSON
+        char addrStr[17]; 
+        snprintf(addrStr, sizeof(addrStr), "%02X%02X%02X%02X%02X%02X%02X%02X",
+          liveAddresses[i][0], liveAddresses[i][1], liveAddresses[i][2], liveAddresses[i][3],
+          liveAddresses[i][4], liveAddresses[i][5], liveAddresses[i][6], liveAddresses[i][7]);
+        deviceObj["SN"] = String(addrStr);
+        for(int j = 0; j < deviceCount; j++) {
+          if(memcmp(liveAddresses[i], sensorList[j].address, 8) == 0) {
+            // Here we grab the deviceType and other data from the struct
+            deviceObj["type"] = sensorList[j].deviceType; 
+            deviceObj["identifier"] = sensorList[j].classification; //Server doesn't expect this yet, but we should send it
+            break;
+          }
+        }
       }
-      //Now that we have found the onewire devices, we should know our serial number;
-      wsresp["SerialNumber"] = SerialNumber;
-      //And we also know the hardware IDs of the entire system;
-      for (uint8_t i = 0; i < devices; i += 1) {
-        String TempID = String(SerialNumbers[i],HEX);
-        TempID.toUpperCase();
-        wsresp["HardwareIDs"][i] = TempID;
-      }
-      //Determine if this is the first time we are sending this since startup. 
-      if(MessageNumber > 0){
-        //We've sent messages in the past, reset the message count but no need to ask for anything special
-        MessageNumber = 0;
-      } else{
-        //This is the first message, so ask what state we should be in and what time it is
-        wsresp["Request"][0] = "State";
-        wsresp["Request"][1] = "Time";
-      }
+      //Now we need to tell the server the state of all flags we support;
+      //This is sent as part of the "config" object, 
+      JsonObject flags = config["flags"].to<JsonObject>();
+      flags["lockWhenIdle"] = LockWhenIdle;
+      flags["restartWhenIdle"] = RestartWhenIdle;
       WSSend = 1;
       SendWSReconnect = 0;
     }
+
+    //0.5: We just connected but the scrummers can't figure out how to process multiple requests, so we send a second message right away. They claim it was an "intentional decision".
+    if(SendInfoMessage && !WSSend){
+      JsonObject info = wsresp["info"].to<JsonObject>();
+      JsonArray fields = info["fields"].to<JsonArray>();
+      fields.add("TIME");
+      fields.add("STATE");
+      WSSend = 1;
+      SendInfoMessage = 0;
+    }
+
     //1: Authenticating an ID
     if(VerifyID && !WSSend){
-      wsresp["Auth"] = UID;
+      JsonObject authTo = wsresp["authTo"].to<JsonObject>();
+      authTo["state"] = "UNLOCKED";
+      authTo["cardTagID"] = UID;
       WSSend = 1;
       VerifyID = 0;
     }
     //2: There's an error message to send
     if(ReadyToSend && !WSSend){
-      wsresp["Message"] = Message;
+      JsonObject message = wsresp["message"].to<JsonObject>();
+      JsonObject content = message["content"].to<JsonObject>();
+      content["message"] = Message;
+      message["auditLog"] = true; 
       WSSend = 1;
       ReadyToSend = 0;
       WritingMessage = 0;
     } else if (LogReadyToSend && !WSSend){
-      wsresp["Log"][LogKey] = LogValue; 
+      JsonObject message = wsresp["message"].to<JsonObject>();
+      JsonObject content = message["content"].to<JsonObject>();
+      content[LogKey] = LogValue;
+      message["auditLog"] = false;
       WSSend = 1;
       LogReadyToSend = 0;
       WritingMessage = 0;
@@ -370,57 +420,66 @@ void SocketManager(void *pvParameters) {
     
     //3: The state changed
     if(ChangeStatus && !WSSend){
-      if(!State.equals("Restart") && !State.equals("Startup")){
-        //We only include the state if it is not restart or startup.
-        wsresp["State"] = State;
-      }
-      wsresp["UID"] = UID;
-      wsresp["StateSource"] = StateSource;
+      JsonObject status = wsresp["status"].to<JsonObject>();
+      JsonObject stateChange = status["stateChange"].to<JsonObject>();
+      JsonArray channels = stateChange["channels"].to<JsonArray>();
+      JsonObject authObj = channels.createNestedObject();
+      authObj["fromState"] = APIOldState;
+      authObj["toState"] = APIState;
+      authObj["reason"] = StateSource;
+      authObj["channelID"] = 0;
       WSSend = 1;
       ChangeStatus = 0;
     }
     //4: It is time for a regular report
     if(RegularStatus && !WSSend){
-      if(!State.equals("Restart") && !State.equals("Startup")){
-        //We only include the state if it is not restart or startup.
-        wsresp["State"] = State;
-      }
-      wsresp["UID"] = UID;
-      if(rtc.getYear() < 2016){
-        //Time is not correct
+      if(State != "Startup"){
+        //We skip this if we are in startup state still.
+        JsonObject status = wsresp["status"].to<JsonObject>();
+        JsonObject regular = status["regular"].to<JsonObject>();
+        JsonArray currentStates = regular["currentStates"].to<JsonArray>();
+        JsonObject statusObject = currentStates.createNestedObject();
+        statusObject["state"] = APIState;
+        statusObject["channelID"] = 0;
+        status["currentCardTag"] = UID;
+        WSSend = 1;
+        RegularStatus = 0;
+      } else{
+        RegularStatus = 0;
         if(DebugMode){
-          Serial.println(F("Wrong time in RTC."));
-          Serial.println(F("Requesting right time from server."));
+          Serial.println(F("Skipped regular report becuase we are in startup mode."));
         }
-        wsresp["Request"][0] = "Time";
       }
-      WSSend = 1;
-      RegularStatus = 0;
     }
     delay(1);
     if(WSSend){
       //There is something to send
-      WSSend = 0;
-      wsresp["Seq"] = MessageNumber;
-      MessageNumber++;
-      String WSToSend;
+      String WSToSend = "";
       serializeJson(wsresp, WSToSend);
-      wsresp.clear(); //Wipe the JSON for the next write session
-      if(DebugMode){
-        Serial.print(F("Sending Websocket Message:" ));
-        Serial.println(WSToSend);
-      }
-      //This seems to be causing the crash?
-      //Is it because we are sending before connected?
-      if(socket.isConnected()){
-        //If we don't have a connection, we don't want to send
-        SocketText = WSToSend;
+      //TODO: We sometimes send a null payload. This should fix it but it doesn't. If we fix this it may make startup time faster.
+      if(WSToSend.length() > 1){
+        wsresp.clear(); //Wipe the JSON for the next write session
         if(DebugMode){
-          Serial.println(F("Sent."));
+          Serial.print(F("Sending Websocket Message:"));
+          Serial.println(WSToSend);
+        }
+        //This seems to be causing the crash?
+        //Is it because we are sending before connected?
+        if(socket.isConnected()){
+          //If we don't have a connection, we don't want to send
+          SocketText = WSToSend;
+          if(DebugMode){
+            Serial.println(F("Sent."));
+          }
+          WSSend = 0;
+        } else{
+          if(DebugMode){
+            Serial.println(F("Skipped send because of no connection."));
+          }
         }
       } else{
         if(DebugMode){
-          Serial.println(F("Didn't send because of lost connection. Dropping message."));
+          Serial.println(F("Ignoring send of a null payload..."));
         }
       }
     }
@@ -455,49 +514,6 @@ void SocketManager(void *pvParameters) {
   }
 }
 
-void authUser(JsonDocument input){
-  //Verifies the user based on the contents of the JSON payload.
-  if(DebugMode){
-    Serial.println(F("Parsing Auithentication Data..."));
-  }
-  //Step 1: Check the UID matches what's currently in the machine
-  if(input["Auth"].as<String>() != UID){
-    if(DebugMode){
-      Serial.println(F("UIDs Do not match!"));
-    }
-    return;
-  }
-  //Step 2: Check if the user was approved or denied
-  if(input["Verified"].as<bool>() == 0){
-    //Access Denied
-    CardStatus = 0;
-    CardVerified = 1;
-    InternalStatus = 0;
-    InternalVerified = 1;
-    if(DebugMode){
-      Serial.print(F("Access Denied. Reason: "));
-      Serial.println(input["Reason"].as<String>());
-    }
-    return;
-  }
-  //If we are here, that means the user was approved:
-  CardStatus = 1;
-  CardVerified = 1;
-  if(DebugMode){
-    Serial.println(F("Access Granted."));
-  }
-  if(!InternalStatus){
-  //Card was not authorized based on the internal list. Must not be on the list. Adding.
-  File file = SPIFFS.open("/validids.txt",FILE_APPEND);
-  file.println(UID);
-  file.close();
-  InternalVerified = 1;
-  VerifiedBeep = 1;
-  InternalStatus = 1;
-  }
-}
-
-
 void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
   //We check for OTA validity on the receipt of a text message. Need this info to do that;
   switch(type) {
@@ -515,6 +531,7 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
       Serial.println(F("Connected."));
       Serial.printf("[WSc] Connected to url: %s\n", payload);
       SendWSReconnect = 1;
+      SendInfoMessage = 1;
       NoNetwork = 0;
       NextPing = millis64() + 2000;
       break;
@@ -542,7 +559,6 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
 
 void StartWebsocket(){
   //This function starts the websocket
-  //socket.beginSslWithBundle(Server.c_str(), 443, "/api/ws", NULL, 0, "");
   if(ConnectRandomMax > 0){
     long WebsocketDelay = random(1, ConnectRandomMax);
     if(DebugMode){
@@ -553,11 +569,61 @@ void StartWebsocket(){
     delay(WebsocketDelay);
   }
 
-  socket.begin(Server.c_str(), 80, "/api/ws");
+  //New API requires some info in the header of the Websocket starting:
+  String ExtraHeader = "device-sn:" + SerialNumber + "\r\ndevice-key:" + Key;
+  socket.setExtraHeaders(ExtraHeader.c_str());
+  //socket.begin(Server.c_str(), 80, "/api/devices/cores/access/ws");
+  socket.beginSslWithCA(Server.c_str(), 443, "/api/devices/cores/access/ws", root_ca);
+
   if(DebugMode){
     Serial.print(F("Connecting to websocket URL: "));
     Serial.println(Server);
   }
   socket.onEvent(webSocketEvent);
-  socket.setReconnectInterval(5000); //Attempt to reconnect every 5 seconds if we lose connection
+  socket.setReconnectInterval(2000); //Attempt to reconnect every 2 seconds if we lose connection
+}
+
+String InternalStateToAPI(String incoming){
+  //This function converts our internal state to the API-compliant one.
+    if(incoming == "Idle"){
+      return "IDLE";
+    }
+    if(incoming == "Unlocked"){
+      return "UNLOCKED";
+    }
+    if(incoming == "AlwaysOn"){
+      return "ALWAYS_ON";
+    }
+    if(incoming == "Lockout"){
+      return "LOCKED_OUT";
+    }
+    if(incoming == "Fault" || State == "TemperatureFault"){
+      return "FAULT";
+    }
+    if(incoming == "Startup"){
+      return "UNKNOWN";
+    }
+}
+
+String APIStateToInternal(String incoming){
+  //This function converts the API-compliant state to an internal one.
+  if(incoming == "IDLE"){
+    return "Idle";
+  }
+  if(incoming == "UNLOCKED"){
+    return "Unlocked";
+  }
+  if(incoming == "ALWAYS_ON"){
+    return "AlwaysOn";
+  }
+  if(incoming == "LOCKED_OUT"){
+    return "Lockout";
+  }
+  if(incoming == "FAULT"){
+    return "Fault";
+  }
+  if(incoming == "UNKNONW"){
+    //If we don't know what we should be, let's just go to the current state
+    return State;
+  }
 }
