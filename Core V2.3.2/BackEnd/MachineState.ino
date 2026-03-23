@@ -33,11 +33,15 @@ void MachineState(void *pvParameters) {
     xSemaphoreTake(StateMutex, portMAX_DELAY);
     if(TemperatureFault && State != "Fault"){
       State = "Fault";
-      StateSource = "Fault Temperature";
+      StateSource = "OVER_TEMP";
+    }
+    if(SealFault && State != "Fault"){
+      State = "Fault";
+      StateSource = "INTEGRITY_FAIL";
     }
     if(Fault && State != "Fault"){
       State = "Fault";
-      StateSource = "Fault Other";
+      StateSource = "FAULT";
     }
     
     //Read the key switches and set the state, with a debounce time
@@ -55,7 +59,7 @@ void MachineState(void *pvParameters) {
             if(Key1){
               //Locked On
               State = "AlwaysOn";
-              StateSource = "Key Switch";
+              StateSource = "LOCAL";
               SessionStart = millis64();
             } 
             else if(!Key1 && !Key2){
@@ -70,13 +74,13 @@ void MachineState(void *pvParameters) {
               if(KeyDebounce >= 150 && !Key1 && !Key2){
                 //We made it the full debounce time
                 State = "Lockout";
-                StateSource = "Key Switch";
+                StateSource = "LOCAL";
               }
             }
             else if(Key2){
               //Normal Mode
               State = "Idle";
-              StateSource = "Key Switch";
+              StateSource = "LOCAL";
             }
           }
         }
@@ -89,14 +93,14 @@ void MachineState(void *pvParameters) {
       //We should be unlocked
       PreUnlockState = State;
       State = "Unlocked";
-      StateSource = "Access Granted";
+      StateSource = "AUTHED";
       SessionStart = millis64();
     }
     if(State == "Unlocked" && !CardPresent){
       //The machine is unlocked, but the keycard was removed.
       //We should return to our previous state
       State = PreUnlockState;
-      StateSource = "Card Removed";
+      StateSource = "CARD_REMOVED";
       EndStatus = 1; //Send a message to the server that the session ended
     }
     //Set the ACS output based on state;
@@ -107,6 +111,24 @@ void MachineState(void *pvParameters) {
       Switch = 0;
     }
     if(State != OldState){
+      //Handling for new API
+      APIOldState = "UNKNOWN";
+      if(OldState == "Idle"){
+        APIOldState = "IDLE";
+      }
+      if(OldState == "Unlocked"){
+        APIOldState = "UNLOCKED";
+      }
+      if(OldState == "AlwaysOn"){
+        APIOldState = "ALWAYS_ON";
+      }
+      if(OldState == "Lockout"){
+        APIOldState = "LOCKED_OUT";
+      }
+      if(OldState == "Fault" || State == "TemperatureFault" || State == "Startup"){
+        APIOldState = "FAULT";
+      }
+
       OldState = State;
       ChangeStatus = 1; //Send a message to the server that the state changed.
     }
@@ -123,7 +145,9 @@ void MachineState(void *pvParameters) {
     //Check if we should lockout based on LockWhenIdle
     if(State == "Idle" && LockWhenIdle){
       State = "Lockout";
-      StateSource = "LockWhenIdle, bypassed Idle state";
+      StateSource = "LOCAL";
+      LockWhenIdle = 0;
+      SendWSReconnect = 1;
       if(DebugMode){
         Serial.println(F("Executed LockWhenIdle command."));
       }
@@ -132,6 +156,18 @@ void MachineState(void *pvParameters) {
       }
       Message = "Idle state bypassed due to LockWhenIdle.";
       ReadyToSend = 1;
+    }
+
+    //Check if we should restart based on RestartWhenIdle
+    if(State == "Idle" && RestartWhenIdle){
+      RestartWhenIdle = 0;
+      SendWSReconnect = 1;
+      State = "Restart";
+      delay(100);
+      Serial.println(F("RESTARTING. Source: RestartWhenIdle."));
+      settings.putString("ResetReason","RestartWhenIdle");
+      delay(100);
+      ESP.restart();
     }
 
     //Release the semaphore;

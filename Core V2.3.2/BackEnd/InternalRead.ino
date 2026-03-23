@@ -39,6 +39,8 @@ void InternalRead(void *pvParameters){
           Button = 0;
         } else{
           Button = 1;
+          //If we are identifying, we want it to turn off when we hit the button
+          Identify = 0;
         }
         if(DebugMode && InternalReadDebug){
           if(xSemaphoreTake(DebugMutex,portMAX_DELAY) == pdTRUE){

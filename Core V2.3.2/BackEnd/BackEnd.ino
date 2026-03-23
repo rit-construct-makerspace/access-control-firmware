@@ -49,8 +49,9 @@ USBConfig: Allows programatic changing of settings over USB
 
 //Global Variables:
 bool TemperatureUpdate;                  //1 when writing new information, to indicate other devices shouldn't read temperature-related info
-uint64_t SerialNumbers[MAX_DEVICES];     //an array of uint64_t serial numbers of the devices. Size of the array is based on MAX_DEVICES 
-char devices;                            //How many onewire devices were detected, and therefore how many hardware components make up the ACS deployment
+
+char deviceCount;                        //How many onewire devices were detected, and therefore how many hardware components make up the ACS deployment
+
 float SysMaxTemp;                        //a float of the maximum temperature of the system
 bool DebugPrinting;                      //1 when a thread is writing on debug serial
 byte NetworkMode = 1;                    //0 means WiFi only, 1 means WiFi or Ethernet, 2 means Ethernet only. TODO ethernet not implemented
@@ -129,7 +130,7 @@ bool Identify;                           //Set to 1 to play a constant noise and
 byte Brightness = 255;                   //Overarching setting that sets the LED brightness
 uint64_t LastLightChange;                //Tracks when the last time the lighting was changed.
 bool OTATimeout;                         //Set to 1 if we checked the OTA timeout
-String StateSource = "Startup";          //Logs what caused the state to change for reporting.
+String StateSource = "LOCAL";            //Logs what caused the state to change for reporting.
 uint64_t NextPing;                       //When we should send the next ping to see if we are connected to the server.
 bool PingPending;                        //If 1, we are waiting to hear back from a ping
 uint64_t PingTimeout;                    //If we reach this time, it has been too long since we sent the ping.
@@ -154,9 +155,32 @@ String StartupIssue = "None";            //Stores any issues that happen during 
 bool TriggerRestart = 0;                 //Set to 1 to execute a restart.
 bool StartupFailed = 0;                  //1 if something went wrong on startup
 bool LockWhenIdle = 0;                   //1 if the machine should lock next time its state is Idle
+bool SealBroken = 0;                     //1 means there is an expected onewire device on the bus
+bool SealFault = 0;                      //1 means there is a fault due to a broken seal.
+bool SealBrokenReport = 0;               //1 means we just detected a bus issue, and need to report it. 
+bool ReSealBus = 0;                      //1 means we should re-seal the bus with the current connected devices.
+byte liveAddresses[MAX_DEVICES][8];      //OneWire addresses of what is currently connected
+int liveAddressCount = 0;                //Number of currently connected devices on the bus
+bool UpdateAddressBuffer = 1;            //Set to 1 to tell the Temperature monitor to upodate the address buffer.
+bool AddressBufferValid = 0;             //This is a flag we set to 1 to tell the SocketManager it is OK to send our buffer of devices. 
+bool RestartWhenIdle = 0;                //Set to 1 to restart the device the next time the state is idle.
+String APIOldState;                      //Stores the old state in an API-friendly way for reporting.
+
+//For handling OneWire devices
+struct Device {
+  byte address[8];
+  byte deviceType;         
+  byte highTempLimit;      
+  uint32_t classification; 
+  float currentTemp;       
+  bool isAlarming;         
+  bool isOnline;           // <--- Track if it's actually responding
+};
+
+Device sensorList[MAX_DEVICES];
 
 //Libraries:
-#include <OneWireESP32.h>         //Version 2.0.2 | Source: https://github.com/junkfix/esp32-ds18b20
+#include <OneWire.h>              //Replacing for WSACS API update...
 #include <Adafruit_PN532.h>       //Version 1.3.4 | Source: https://github.com/adafruit/Adafruit-PN532
 #include <ArduinoJson.h>          //Version 7.3.0 | Source: https://github.com/bblanchon/ArduinoJson
 #include <ArduinoJson.hpp>        //Version 7.3.0 | Source: https://github.com/bblanchon/ArduinoJson
@@ -227,6 +251,39 @@ extern "C" bool verifyRollbackLater() {
   //Since we are handling OTA verification ourselves, we just return true.
   return true;
 }
+
+//SSL Certificate. R12 for make.rit.edu running on Let's Encrypt. Will expire on March 12 2027!
+const char *root_ca = R"literal(
+-----BEGIN CERTIFICATE-----
+MIIFBjCCAu6gAwIBAgIRAMISMktwqbSRcdxA9+KFJjwwDQYJKoZIhvcNAQELBQAw
+TzELMAkGA1UEBhMCVVMxKTAnBgNVBAoTIEludGVybmV0IFNlY3VyaXR5IFJlc2Vh
+cmNoIEdyb3VwMRUwEwYDVQQDEwxJU1JHIFJvb3QgWDEwHhcNMjQwMzEzMDAwMDAw
+WhcNMjcwMzEyMjM1OTU5WjAzMQswCQYDVQQGEwJVUzEWMBQGA1UEChMNTGV0J3Mg
+RW5jcnlwdDEMMAoGA1UEAxMDUjEyMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIB
+CgKCAQEA2pgodK2+lP474B7i5Ut1qywSf+2nAzJ+Npfs6DGPpRONC5kuHs0BUT1M
+5ShuCVUxqqUiXXL0LQfCTUA83wEjuXg39RplMjTmhnGdBO+ECFu9AhqZ66YBAJpz
+kG2Pogeg0JfT2kVhgTU9FPnEwF9q3AuWGrCf4yrqvSrWmMebcas7dA8827JgvlpL
+Thjp2ypzXIlhZZ7+7Tymy05v5J75AEaz/xlNKmOzjmbGGIVwx1Blbzt05UiDDwhY
+XS0jnV6j/ujbAKHS9OMZTfLuevYnnuXNnC2i8n+cF63vEzc50bTILEHWhsDp7CH4
+WRt/uTp8n1wBnWIEwii9Cq08yhDsGwIDAQABo4H4MIH1MA4GA1UdDwEB/wQEAwIB
+hjAdBgNVHSUEFjAUBggrBgEFBQcDAgYIKwYBBQUHAwEwEgYDVR0TAQH/BAgwBgEB
+/wIBADAdBgNVHQ4EFgQUALUp8i2ObzHom0yteD763OkM0dIwHwYDVR0jBBgwFoAU
+ebRZ5nu25eQBc4AIiMgaWPbpm24wMgYIKwYBBQUHAQEEJjAkMCIGCCsGAQUFBzAC
+hhZodHRwOi8veDEuaS5sZW5jci5vcmcvMBMGA1UdIAQMMAowCAYGZ4EMAQIBMCcG
+A1UdHwQgMB4wHKAaoBiGFmh0dHA6Ly94MS5jLmxlbmNyLm9yZy8wDQYJKoZIhvcN
+AQELBQADggIBAI910AnPanZIZTKS3rVEyIV29BWEjAK/duuz8eL5boSoVpHhkkv3
+4eoAeEiPdZLj5EZ7G2ArIK+gzhTlRQ1q4FKGpPPaFBSpqV/xbUb5UlAXQOnkHn3m
+FVj+qYv87/WeY+Bm4sN3Ox8BhyaU7UAQ3LeZ7N1X01xxQe4wIAAE3JVLUCiHmZL+
+qoCUtgYIFPgcg350QMUIWgxPXNGEncT921ne7nluI02V8pLUmClqXOsCwULw+PVO
+ZCB7qOMxxMBoCUeL2Ll4oMpOSr5pJCpLN3tRA2s6P1KLs9TSrVhOk+7LX28NMUlI
+usQ/nxLJID0RhAeFtPjyOCOscQBA53+NRjSCak7P4A5jX7ppmkcJECL+S0i3kXVU
+y5Me5BbrU8973jZNv/ax6+ZK6TM8jWmimL6of6OrX7ZU6E2WqazzsFrLG3o2kySb
+zlhSgJ81Cl4tv3SbYiYXnJExKQvzf83DYotox3f0fwv7xln1A2ZLplCb0O+l/AK0
+YE0DS2FPxSAHi0iwMfW2nNHJrXcY3LLHD77gRgje4Eveubi2xxa+Nmk/hmhLdIET
+iVDFanoCrMVIpQ59XWHkzdFmoHXHBV7oibVjGSO7ULSQ7MJ1Nz51phuDJSgAIU7A
+0zrLnOrAj/dfrlEWRhCvAgbuwLZX1A2sjNjXoPOHbsPiy+lO1KF8/XY7
+-----END CERTIFICATE-----
+)literal";
 
 void setup(){
   xTaskCreate(OTAWatchdog, "OTAWatchdog", 2048, NULL, 1, NULL);
@@ -488,7 +545,7 @@ void setup(){
   xTaskCreate(ReadCard, "ReadCard", 2048, NULL, 5, NULL);
   xTaskCreate(BuzzerControl, "BuzzerControl", 1024, NULL, 5, NULL);
   xTaskCreate(MachineState, "MachineState", 2048, NULL, 5, NULL);
-  xTaskCreate(SocketManager, "SocketManager", 4096, NULL, 3, NULL);
+  xTaskCreate(SocketManager, "SocketManager", 8192, NULL, 3, NULL);
   xTaskResumeAll();
 
   Serial.println(F("Setup done."));

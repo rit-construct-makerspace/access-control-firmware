@@ -90,7 +90,7 @@ void LEDControl(void *pvParameters) {
     }
     //Done checking the State, release mutex;
     xSemaphoreGive(StateMutex);
-    if(TemperatureFault || Fault){
+    if(TemperatureFault || Fault || SealFault){
       //Animation 0: Flashing Red
       LEDAnimation = 0;
     }
@@ -99,7 +99,7 @@ void LEDControl(void *pvParameters) {
     if(LEDAnimation != OldLEDAnimation){
       OldLEDAnimation = LEDAnimation;
       AnimationTime = 0; //Force an update of the animation block
-    }
+    } 
     if(AnimationTime <= millis64()){
       //It is time to advance to the next animation block
       AnimationBlock = !AnimationBlock;
@@ -167,8 +167,12 @@ void LEDControl(void *pvParameters) {
       break;
       case 6:
         //Solid White
-        Red = 255;
-        Green = 255;
+        //Red = 255;
+        //Green = 255;
+        //Blue = 255;
+        //This break the led. go for blue instead.
+        Red = 0;
+        Green = 0;
         Blue = 255;
       break;
       case 7:
