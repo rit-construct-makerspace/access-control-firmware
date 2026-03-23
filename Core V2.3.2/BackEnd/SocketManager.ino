@@ -319,7 +319,7 @@ void SocketManager(void *pvParameters) {
     //Check how long it has been since we heard a non-ping message from the websocket. If it has been a while, prompt the server by sending the startup messages again.
     if(LastFromWS + 15000 <= millis64()){
       SendInfoMessage = 1;
-      LastFromWS = LastFromWS + 1000; //Give a 1 second delay so we don't spam this.
+      LastFromWS = LastFromWS + 5000; //Give a 1 second delay so we don't spam this.
       if(DebugMode){
         Serial.println(F("Haven't heard from the server in a while, sending Config Info message to prompt it to do something."));
       }
@@ -572,10 +572,9 @@ void StartWebsocket(){
   //New API requires some info in the header of the Websocket starting:
   String ExtraHeader = "device-sn:" + SerialNumber + "\r\ndevice-key:" + Key;
   socket.setExtraHeaders(ExtraHeader.c_str());
-  //socket.beginSslWithCA(Server.c_str(), 443, "/api/devices/cores/access/ws", root_ca);
-  //Hitting against a test server for now until we get production server online.
-  String testserver = "129.21.61.154";
-  socket.begin(testserver.c_str(), 3000, "/api/devices/cores/access/ws");
+  //socket.begin(Server.c_str(), 80, "/api/devices/cores/access/ws");
+  socket.beginSslWithCA(Server.c_str(), 443, "/api/devices/cores/access/ws", root_ca);
+
   if(DebugMode){
     Serial.print(F("Connecting to websocket URL: "));
     Serial.println(Server);
