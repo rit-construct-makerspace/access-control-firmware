@@ -337,6 +337,8 @@ void SocketManager(void *pvParameters) {
       JsonObject status = wsresp["status"].to<JsonObject>();
       status["currentCardTag"] = UID;
       JsonObject config = status["config"].to<JsonObject>();
+      String VerToSend = "shlugduino V" + String(Version);
+      config["firmware"] = VerToSend;
       JsonArray channels = config["channels"].to<JsonArray>();
       JsonObject channelsObject = channels.createNestedObject();
       channelsObject["id"] = 0;
