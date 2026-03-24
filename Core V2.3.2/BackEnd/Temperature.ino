@@ -29,10 +29,8 @@ void Temperature(void *pvParameters){
   //If the old configuration has no devices in it, we should discover as we are.
   if(deviceCount == 0){
      Serial.println(F("Inventory empty! Scanning to initialize..."));
-     xSemaphoreTake(OneWireMutex, portMAX_DELAY); 
      discoverDevices(); // This sets the initial baseline
      saveInventoryToFile(); // Save it so it's not empty next time
-     xSemaphoreGive(OneWireMutex);
   }
   //We should make sure the internal OneWire device is configured properly;
   configurePriorityDevice(SerialNumber);
@@ -325,7 +323,6 @@ void loadInventoryFromFile() {
   if (!SPIFFS.exists(INV_FILE)) {
     Serial.println("No inventory file found. System is uninitialized.");
     deviceCount = 0;
-    Fault = true; 
     return;
   }
 
