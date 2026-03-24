@@ -406,6 +406,7 @@ void SocketManager(void *pvParameters) {
       JsonObject message = wsresp["message"].to<JsonObject>();
       JsonObject content = message["content"].to<JsonObject>();
       content["message"] = Message;
+      content["category"] = "message";
       message["auditLog"] = true; 
       WSSend = 1;
       ReadyToSend = 0;
