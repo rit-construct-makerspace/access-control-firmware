@@ -350,6 +350,7 @@ void SocketManager(void *pvParameters) {
       //Need to iterate through each connected device on the bus, and add at as a nested object within the components array
       //Each object should have the key "SN" for the OneWire address, "type" for the type. Type has to be a string of the type, we can set it to always be "SWITCH_1_CHANNEL" by sending 0b001
       //First, let's make sure that the buffer of addresses is up to date;
+      /*
       AddressBufferValid = 0;
       UpdateAddressBuffer = 1;
       while(!AddressBufferValid){
@@ -374,6 +375,7 @@ void SocketManager(void *pvParameters) {
           }
         }
       }
+      */
       //Now we need to tell the server the state of all flags we support;
       //This is sent as part of the "config" object, 
       JsonObject flags = config["flags"].to<JsonObject>();

@@ -98,6 +98,7 @@ void USBConfig(void *pvParameters){
       Serial.println(F("Serial Number:"));
       Serial.println(SerialNumber);
     }
+    /*
     if(Input.charAt(0) == '(' ){
       //OneWire configuration command
       //Format: (OneWire,[address],[type],[class],[high temp])
@@ -149,5 +150,6 @@ void USBConfig(void *pvParameters){
         }
       }
     }
+    */
   }
 }

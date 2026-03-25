@@ -27,7 +27,7 @@ USBConfig: Allows programatic changing of settings over USB
 */
 
 //Settings
-#define Version "1.5.0"
+#define Version "1.5.1"
 #define Hardware "2.3.2-LE"
 #define MAX_DEVICES 10 //How many possible temperature sensors to scan for
 #define OTA_URL "https://raw.githubusercontent.com/rit-construct-makerspace/access-control-firmware/refs/heads/main/otadirectory.json"
@@ -44,7 +44,7 @@ USBConfig: Allows programatic changing of settings over USB
 #define BAD_INPUT_THRESHOLD 5 //If the wrong password or a bad JSON is loaded more than this many times, delete all information as a safety.
 #define TXINTERRUPT 0 //Set to 1 to route UART0 TX to the DB9 interrupt pin, to allow external loggers to capture crash data.
 //#define WebsocketUART //Uncomment to get messages from uart as if it is a websocket for testing. Also disables USB config to prevent issues there.
-#define DebugMode 0 //Set to 1 for verbose output via UART, /!\ WARNING /!\ can dump sensitive information
+#define DebugMode 1 //Set to 1 for verbose output via UART, /!\ WARNING /!\ can dump sensitive information
 #define ConnectRandomMax 3000 //Up to how many milliseconds to delay on connect/reconnect to the server, to prevent DDOSing it. Set to 0 to disable.
 
 //Global Variables:
@@ -540,7 +540,7 @@ void setup(){
   //Lastly, create all tasks and begin operating normally.
   vTaskSuspendAll();
   xTaskCreate(RegularReport, "RegularReport", 1024, NULL, 6, NULL); 
-  xTaskCreate(Temperature, "Temperature", 2048, NULL, 5, NULL);
+  //xTaskCreate(Temperature, "Temperature", 2048, NULL, 5, NULL);
   xTaskCreate(USBConfig, "USBConfig", 2048, NULL, 5, NULL);
   xTaskCreate(ReadCard, "ReadCard", 2048, NULL, 5, NULL);
   xTaskCreate(BuzzerControl, "BuzzerControl", 1024, NULL, 5, NULL);

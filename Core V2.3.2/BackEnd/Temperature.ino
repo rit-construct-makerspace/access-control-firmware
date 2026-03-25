@@ -8,6 +8,8 @@ This process is responsible for 2 main things;
 
 */
 
+/*
+
 const char* INV_FILE = "/inventory.dat"; //Where we store onewire devices for bus integrity monitoring
 
 
@@ -372,3 +374,5 @@ void refreshLiveAddressBuffer() {
     }
   }
 }
+
+*/
