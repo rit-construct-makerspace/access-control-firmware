@@ -139,11 +139,11 @@ esp_err_t USB::init() {
     // };
 
     char const* string_desc_arr[] = {
-        (const char[]){0x09, 0x04}, // 0: is supported language is English (0x0409)
-        "RIT SHED Makerspaces",     // 1: Manufacturer
-        "ACS Core v3.0.0",          // 2: Product
-        "123456",                   // 3: Serials
-        "Example MSC",              // 4. MSC
+        (const char[]){0x09, 0x04},    // 0: is supported language is English (0x0409)
+        "RIT SHED Makerspaces",        // 1: Manufacturer
+        "ACS Core v3.0.0",             // 2: Product
+        Hardware::get_serial_number(), // 3: Serials
+        "Example MSC",                 // 4. MSC
     };
 
     tinyusb_config_t tusb_cfg = TINYUSB_DEFAULT_CONFIG();
