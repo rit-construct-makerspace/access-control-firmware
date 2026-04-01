@@ -101,7 +101,7 @@ void led_thread_fn(void*) {
     }
 
     const Animation::Animation* thread_animation = &Animation::STARTUP;
-    bool network_good = false;
+    bool network_good = true;
     uint8_t current_frame = 0;
 
     while (true) {

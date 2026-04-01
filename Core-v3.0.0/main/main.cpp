@@ -17,7 +17,7 @@ void set_log_levels() {
 extern "C" void app_main(void) {
     set_log_levels();
     Hardware::init();
-    USB::init();
+    // USB::init();
     Storage::init();
     IO::init();
     Network::init();

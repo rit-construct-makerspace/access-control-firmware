@@ -9,7 +9,7 @@
 #include "driver/gpio.h"
 #include "esp_log.h"
 #include "hardware/pins.hpp"
-// #include "io/Button.hpp"
+#include "io/Button.hpp"
 // #include "io/Buzzer.hpp"
 // #include "io/CardReader.hpp"
 #include "io/LEDControl.hpp"
@@ -550,7 +550,7 @@ int IO::init() {
     gpio_config(&conf); // Enable turning on and off the connected switch
 
     LED::init();
-    // Button::init();
+    Button::init();
     // CardReader::init();
     // Buzzer::init();
     // Temperature::init();
