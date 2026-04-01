@@ -388,7 +388,7 @@ namespace Network {
         watchdog_timer_handle =
             xTimerCreate("watchdog_timeout", pdMS_TO_TICKS(30 * 1000), pdFALSE, NULL, network_watchdog_expiry_fn);
 
-        xTaskCreate(network_thread_fn, "network", 2048, nullptr, 0, &network_task);
+        xTaskCreate(network_thread_fn, "network", CONFIG_NETWORK_TASK_STACK_SIZE, nullptr, 0, &network_task);
 
         esp_reset_reason_t reason = esp_reset_reason();
         ESP_LOGI(TAG, "Reset cause: %s", reset_reason_to_str(reason));
