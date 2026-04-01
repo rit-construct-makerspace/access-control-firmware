@@ -1,4 +1,5 @@
 #include "hardware/hardware.hpp"
+#include "hardware/storage.hpp"
 #include "hardware/usb.hpp"
 
 #include <stdio.h>
@@ -12,7 +13,9 @@ void set_log_levels() {
 }
 
 extern "C" void app_main(void) {
-  set_log_levels();
-  Hardware::init();
-  USB::init();
+    set_log_levels();
+    Hardware::init();
+    USB::init();
+    Storage::init();
+    ESP_LOGI("main", "FINISHED INITING");
 }

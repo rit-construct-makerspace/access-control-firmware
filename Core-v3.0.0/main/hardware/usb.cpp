@@ -149,6 +149,7 @@ esp_err_t USB::init() {
     tinyusb_config_t tusb_cfg = TINYUSB_DEFAULT_CONFIG();
     tusb_cfg.descriptor.string = string_desc_arr;
     tusb_cfg.phy.self_powered = true;
+    tusb_cfg.phy.vbus_monitor_io = -1;
 
     // {
     //     .device_descriptor = NULL,
