@@ -1,6 +1,8 @@
 #include "hardware/hardware.hpp"
 #include "hardware/storage.hpp"
 #include "hardware/usb.hpp"
+#include "io/IO.hpp"
+#include "network/network.hpp"
 
 #include <stdio.h>
 
@@ -17,5 +19,7 @@ extern "C" void app_main(void) {
     Hardware::init();
     USB::init();
     Storage::init();
+    IO::init();
+    Network::init();
     ESP_LOGI("main", "FINISHED INITING");
 }
