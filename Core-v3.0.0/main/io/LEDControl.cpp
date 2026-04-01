@@ -1,6 +1,6 @@
 #include "LEDControl.hpp"
 
-// #include "network/network.hpp"
+#include "network/network.hpp"
 #include <array>
 #include <chrono>
 #include <freertos/FreeRTOS.h>
@@ -111,10 +111,9 @@ void led_thread_fn(void*) {
 
         advance_frame(thread_animation, strip, current_frame);
 
-        // network_good = Network::is_online();
+        network_good = Network::is_online();
 
         if (!network_good && (current_frame % 2 == 0)) {
-            led_strip_set_pixel(strip, 0, Animation::WHITE[0], Animation::WHITE[0], Animation::WHITE[0]);
             led_strip_set_pixel(strip, 0, Animation::WHITE[0], Animation::WHITE[0], Animation::WHITE[0]);
         }
 
