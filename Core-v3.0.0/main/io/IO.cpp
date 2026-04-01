@@ -10,8 +10,8 @@
 #include "esp_log.h"
 #include "hardware/pins.hpp"
 #include "io/Button.hpp"
-// #include "io/Buzzer.hpp"
-// #include "io/CardReader.hpp"
+#include "io/Buzzer.hpp"
+#include "io/CardReader.hpp"
 #include "io/LEDControl.hpp"
 // #include "io/Temperature.hpp"
 #include "network/network.hpp"
@@ -63,74 +63,74 @@ void go_to_state(IOState next_state) {
         return;
     }
 
-    // switch (next_state) {
-    //     case IOState::IDLE:
-    //         gpio_set_level(SWITCH_CNTRL, 0);
-    //         CardReader::set_require_switches(true);
-    //         LED::set_animation(&Animation::IDLE);
-    //         break;
-    //     case IOState::UNLOCKED:
-    //         gpio_set_level(SWITCH_CNTRL, 1);
-    //         CardReader::set_require_switches(true);
-    //         Buzzer::send_effect(SoundEffect::ACCEPTED);
-    //         LED::set_animation(&Animation::UNLOCKED);
-    //         break;
-    //     case IOState::ALWAYS_ON:
-    //         gpio_set_level(SWITCH_CNTRL, 1);
-    //         CardReader::set_require_switches(true);
-    //         Buzzer::send_effect(SoundEffect::ACCEPTED);
-    //         LED::set_animation(&Animation::ALWAYS_ON);
-    //         break;
-    //     case IOState::LOCKOUT:
-    //         gpio_set_level(SWITCH_CNTRL, 0);
-    //         CardReader::set_require_switches(true);
-    //         Buzzer::send_effect(SoundEffect::LOCKOUT);
-    //         LED::set_animation(&Animation::LOCKOUT);
-    //         break;
-    //     case IOState::NEXT_CARD:
-    //         gpio_set_level(SWITCH_CNTRL, 0);
-    //         CardReader::set_require_switches(true);
-    //         LED::set_animation(&Animation::NEXT_CARD);
-    //         break;
-    //     case IOState::WELCOMING:
-    //         gpio_set_level(SWITCH_CNTRL, 0);
-    //         CardReader::set_require_switches(false);
-    //         LED::set_animation(&Animation::WELCOMING);
-    //         break;
-    //     case IOState::WELCOMED:
-    //         gpio_set_level(SWITCH_CNTRL, 0);
-    //         CardReader::set_require_switches(false);
-    //         Buzzer::send_effect(SoundEffect::ACCEPTED);
-    //         LED::set_animation(&Animation::WELCOMED);
-    //         break;
-    //     case IOState::ALWAYS_ON_WAITING:
-    //         CardReader::set_require_switches(true);
-    //         LED::set_animation(&Animation::ALWAYS_ON_WAITING);
-    //         break;
-    //     case IOState::LOCKOUT_WAITING:
-    //         CardReader::set_require_switches(true);
-    //         LED::set_animation(&Animation::LOCKOUT_WAITING);
-    //         break;
-    //     case IOState::IDLE_WAITING:
-    //         CardReader::set_require_switches(true);
-    //         LED::set_animation(&Animation::IDLE_WAITING);
-    //         break;
-    //     case IOState::AWAIT_AUTH:
-    //         LED::set_animation(&Animation::AWAIT_AUTH);
-    //         break;
-    //     case IOState::DENIED:
-    //         Buzzer::send_effect(SoundEffect::DENIED);
-    //         LED::set_animation(&Animation::DENIED);
-    //         break;
-    //     case IOState::FAULT:
-    //         gpio_set_level(SWITCH_CNTRL, 0);
-    //         Buzzer::send_effect(SoundEffect::FAULT);
-    //         LED::set_animation(&Animation::FAULT);
-    //         break;
-    //     default:
-    //         ESP_LOGI(TAG, "Attempted to go to an unkown state");
-    //         return;
-    // }
+    switch (next_state) {
+        case IOState::IDLE:
+            gpio_set_level(SWITCH_CNTRL, 0);
+            CardReader::set_require_switches(true);
+            LED::set_animation(&Animation::IDLE);
+            break;
+        case IOState::UNLOCKED:
+            gpio_set_level(SWITCH_CNTRL, 1);
+            CardReader::set_require_switches(true);
+            Buzzer::send_effect(SoundEffect::ACCEPTED);
+            LED::set_animation(&Animation::UNLOCKED);
+            break;
+        case IOState::ALWAYS_ON:
+            gpio_set_level(SWITCH_CNTRL, 1);
+            CardReader::set_require_switches(true);
+            Buzzer::send_effect(SoundEffect::ACCEPTED);
+            LED::set_animation(&Animation::ALWAYS_ON);
+            break;
+        case IOState::LOCKOUT:
+            gpio_set_level(SWITCH_CNTRL, 0);
+            CardReader::set_require_switches(true);
+            Buzzer::send_effect(SoundEffect::LOCKOUT);
+            LED::set_animation(&Animation::LOCKOUT);
+            break;
+        case IOState::NEXT_CARD:
+            gpio_set_level(SWITCH_CNTRL, 0);
+            CardReader::set_require_switches(true);
+            LED::set_animation(&Animation::NEXT_CARD);
+            break;
+        case IOState::WELCOMING:
+            gpio_set_level(SWITCH_CNTRL, 0);
+            CardReader::set_require_switches(false);
+            LED::set_animation(&Animation::WELCOMING);
+            break;
+        case IOState::WELCOMED:
+            gpio_set_level(SWITCH_CNTRL, 0);
+            CardReader::set_require_switches(false);
+            Buzzer::send_effect(SoundEffect::ACCEPTED);
+            LED::set_animation(&Animation::WELCOMED);
+            break;
+        case IOState::ALWAYS_ON_WAITING:
+            CardReader::set_require_switches(true);
+            LED::set_animation(&Animation::ALWAYS_ON_WAITING);
+            break;
+        case IOState::LOCKOUT_WAITING:
+            CardReader::set_require_switches(true);
+            LED::set_animation(&Animation::LOCKOUT_WAITING);
+            break;
+        case IOState::IDLE_WAITING:
+            CardReader::set_require_switches(true);
+            LED::set_animation(&Animation::IDLE_WAITING);
+            break;
+        case IOState::AWAIT_AUTH:
+            LED::set_animation(&Animation::AWAIT_AUTH);
+            break;
+        case IOState::DENIED:
+            Buzzer::send_effect(SoundEffect::DENIED);
+            LED::set_animation(&Animation::DENIED);
+            break;
+        case IOState::FAULT:
+            gpio_set_level(SWITCH_CNTRL, 0);
+            Buzzer::send_effect(SoundEffect::FAULT);
+            LED::set_animation(&Animation::FAULT);
+            break;
+        default:
+            ESP_LOGI(TAG, "Attempted to go to an unkown state");
+            return;
+    }
 
     if (!set_state(next_state)) {
         ESP_LOGI(TAG, "Failed to update the stored state");
@@ -251,7 +251,7 @@ void handle_card_detected(IOEvent event) {
             });
             break;
         case IOState::LOCKOUT:
-            // Buzzer::send_effect(SoundEffect::LOCKOUT);
+            Buzzer::send_effect(SoundEffect::LOCKOUT);
             break;
         case IOState::WELCOMING:
             prior_request_state = IOState::WELCOMING;
@@ -369,7 +369,7 @@ void identify_timer_callback(TimerHandle_t timer) {
 
 void handle_identify() {
     LED::set_animation(&Animation::IDENTIFY);
-    // Buzzer::send_effect(SoundEffect::MARIO_VICTORY);
+    Buzzer::send_effect(SoundEffect::MARIO_VICTORY);
     xTimerStart(identify_timer, pdMS_TO_TICKS(100));
 }
 
@@ -398,10 +398,10 @@ void handle_network_command(IOEvent current_event) {
                 }
 
                 CardTagID cur_tag;
-                // if (!CardReader::get_card_tag(cur_tag)) {
-                //     IO::fault(FaultReason::SOFTWARE_ERROR);
-                //     return;
-                // }
+                if (!CardReader::get_card_tag(cur_tag)) {
+                    IO::fault(FaultReason::SOFTWARE_ERROR);
+                    return;
+                }
 
                 switch (current_event.network_command.commanded_state) {
                     case IOState::ALWAYS_ON:
@@ -512,7 +512,7 @@ void io_thread_fn(void*) {
                 break;
 
             case IOEventType::CARD_READ_ERROR:
-                // Buzzer::send_effect(SoundEffect::DENIED);
+                Buzzer::send_effect(SoundEffect::DENIED);
                 break;
 
             case IOEventType::NETWORK_COMMAND:
@@ -551,11 +551,14 @@ int IO::init() {
 
     LED::init();
     Button::init();
-    // CardReader::init();
-    // Buzzer::init();
+    CardReader::init();
+    Buzzer::init();
     // Temperature::init();
 
     xTaskCreate(io_thread_fn, "io", CONFIG_IO_TASK_STACK_SIZE, NULL, 0, &io_thread);
+
+    Buzzer::send_effect(SoundEffect::IDENTIFY);
+
     return 0;
 }
 

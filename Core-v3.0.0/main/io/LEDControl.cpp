@@ -24,7 +24,7 @@ static const char* TAG = "led";
 
 led_strip_handle_t configure_led(void) {
     led_color_component_format_t strip_color_format;
-    strip_color_format = LED_STRIP_COLOR_COMPONENT_FMT_GRB;
+    strip_color_format = LED_STRIP_COLOR_COMPONENT_FMT_RGB;
 
     // LED strip general initialization, according to your led board design
     led_strip_config_t strip_config = {
@@ -111,7 +111,7 @@ void led_thread_fn(void*) {
 
         advance_frame(thread_animation, strip, current_frame);
 
-        network_good = Network::is_online();
+        // network_good = Network::is_online();
 
         if (!network_good && (current_frame % 2 == 0)) {
             led_strip_set_pixel(strip, 0, Animation::WHITE[0], Animation::WHITE[0], Animation::WHITE[0]);

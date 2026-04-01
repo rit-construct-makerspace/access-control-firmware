@@ -21,5 +21,4 @@ extern "C" void app_main(void) {
     Storage::init();
     IO::init();
     Network::init();
-    ESP_LOGI("main", "FINISHED INITING");
 }
