@@ -14,10 +14,12 @@ ReadFailed: set to 1 if a card was not read properly repeatedly, indicating it i
 
 void MachineState(void *pvParameters) {
   uint64_t LastKeyState = 0;
+  /*
   while(Key1 && Key2){
     //Both keys set to 1 never can actually happen. This means we haven't read new states from the frontend yet.
     delay(10);
   }
+  */
   bool OldKey1 = Key1;
   bool OldKey2 = Key2;
   String OldState = State; //Stores the last state of the system.
@@ -30,7 +32,7 @@ void MachineState(void *pvParameters) {
       LogoffSent = 0;
     }
     //The rest of this loop requires the State string, so let's reserve it;
-    xSemaphoreTake(StateMutex, portMAX_DELAY);
+    //xSemaphoreTake(StateMutex, portMAX_DELAY);
     if(TemperatureFault && State != "Fault"){
       State = "Fault";
       StateSource = "OVER_TEMP";
@@ -94,6 +96,7 @@ void MachineState(void *pvParameters) {
       PreUnlockState = State;
       State = "Unlocked";
       StateSource = "AUTHED";
+      Serial.println(F("Authed."));
       SessionStart = millis64();
     }
     if(State == "Unlocked" && !CardPresent){
@@ -101,6 +104,7 @@ void MachineState(void *pvParameters) {
       //We should return to our previous state
       State = PreUnlockState;
       StateSource = "CARD_REMOVED";
+      Serial.println(F("Card reomved."));
       EndStatus = 1; //Send a message to the server that the session ended
     }
     //Set the ACS output based on state;
@@ -171,7 +175,7 @@ void MachineState(void *pvParameters) {
     }
 
     //Release the semaphore;
-    xSemaphoreGive(StateMutex);
+    //xSemaphoreGive(StateMutex);
 
     //Check if it is 4am and we need to restart
     if((NightlyFlag == 0) && (rtc.getHour(true) == 4) && (millis64() > 3700000)){

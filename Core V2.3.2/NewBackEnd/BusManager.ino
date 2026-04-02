@@ -4,14 +4,7 @@ The Bus Manager is responsible for everything OneWire related
   * Checking for bus integrity
 */
 
-//Variables - Inter-Task Communication
-bool SealBroken = 0;  //Set to 1 if there is an incorrect OneWire device on the bus. 
-bool Overtemp = 0;    //Set to 1 if there is a device overtemperature on the bus, so we can fault. 
-byte liveAddresses[5][8];      //OneWire addresses of what is currently connected, for server reporting.
-int liveAddressCount = 0;                //Number of currently connected devices on the bus, for server reporting.
-
 void BusManager(void *pvParameters){
-  byte deviceCount = 0; //Tracks the number of OneWire devices found on the bus.
   unsigned long long OneWireTime = 0;      //Next time we should check the bus.
   struct Device {
     byte address[8];
@@ -24,13 +17,25 @@ void BusManager(void *pvParameters){
   };
   Device sensorList[5];
   while(1){
-    //Step 1: Check if it is time to check the bus
+    //Step 1: Check if we are commanded to seal the bus;
+    if(ReSealBus){
+      ReSealBus = false;
+      discoverDevices();
+      saveInventoryToFile();
+      SealBroken = false;
+      //Set state lockout;
+      State = "LOCKED_OUT";
+      StateChangeReason = "LOCAL";
+      //Immediately re-run the bus scan;
+      OneWireTime = 0;
+    }
+    //Step 2: Check if it is time to check the bus
     if(OneWireTime <= millis64()){
       OneWireTime = millis64() + 10000; //Check again in 10 seconds
       //Step 2: Scan the bus for devices, make sure they are all there
       checkBusHealth();
       if(SealBroken){
-        refreshLiveAddresSBuffer();
+        refreshLiveAddressBuffer();
       }
       //Step 3: Check for any overtemp devices
       updateBusTemperatures();
@@ -41,13 +46,13 @@ void BusManager(void *pvParameters){
 
 void loadInventoryFromFile() {
   //Gets the expected list of OneWire devices from memory.
-  if (!SPIFFS.exists(INV_FILE)) {
+  if (!SPIFFS.exists("/inventory.dat")) {
     Serial.println("No inventory file found. System is uninitialized.");
     deviceCount = 0;
     return;
   }
 
-  File file = SPIFFS.open(INV_FILE, FILE_READ);
+  File file = SPIFFS.open("/inventory.dat", FILE_READ);
   deviceCount = file.read(); // First byte is the count
   
   for (int i = 0; i < deviceCount; i++) {
@@ -72,7 +77,7 @@ void discoverDevices() {
   deviceCount = 0;
   ds.reset_search();
   Serial.println("\n--- Scanning Bus ---");
-  while (ds.search(addr) && deviceCount < MAX_DEVICES) {
+  while (ds.search(addr) && deviceCount < 10) {
     if (OneWire::crc8(addr, 7) != addr[7]) continue;
     for (int i = 0; i < 8; i++) sensorList[deviceCount].address[i] = addr[i];
     
@@ -88,7 +93,7 @@ void discoverDevices() {
 
 void saveInventoryToFile() {
   //Saves the current list of debices to SPIFFs, treating it as a valid deployment. 
-  File file = SPIFFS.open(INV_FILE, FILE_WRITE);
+  File file = SPIFFS.open("/inventory.dat", FILE_WRITE);
   if (!file) {
     Serial.println("Error: Could not create inventory file!");
     return;
@@ -111,9 +116,9 @@ void checkBusHealth() {
   byte addr[8];
   int liveCount = 0;
   bool currentMismatch = false;
-  bool responded[MAX_DEVICES] = {false};
+  bool responded[10] = {false};
 
-  // 1. Initial Full Bus Scan
+  // --- 1. Initial Full Bus Scan ---
   ds.reset_search();
   while (ds.search(addr)) {
     if (OneWire::crc8(addr, 7) != addr[7]) continue;
@@ -138,25 +143,18 @@ void checkBusHealth() {
     }
   }
 
-  // 2. Double-Check Missing Devices
+  // --- 2. Verified Retry for Missing Devices ---
   for (int i = 0; i < deviceCount; i++) {
     if (!responded[i]) {
-      // Try to reset the bus and specifically address this "missing" device
-      ds.reset();
-      ds.select(sensorList[i].address);
-      
-      // If the device responds to a direct select, it's actually there!
-      // We check if the device pulls the bus low (presence pulse)
-      if (ds.reset()) { 
-        // We do a second search or a simple read attempt to verify
+      // Use a targeted scratchpad read instead of a general bus reset.
+      // If the device is missing, the bus floats high, CRC fails, and this returns false.
+      byte dummyData[9];
+      if (readScratchpad(sensorList[i].address, dummyData)) { 
         responded[i] = true;
         sensorList[i].isOnline = true;
         liveCount++;
-        Serial.print("Recovery: Device ");
-        printAddress(sensorList[i].address);
-        Serial.println(" found on retry.");
       } else {
-        // Still missing after retry
+        // Still missing after targeted communication attempt
         Serial.print("SECURITY ALERT: Missing device: ");
         printAddress(sensorList[i].address);
         Serial.println();
@@ -166,26 +164,17 @@ void checkBusHealth() {
     }
   }
 
-  // 3. Final Count Comparison
+  // --- 3. Final Count Comparison ---
   if (liveCount != deviceCount) {
     currentMismatch = true;
   }
 
-  // 4. State Management & Auto-Recovery
+  // --- 4. State Management & Terminal Fault Logic ---
   if (currentMismatch) {
     if (!SealBroken) {
       Serial.println("BUS SEAL RUPTURED!");
       SealBroken = true;
     }
-  } else {
-    //If the bus layout is now perfect, go back to normal
-    /*
-    Taken out for now, fault states should be considered terminal and require a restart no matter what.
-    if (SealBroken) {
-      Serial.println("Bus integrity restored. Seal re-established.");
-      SealBroken = false;
-    }
-    */
   }
 }
 
@@ -197,7 +186,7 @@ void updateBusTemperatures() {
   delay(750); 
 
   //Start by assuming everything is fine. 
-  Overtemp = false; 
+  OverTemp = false; 
 
   for (int i = 0; i < deviceCount; i++) {
     byte data[9];
@@ -210,7 +199,7 @@ void updateBusTemperatures() {
       if (sensorList[i].currentTemp >= (float)sensorList[i].highTempLimit) {
         sensorList[i].isAlarming = true;
         //If this specific sensor is alarming, the whole system is Overtemp
-        Overtemp = true; 
+        OverTemp = true; 
         Serial.println(F("Overtemperature detected!"));
         Serial.print("Device ");
         for(int j = 0; j < 8; j++){
@@ -239,4 +228,35 @@ void refreshLiveAddressBuffer() {
       liveAddressCount++;
     }
   }
+}
+
+void printAddress(byte addr[8]) {
+  for (int i = 0; i < 8; i++) {
+    if (addr[i] < 16) Serial.print("0");
+    Serial.print(addr[i], HEX);
+    if (i < 7) Serial.print(":");
+  }
+}
+
+bool readScratchpad(byte addr[8], byte* buffer) {
+  ds.reset();
+  ds.select(addr);
+  ds.write(0xBE); 
+  for (int i = 0; i < 9; i++) buffer[i] = ds.read();
+  return (OneWire::crc8(buffer, 8) == buffer[8]);
+}
+
+uint32_t fetchMetadata(byte addr[8], byte &outType, byte &outHigh) {
+  byte data[9];
+  if (readScratchpad(addr, data)) {
+    outHigh = data[2]; // TH is our High Temp Limit
+    outType = (data[3] >> 3) & 0x07;
+    
+    uint32_t combined = 0;
+    combined |= (uint32_t)data[7] << 9; 
+    combined |= (uint32_t)data[6] << 1;
+    combined |= (uint32_t)(data[3] & 0x04) >> 2;
+    return combined & 0x1FFFF;
+  }
+  return 0xFFFFFFFF;
 }

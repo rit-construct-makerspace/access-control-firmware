@@ -6,20 +6,6 @@ There are 3 tasks;
   RestartController - Listens for the front button to be held for 5 seconds, restarts the device. All other reset source throughout the code are handled by this task as well.
 */
 
-//Variables - Inter-Task Communication (Outside Frontend)
-bool Button = 0;  //Set to 1 when frontend button pressed.
-bool Switch1 = 0;  //Set to 1 when switch 1 of card detect is pressed.
-bool Switch2 = 0;  //Set to 1 when switch 2 of the card detect is pressed.
-
-//Variables - Inter-Task Communication (Inside Frontend)
-bool NewLED = 0; //Set to 1 when there is new valid data to send to the frontend for the LEDs.
-byte Red = 0; //Tracks the red channel light intensity
-byte Green = 0; //Tracks the green channel light intensity
-byte Blue = 0; //Tracks the blue channel light intensity
-bool NewBuzzer = 0; //Set to 1 when there is a new valid buzzer tone to send.
-unsigned int Tone = 0; //Set to the tone that the buzzer should play.
-bool ResetLED = 0; //Set to 1 to take priority over the LED controller, to indicate the restart is imminent.
-
 #define HIGH_TONE 2000 //Hz
 #define LOW_TONE 1500 //Hz
 
@@ -30,7 +16,7 @@ void InternalSerial(void *pvParameters){
 
     //1: Check if it has been long enough to send a poll message. This lets us periodically get information from the frontend for InternalRead to use.
     if(PollTime <= millis64()){
-      Polltime = millis64() + 1000;
+      PollTime = millis64() + 1000;
       Internal.println("P");
     }
 
@@ -55,7 +41,7 @@ void InternalSerial(void *pvParameters){
     Internal.println("S " + String(Access));
 
     //Wait a bit to give the frontend time to send us data.
-    vTaskDelay(20 / portTICK_PERIOD_MS);
+    vTaskDelay(25 / portTICK_PERIOD_MS);
 
     //5: See if there is anything from the frontend;
     while(Internal.available()){
@@ -65,9 +51,9 @@ void InternalSerial(void *pvParameters){
       if(incoming.charAt(0) == 'B'){
         //Message pertains to the buttons
         if(incoming.charAt(2) == '1'){
-          Button = 0;
-        } else{
           Button = 1;
+        } else{
+          Button = 0;
         }
       }
       if(incoming.charAt(0) == 'S'){
@@ -113,7 +99,7 @@ void AVControl(void *pvParameters){
       //Animation 3: Solid Yellow
       LEDAnimation = 3;
     }
-    if((PendingApproval){
+    if(PendingApproval){
       //Animation 4: Flashing Yellow
       LEDAnimation = 4;
     }
@@ -121,13 +107,17 @@ void AVControl(void *pvParameters){
       //Animation 2: Solid Green
       LEDAnimation = 2;
     }
+    if(State.equals("UNKNOWN") || NoNetwork){
+      //Animation 7: Solid Blue
+      LEDAnimation = 7;
+    }
+    if((State.equals("UNLOCKED") || State.equals("ALWAYS_ON")) && NoNetwork){
+      //Animation 5: Alternate blue/green
+      LEDAnimation = 5;
+    }
     if(State.equals("LOCKED_OUT") || AccessDenied){
       //Animation 1: Solid Red
       LEDAnimation = 1;
-    }
-    if(State.equals("UNKNOWN")){
-      //Animation 7: Solid Blue
-      LEDAnimation = 7;
     }
     if(Identify){
       //Animation 9: Flashing Blue
@@ -204,14 +194,14 @@ void AVControl(void *pvParameters){
         }
       break;
       case 5:
-        //Cycle Green/White
+        //Cycle Green/Blue
         if(AnimationBlock == 1){
           Red = 0;
           Green = 255;
           Blue = 0;
         } else{
-          Red = 255;
-          Green = 255;
+          Red = 0;
+          Green = 0;
           Blue = 255;
           AnimationBlock = 0;
         }
@@ -276,32 +266,18 @@ void AVControl(void *pvParameters){
     
     //After the LED, we need to set up the buzzer.
 
-    Buzzer todos
-    AccessDenied
-    NFCBroken
-
-
     Melody = 0; //Set to 0 so if no situations apply, we stop playing
-    //Reserve the State string so it doesn't change while we are comparing it.
-    xSemaphoreTake(StateMutex, portMAX_DELAY); 
-    if(State.equals("Unlocked")){
+    if(UnlockedBeep){
       //The machine has been unlocked
-      //Since we only play a tone on a melody change, constalty checking this should be fine...
       Melody = 1;
     }
-    xSemaphoreGive(StateMutex);
-    if(CardVerified && !CardStatus && CardPresent){
+    if(AccessDenied){
       Melody = 2;
     }
-    if(TemperatureFault || Fault || ReadError){
+    if(State == "FAULT"){
       Melody = 3;
     }
-    if(VerifiedBeep && (State != "Idle" || NoNetwork)){
-      Melody = 4;
-    } else{
-      VerifiedBeep = 0;
-    }
-    if(ChangeBeep){
+    if(SingleBeep){
       Melody = 4;
     }
     if(Identify){
@@ -328,6 +304,7 @@ void AVControl(void *pvParameters){
     MelodyTime = millis64() + 250; //Set the time to change the note again.
     switch (Melody){
       case 1:
+        //Approved tone
         switch (MelodyStep){
           case 0:
             Tone = LOW_TONE;
@@ -337,11 +314,13 @@ void AVControl(void *pvParameters){
           break;
           case 2:
             Tone = 0;
+            UnlockedBeep = 0;
             DonePlaying = 1;
           break;
         }
       break;
       case 2:
+        //Denied tone
         switch (MelodyStep){
           case 0: 
             Tone = HIGH_TONE;
@@ -356,6 +335,7 @@ void AVControl(void *pvParameters){
         }
       break;
       case 3:
+        //Fault tone
         switch (MelodyStep){
           case 0:
             Tone = LOW_TONE;
@@ -374,21 +354,20 @@ void AVControl(void *pvParameters){
           break;
           case 5:
             Tone = 0;
-            ReadError = 0; //Turn off this flag in case that's the trigger.
             DonePlaying = 1;
           break;
         }
       break;
       case 4:
+        //Single beep
         switch(MelodyStep){
           case 0:
             Tone = HIGH_TONE;
           break;
           case 1:
             Tone = 0;
-            VerifiedBeep = 0;
-            ChangeBeep = 0;
             DonePlaying = 1;
+            SingleBeep = 0;
           break;
         }
       break;
@@ -410,10 +389,12 @@ void AVControl(void *pvParameters){
   }
 }
 
+
 void RestartController(void *pvParameters){
   unsigned long long ButtonTime = 0;
   while(1){
     //First, check if the button is being held to trigger a restart;
+    delay(100);
     if(!Button){
       //Button is not being pressed
       ButtonTime = millis64() + 3000;
@@ -430,9 +411,8 @@ void RestartController(void *pvParameters){
     }
     //Next, check if anything has asked for the device to be restarted.
     if(RequestReset){
-      vTaskSuspendAll(); //Don't let other tasks take over.
-      internal.println("L 0,0,255"); //Set LED blue
-      internal.flush();
+      Internal.println("L 0,0,255"); //Set LED blue
+      Internal.flush();
       settings.putString("ResetReason",ResetReason);
       delay(50);
       ESP.restart();

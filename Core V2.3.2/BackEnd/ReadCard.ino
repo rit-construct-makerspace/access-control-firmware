@@ -82,7 +82,7 @@ void ReadCard(void *pvParameters) {
         uint32_t versiondata = nfc.getFirmwareVersion();
         if(!versiondata){
           //Wait until we can take the debug port no matter how long it takes...
-          xSemaphoreTake(StateMutex, portMAX_DELAY); 
+          //xSemaphoreTake(StateMutex, portMAX_DELAY); 
           Serial.println(F("CRITICAL ERROR: NFC READER MALFUNCTION."));
           xSemaphoreGive(DebugMutex);
           Fault = 1;
@@ -196,6 +196,7 @@ void ReadCard(void *pvParameters) {
       CardVerified = 0;
       InternalVerified = 0;
       InternalStatus = 0;
+      AuthPending = 0; //In case they pulled it out while we were authing
       UID = "";
     }
     if(!Switch1 && !Switch2){

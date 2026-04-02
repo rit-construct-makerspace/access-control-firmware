@@ -48,7 +48,7 @@ void LEDControl(void *pvParameters) {
     vTaskDelay(3 / portTICK_PERIOD_MS);
     //First, set the animation state:
     //Reserve the State string for checks;
-    xSemaphoreTake(StateMutex, portMAX_DELAY); 
+    //xSemaphoreTake(StateMutex, portMAX_DELAY); 
     //Animation triggers are not exclusive, so if statements written in reverse-priority order.
     if(State.equals("Idle")){
       //Animation 3: Solid Yellow
@@ -89,7 +89,7 @@ void LEDControl(void *pvParameters) {
       LEDAnimation = 8;
     }
     //Done checking the State, release mutex;
-    xSemaphoreGive(StateMutex);
+    //xSemaphoreGive(StateMutex);
     if(TemperatureFault || Fault || SealFault){
       //Animation 0: Flashing Red
       LEDAnimation = 0;

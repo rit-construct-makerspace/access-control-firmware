@@ -38,7 +38,7 @@ void ResetButton(void *pvParameters){
 
     if(millis64() >= ButtonTime || TriggerRestart){
       //It has been 3 seconds, restart.
-      xSemaphoreTake(StateMutex, portMAX_DELAY);
+      //xSemaphoreTake(StateMutex, portMAX_DELAY);
       settings.putString("LastState", State);
       delay(10);
       State = "Restart";

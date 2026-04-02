@@ -49,6 +49,7 @@
   #include <ESP32Ping.h>            //Version 1.6   | Source: https://github.com/marian-craciunescu/ESP32Ping
   #include <ping.h>                 //Version 1.6   | Source: https://github.com/marian-craciunescu/ESP32Ping
   #include "esp_ota_ops.h"          //Version 3.1.1 | Inherent to ESP32 Arduino
+  #include <MQTTPubSubClient.h> 
 
 //Objects:
   Adafruit_PN532 nfc(SCKPin, MISOPin, MOSIPin, NFCCS);
@@ -60,6 +61,8 @@
   ESP32OTAPull ota;
   ESP32Time rtc;
   WebSocketsClient socket;
+  MQTTPubSub::PubSubClient<256> mqtt;
+  OneWire ds(TEMP); 
 
 extern "C" bool verifyRollbackLater() {
   //This code is run to verify the OTA before actual setup.
@@ -111,11 +114,16 @@ bool ChangeBeep = 0; //Lets the frontend know to beep.
 //Variables - System State
 bool Identify = 0; //Set to 1 to play an identification alarm/buzzer.
 String State = "UNKNOWN"; //State of the machine, uses the WSACS API standard wording (IDLE, UNLOCKED, ALWAYS_ON, LOCKED_OUT, FAULT, UNKNOWN)
+String StateChangeReason; //What caused the state to change
 bool PendingApproval = 0; //Set to 1 when we have a card present that hasn't been authed yet, this is used for LED animations. 
 bool AccessDenied = 0; //Set to 1 when a card is present but has been denied, for LED animations. 
 bool CardPresent = 0; //Used to track if there is a card present in the machine.
 bool NFCBroken = 0;   //Set to 1 if we lose the NFC reader, needed since the NFC reader is an external component on these boards. 
-String LastState; //Stores what the state was previously, to detect changes.
+String LastState = "UNKNOWN"; //Stores what the state was previously, to detect changes.
+String PreservedLastState = "UNKNOWN";
+bool LockWhenIdle = 0;
+bool RestartWhenIdle = 0;
+bool NoNetwork = 1;
 
 //Variables - Config
 String SerialNumber;
@@ -123,16 +131,81 @@ String Password;
 String SSID;
 String Server;
 String Key;
+int MakerspaceID;
 
-//Variables - WebSocket
-bool JustDisconnected = 1; //Stops spamming of websocket disconnect messages.
-bool WSSend = 0;     //Tracks if we have something to send
-unsigned long long NextPing = 0; //The time to send the next ping. A ping goes out every 2 seconds.
-String WSIncoming;   //String of incoming data from server;
-bool NewFromWS; //Set to 1 if there is data to be read in WSIncoming.
+//Variables - MQTT Incoming
+String AuthResponse; 
+bool NewAuth = 0;
+String InfoResponse;
+bool NewInfo = 0;
+String CommandResponse;
+bool NewCommand = 0;
+bool NewPing = 1;
+bool SendPing = 0;
+unsigned long long NextPingTime = 0;
+bool OTAValid = 0;
+bool OTALocked = 0;
+
+//Variables - MQTT Outgoing
+String BaseTopic; //Used to store the root topic that all others are appended to.
+String Message; //Info for the history tab
+bool MessageToSend = 0;
+bool SendAuth = 0;
+bool StateChange = 0;
+bool ReportConfig = 0;
+bool RequestInfo = 0;
+bool SendStatus = 0;
+
+//Variables - Inter-Task Communication
+bool SealBroken = 0;  //Set to 1 if there is an incorrect OneWire device on the bus. 
+bool ReSealBus = 0;
+bool OverTemp = 0;    //Set to 1 if there is a device overtemperature on the bus, so we can fault. 
+byte liveAddresses[5][8];      //OneWire addresses of what is currently connected, for server reporting.
+int liveAddressCount = 0;                //Number of currently connected devices on the bus, for server reporting.
+byte deviceCount = 0; //Tracks the number of OneWire devices found on the bus.
+
+//Variables - Inter-Task Communication (Outside Frontend)
+bool Button = 0;  //Set to 1 when frontend button pressed.
+bool Switch1 = 0;  //Set to 1 when switch 1 of card detect is pressed.
+bool Switch2 = 0;  //Set to 1 when switch 2 of the card detect is pressed.
+
+//Variables - Inter-Task Communication (Inside Frontend)
+bool NewLED = 0; //Set to 1 when there is new valid data to send to the frontend for the LEDs.
+byte Red = 0; //Tracks the red channel light intensity
+byte Green = 0; //Tracks the green channel light intensity
+byte Blue = 0; //Tracks the blue channel light intensity
+bool NewBuzzer = 0; //Set to 1 when there is a new valid buzzer tone to send.
+unsigned int Tone = 0; //Set to the tone that the buzzer should play.
+bool ResetLED = 0; //Set to 1 to take priority over the LED controller, to indicate the restart is imminent.
+bool UnlockedBeep = 0;
+bool SingleBeep = 0;
+
+//For handling OneWire devices
+struct Device {
+  byte address[8];
+  byte deviceType;         
+  byte highTempLimit;      
+  uint32_t classification; 
+  float currentTemp;       
+  bool isAlarming;         
+  bool isOnline;           // <--- Track if it's actually responding
+};
+
+Device sensorList[10];
 
 void setup() {
   // put your setup code here, to run once:
+
+  Serial.begin(115200);
+  Serial.println(F("STARTUP"));
+  delay(2000);
+
+  //Start SPIFFS:
+  if(!SPIFFS.begin(1)){
+    Serial.println(F("SPIFFS Mount Failed!"));
+    delay(1000);
+    ESP.restart();
+  }
 
   //Connect to the frontend, set the buzzer off. In case we crashed while we were writing the buzzer.
   Internal.begin(115200, SERIAL_8N1, TOESP, TOTINY);
@@ -146,6 +219,7 @@ void setup() {
   xTaskCreate(InternalSerial, "InternalSerial", 1024, NULL, 5, NULL);
   xTaskCreate(AVControl, "AVControl", 1024, NULL, 5, NULL);
   xTaskCreate(RestartController, "RestartController", 1024, NULL, 5, NULL);
+  xTaskCreate(MachineState, "MachineState", 1024, NULL, 5, NULL);
 
   //Load settings from memory
   settings.begin("settings", false);
@@ -173,15 +247,37 @@ void setup() {
   if(settings.isKey("Timezone")){
     TimezoneHr = settings.getString("Timezone").toInt();
   } else{
-    TimezoneHr = -4;
+    TimezoneHr = -4; //Hardcoded EST
   }
   rtc.offset = TimezoneHr * 3600;
+  //Special handler, since deployed hardware doesn't have a makerspace ID currently.
+  if(!settings.isKey("MakerspaceID")){
+    while(1){
+      delay(1000);
+      if(Serial.available()){
+        String incoming = Serial.readString();
+        incoming.trim();
+        MakerspaceID = incoming.toInt();
+        settings.putInt("MakerspaceID", MakerspaceID);
+        Serial.print(F("Makerspace ID Set to: "));
+        Serial.println(MakerspaceID);
+        break;
+      } else{
+        Serial.println(F("ERROR! No Makerspace ID. Need to enter one now to continue..."));
+      }
+    }
+  }
+  MakerspaceID = settings.getInt("MakerspaceID");
 
   //Connect to the network before we continue.
   WiFi.mode(WIFI_STA);
   WiFi.begin(SSID, Password);
   WiFi.setSleep(false);
   WiFi.setAutoReconnect(true);
+
+  mqtt.begin(socket); //Enable MQTT on the websocket
+
+  NetworkConnect();
 
   //If we cared about why we restarted, this'd be the place to handle it.
 
@@ -190,7 +286,7 @@ void setup() {
   ota.SetConfig(Hardware);
   ota.OverrideDevice("ACS Core");
   ota.EnableSerialDebug();
-  int otaresp = ota.CheckForOTAUpdate(OTA_URL, Version);
+  int otaresp = ota.CheckForOTAUpdate("https://raw.githubusercontent.com/rit-construct-makerspace/access-control-firmware/refs/heads/main/otadirectory.json", Version);
   Serial.print(F("OTA Response: "));
   Serial.println(errtext(otaresp));
 
@@ -233,22 +329,10 @@ void setup() {
   //Going forward, we will check the OneWire bus in a different task to make life easier.
   xTaskCreate(BusManager, "BusManager", 2048, NULL, 5, NULL);
 
-  //Start our websocket connection
-  //New API requires some info in the header of the Websocket starting:
-  String ExtraHeader = "device-sn:" + SerialNumber + "\r\ndevice-key:" + Key;
-  socket.setExtraHeaders(ExtraHeader.c_str());
-  //socket.begin(Server.c_str(), 80, "/api/devices/cores/access/ws");
-  socket.beginSslWithCA(Server.c_str(), 443, "/api/devices/cores/access/ws", root_ca);
-  Serial.print(F("Attempting initial connect to Websocket..."));
-  while(!socket.isConnected()){
-    Serial.print(".")
-  }
-  Serial.println();
-  Serial.println(F("Websocket connected!"));
-  socket.onEvent(webSocketEvent);
-  socket.setReconnectInterval(2000); //Attempt to reconnect every 2 seconds if we lose connection
-
   //Time to loop! 
+  while(liveAddressCount == 0){ //Wait for the BusManager to have a valid inventory;
+    delay(100); 
+  }
   GamerMode = 0; //Disable the startup lighting
 
 }
@@ -256,96 +340,269 @@ void setup() {
 void loop() {
   // put your main code here, to run repeatedly:
 
-  //Step 1: Check machine state variables
-
-  //Step 1.1: Check for any reason we should be in a fault state
-  if(OverTemp || SealBroken || NFCBroken){
-    State = "FAULT";
-  }
-
-  //Step 1.2: Check for a change to the card. New one? Removed? 
-  //Was a new card inserted?
-  if(!CardPresent && Switch1 && Switch2){
-    CardPresent = 1;
-    //Let's read the card;
-    byte NFCRetryCount = 0;
-    bool success;                                //Determines if an NFC read was successful
-    uint8_t uid[] = { 0, 0, 0, 0, 0, 0, 0, 0 };  // Buffer to store the returned UID
-    uint8_t uidLength;                           // Length of the UID (4 or 7 bytes depending on ISO14443A card type)
-    while(NFCRetryCount <= 5){
-      //Power cycle the NFC reader
-      digitalWrite(NFCPWR, HIGH);
-      vTaskDelay(10 / portTICK_PERIOD_MS);
-      digitalWrite(NFCPWR, LOW);
-      vTaskDelay(10 / portTICK_PERIOD_MS);
-      nfc.wakeup();
-      nfc.setPassiveActivationRetries(0xFF);
-      //Attempt to read the card via NFC:
-      success = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, &uid[0], &uidLength, 500);
-      if(success){
-        break;
-      } else{
-        NFCRetryCount++;
-      }
-    }
-    if(NFCRectryCount > 5){
-      //We failed to read the NFC card all 5 times.
-      //Is there actually an NFC card here?
-      uint32_t versiondata = nfc.getFirmwareVersion();
-      if(!versiondata){
-        //This means the NFC reader is broken
-        NFCBroken = true;
-        Serial.println(F("NFC Reader Broken?"));
-        continue;
-      } else{
-        //Reader is working, must not be an NFC card?
-        AccessDenied = true;
-        Serial.println(F("Not an NFC card?"));
-        continue;
-      }
-    }
-    UID = "";
-    Serial.print(F("Card: "));
-    for (uint8_t i = 0; i < uidLength; i++) {
-      Serial.print(uid[i], HEX);
-      Serial.print(" ");
-      char buf[3] = {0};
-      snprintf(buf, sizeof(buf), "%02x", uid[i]);
-      UID += String(buf);
-    }
-    Serial.println(" Found.");
-    if(State == "IDLE"){
-      //Let's check with the server
-      PendingApproval = true;
-    } else if(State == "UNLOCKED" || State == "ALWAYS_ON"){
-      //Nothing changes, but let's give a beep to the user.
-      ChangeBeep = true;
-    } else{
-      //Auto-deny the user
-      AccessDenied = true;
-    }
-  }
-  //Was a card that was present removed?
-  if(CardPresent && (!Switch1 || !Switch2){
-    //Reset everything to normal.
-    CardPresent = false;
-    UID = "";
-    PendingApproval = false;
-    AccessDenied = false;
-    if(State == "UNLOCKED"){
-      State = "IDLE";
-    }
-  }
-
-  //Step 1.3: Check if the state has changed since last time we went through the loop.
-  if(State != LastState){
-
-  }
+  //Step 0: Call the MQTT updater;
+  mqtt.update();
 
   //Step 4: Communicate with the server
-  //Step 4.1: See if we have any outgoing messages, and send them.
-  //Step 4.2: Check for incoming messages and handle. If we got a message, mark the OTA as secure.
-  //Step 4.3: Send handle the ping-pong.
+
+  //Only do all this if we have a connection
+  if(mqtt.isConnected() && !NoNetwork){
+
+    NoNetwork = false;
+
+    JsonDocument outgoing; //Json to construct the outgoing message in
+
+     //Step 4.1: See if we have any outgoing messages, and send them.
+    if(MessageToSend){
+      //Send a message to the history
+      MessageToSend = 0;
+      outgoing["auditLog"] = 1;
+      outgoing["message"] = Message;
+      outgoing["category"] = "message";
+      String MessagePayload;
+      serializeJson(outgoing, MessagePayload);
+      outgoing.clear(); //Clear so other sends can use it
+      String MessageTopic = BaseTopic + "/log";
+      publish(MessageTopic, MessagePayload);
+    }
+    if(SendAuth){
+      //Send an auth request to the server
+      SendAuth = 0;
+      outgoing["state"] = "UNLOCKED";
+      outgoing["cardTagID"] = UID;
+      String AuthPayload;
+      serializeJson(outgoing, AuthPayload);
+      outgoing.clear();
+      String AuthTopic = BaseTopic + "/authTo/request";
+      publish(AuthTopic, AuthPayload);
+    }
+    if(StateChange){
+      //Send report of a changed state
+      StateChange = 0;
+      JsonArray stateChannels = outgoing["channels"].to<JsonArray>();
+      JsonObject stateObject = stateChannels.createNestedObject();
+      stateObject["channelID"] = 0;
+      stateObject["fromState"] = PreservedLastState;
+      stateObject["toState"] = State;
+      stateObject["reason"] = StateChangeReason;
+      outgoing["currentCardTag"] = UID;
+      String StateChangePayload;
+      serializeJson(outgoing, StateChangePayload);
+      outgoing.clear();
+      String StateChangeTopic = BaseTopic + "/stateChange";
+      publish(StateChangeTopic, StateChangePayload);
+      //At the end, set change reason to nothing:
+      StateChangeReason = "";
+    }
+    if(ReportConfig){
+      //Report the current configuration
+      ReportConfig = 0;
+      JsonArray configChannels = outgoing["channels"].to<JsonArray>();
+      JsonObject configObject = configChannels.createNestedObject();
+      configObject["channelID"] = 0;
+      configObject["tempDuration"] = 0;
+      outgoing["inputMode"] = "INSERT";
+      JsonObject configDeployment = outgoing["deployment"].to<JsonObject>();
+      configDeployment["SN"] = SerialNumber;
+      JsonArray configComponents = configDeployment["components"].to<JsonArray>();
+      //Iterate through and add every component on the bus to the components array;
+      for(int i = 0; i < liveAddressCount; i++){
+        JsonObject deviceObj = configComponents.createNestedObject();
+        // Convert the 8-byte address to a Hex String for JSON
+        char addrStr[17]; 
+        snprintf(addrStr, sizeof(addrStr), "%02X%02X%02X%02X%02X%02X%02X%02X",
+        liveAddresses[i][0], liveAddresses[i][1], liveAddresses[i][2], liveAddresses[i][3],
+        liveAddresses[i][4], liveAddresses[i][5], liveAddresses[i][6], liveAddresses[i][7]);
+        deviceObj["SN"] = String(addrStr);
+        for(int j = 0; j < deviceCount; j++) {
+          if(memcmp(liveAddresses[i], sensorList[j].address, 8) == 0) {
+            // Here we grab the deviceType and other data from the struct
+            deviceObj["type"] = sensorList[j].deviceType; 
+            deviceObj["identifier"] = sensorList[j].classification; //Server doesn't expect this yet, but we should send it
+            break;
+          }
+        }
+      }
+      JsonObject flags = outgoing["flags"].to<JsonObject>();
+      flags["lockWhenIdle"] = LockWhenIdle;
+      flags["restartWhenIdle"] = RestartWhenIdle;
+      String ConfigPayload;
+      serializeJson(outgoing, ConfigPayload);
+      outgoing.clear();
+      String ConfigTopic = BaseTopic + "/config/report";
+      publish(ConfigTopic, ConfigPayload);
+    }
+    if(RequestInfo){
+      //Request information from the server
+      RequestInfo = 0;
+      JsonArray infoFields = outgoing["fields"].to<JsonArray>();
+      infoFields.add("TIME");
+      if(State == "UNKNOWN"){
+        //We don't know what state we should be in, so request it. 
+        infoFields.add("STATE");
+      }
+      String InfoPayload;
+      serializeJson(outgoing, InfoPayload);
+      outgoing.clear();
+      String InfoTopic = BaseTopic + "/info/request";
+      publish(InfoTopic, InfoPayload);
+    }
+    if(SendStatus){
+      //Send our current status to the server
+      SendStatus = 0;
+      JsonArray statusChannels = outgoing["channels"].to<JsonArray>();
+      JsonObject statusObject = statusChannels.createNestedObject();
+      statusObject["channelID"] = 0;
+      statusObject["state"] = State;
+      outgoing["currentCardTag"] = UID;
+      String StatusPayload;
+      serializeJson(outgoing, StatusPayload);
+      outgoing.clear();
+      String StatusTopic = BaseTopic + "/status";
+      publish(StatusTopic, StatusPayload);
+    }
+
+    //Step 4.2: If we got a message, mark the OTA as secure.
+    if(OTAValid && !OTALocked){
+      //We got a message from the server, so we know the OTA is safe to keep.
+      OTALocked = 1; //No need to do this again.
+      const esp_partition_t *running_partition = esp_ota_get_running_partition();
+      esp_ota_img_states_t ota_state;
+      esp_ota_get_state_partition(running_partition, &ota_state);
+      if(ota_state == ESP_OTA_IMG_PENDING_VERIFY){
+        esp_ota_mark_app_valid_cancel_rollback();
+        Serial.println(F("OTA update marked valid."));
+        Message = "OTA update marked valid.";
+        MessageToSend = 1;
+      }
+    }
+
+    JsonDocument incoming; //Json doucment to parse the incoming
+    
+    //Step 4.3: Process any incoming messages
+    if(NewAuth){
+      //Process a response to an auth request.
+      NewAuth = 0;
+      deserializeJson(incoming, AuthResponse);
+      bool IsAuthed = incoming["channels"][0]["approved"].as<bool>();
+      String AuthID = incoming["cardTagID"].as<String>();
+      PendingApproval = false;
+      if(State == "IDLE"){
+        if(IsAuthed){
+          Serial.println(F("Access Granted!"));
+          if(AuthID == UID){
+            Serial.println(F("UIDs match. Unlocking."));
+            State = "UNLOCKED";
+            StateChangeReason = "AUTHED"; 
+            UnlockedBeep = true;
+          }
+        } else{
+          Serial.println(F("Access Denied!"));
+          if(CardPresent){
+            AccessDenied = 1;
+          }
+        }
+      } else{
+        Serial.println(F("Ignoring auth due to invalid state."));
+      }
+    }
+    if(NewInfo){
+      //Process a response to an info request.
+      NewInfo = 0;
+      deserializeJson(incoming, InfoResponse);
+      //Set the time;
+      if(incoming.containsKey("time")){
+        unsigned long long millisecondTime = incoming["time"];
+        rtc.setTime(millisecondTime/1000);
+        Serial.print(F("Time set to: "));
+        Serial.println(rtc.getDateTime(true));
+      }
+      if((incoming.containsKey("state")) && (State == "UNKNOWN")){
+        State = incoming["state"][0]["state"] | "UNKNOWN";
+         if(State == "UNLOCKED" || State == "ALWAYS_ON"){
+          //We shouldn't go into these states
+          State = "IDLE";
+        }
+        StateChangeReason = "COMMANDED";
+        SingleBeep = 1;
+        if((State == "UNLOCKED") || (State == "ALWAYS_ON")){
+          //We do not restart into these states;
+          State = "IDLE";
+        }
+        if(State == "FAULT"){
+          //If we used to be faulted, restart in lockout instead.
+          State = "LOCKED_OUT";
+        }
+        Serial.print(F("State set to > "));
+        Serial.print(State);
+        Serial.println(F(" < on startup."));
+      }
+      
+    }
+    if(NewCommand){
+      //Process an incoming command.
+      NewCommand = 0;
+      deserializeJson(incoming, CommandResponse);
+      //State change command
+      if(incoming.containsKey("toState")){
+        State = incoming["toState"][0]["state"] | "UNKNOWN";
+        if(State == "UNLOCKED" && !CardPresent){
+          //Don't unlock if no card present
+          State = "IDLE"
+        }
+        StateChangeReason = "COMMANDED";
+        SingleBeep = 1;
+        Serial.print(F("Commanded state to: "));
+        Serial.println(State);
+      }
+      //Set flags
+      if(incoming.containsKey("flags")){
+        JsonObject flagObj = incoming["flags"].as<JsonObject>();
+        if(flagObj.containsKey("lockWhenIdle")){
+          LockWhenIdle = flagObj["lockWhenIdle"].as<bool>();
+          Serial.print(F("Server set LockWhenIdle to: "));
+          Serial.println(LockWhenIdle);
+        }
+        if(flagObj.containsKey("restartWhenIdle")){
+          RestartWhenIdle = flagObj["restartWhenIdle"].as<bool>();
+          Serial.print(F("Server set RestartWhenIdle to: "));
+          Serial.println(RestartWhenIdle);
+        }
+      }
+      //Action to do something
+      if(incoming.containsKey("action")){
+        if(incoming["action"] == "RESTART"){
+          Serial.println(F("Server commanded restart!"));
+          Serial.flush();
+          ResetReason = "Server Ordered";
+          RequestReset = true;
+        }
+        if((incoming["action"] == "SEAL") && SealBroken){
+          Serial.println(F("Server commanded bus integrity re-seal."));
+          ReSealBus = true;
+        }
+        if(incoming["action"] == "IDENTIFY"){
+          Serial.println(F("Server commanded identify."));
+          Identify = !Identify;
+        }
+
+      }
+    }
+
+    //Step 4.4: Send a ping if requested
+    if(SendPing){
+      String PingTopic = BaseTopic + "/ping";
+      publish(PingTopic, "Ping!");
+      Serial.println(F("Ping sent."));
+      SendPing = 0;
+      NextPingTime = millis64() + 1000;
+    }
+    
+  } else{
+    Serial.println(F("No network?"));
+    NoNetwork = true;
+    NetworkConnect();
+  }
 
 }
 
@@ -393,34 +650,75 @@ uint64_t millis64(){
   return esp_timer_get_time() / 1000;
 }
 
-void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
-  //Handles all incoming Websocket-related stuff
-  //We check for OTA validity on the receipt of a text message. Need this info to do that;
-  switch(type) {
-    case WStype_DISCONNECTED:
-      if(JustDisconnected){
-        //Stops spam if we have no connection
-        Serial.printf("Websocket Reports Disconnected.");
-        JustDisconnected = 0;
-      }
-      WSSend = 0; //Clear out anything that needs to be sent
-      break;
-    case WStype_CONNECTED:
-      JustDisconnected = 1;
-      Serial.println(F("Websocket Reports Connected."));
-      NextPing = millis64() + 2000;
-      break;
-    case WStype_TEXT:
-      WSIncoming = String((char *)payload, length);
-      NewFromWS = 1;
-      NextPing = millis64() + 2000;
-      break;
-    case WStype_PONG:
-      //Serial.println(F("PONG!"));
-      NextPing = millis64() + 2000;
-      break;
-    case WStype_ERROR:
-      Serial.println(F("Got a websocket error!"));
-      break;
+void NetworkConnect(){
+  //Check the WiFi first
+  if(WiFi.status() != WL_CONNECTED){
+    Serial.println(F("No WiFi? Waiting for reconnect"));
+    while(WiFi.status() != WL_CONNECTED){
+      Serial.print(".");
+      delay(500);
+    }
+    Serial.println(F(" Connected!"));
   }
+  
+  //Start our websocket connection
+  socket.disconnect();
+  socket.begin("129.21.61.154", 3000, "/mqtt", "mqtt"); //Test broker running on Stephen computer. 
+  //socket.beginSslWithCA(Server.c_str(), 443, "/mqtt", root_ca, "mqtt");
+  socket.setReconnectInterval(2000); //Attempt to reconnect every 2 seconds if we lose connection
+  Serial.println(F("Connecting to MQTT Broker"));
+  while(!mqtt.connect(SerialNumber, SerialNumber, Key)){ //Use serial number as unique ID, username, and key as password.
+    Serial.print(".");
+    delay(1000);
+  } 
+  Serial.println(F(" MQTT Connected!"));
+
+  //Subscribe to all MQTT topics relevant to us;
+  BaseTopic = "makerspace/" + String(MakerspaceID) + "/device/" + SerialNumber;
+  String SubAuth = BaseTopic + "/authTo/response";
+  mqtt.subscribe(SubAuth, 2, [](const String& payload, const size_t size) {
+    Serial.print(F("AuthTo Response: "));
+    Serial.println(payload);
+    AuthResponse = payload;
+    NewAuth = 1;
+    OTAValid = 1;
+  });
+  String SubInfo = BaseTopic + "/info/response";
+  mqtt.subscribe(SubInfo, 2, [](const String& payload, const size_t size) {
+    Serial.print(F("Info Response: "));
+    Serial.println(payload);
+    InfoResponse = payload;
+    NewInfo = 1;
+    OTAValid = 1;
+  });
+  String SubCommand = BaseTopic + "/command";
+  mqtt.subscribe(SubCommand, 2, [](const String& payload, const size_t size) {
+    Serial.print(F("Command Input: "));
+    Serial.println(payload);
+    CommandResponse = payload;
+    NewCommand = 1;
+    OTAValid = 1;
+  });
+  String SubPing = BaseTopic + "/ping";
+  mqtt.subscribe(SubPing, 2, [](const String& payload, const size_t size) {
+    Serial.println(F("Ping Loopback."));
+    NewPing = 1;
+    OTAValid = 1;
+  });
+
+  NoNetwork = false;
+
+  //We should request and report things when we (re)connect
+  ReportConfig = 1;
+  RequestInfo = 1;
+  SendPing = 1;
+  NextPingTime = millis64() + 1000;
+}
+
+void publish(String Topic, String Payload){
+  Serial.print(F("Publishing "));
+  Serial.print(Payload);
+  Serial.print(F(" to topic "));
+  Serial.println(Topic);
+  mqtt.publish(Topic, Payload, false, 2); //Send not retained at QoS 2
 }

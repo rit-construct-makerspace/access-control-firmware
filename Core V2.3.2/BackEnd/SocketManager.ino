@@ -10,6 +10,8 @@ This task is responsible for sending and receiving all network traffic via webso
 bool SendInfoMessage = 1; //this starts as a 1 when code starts, set to 0 once the message goes through once
 bool ServerStateSet = 0; //Used to track if we changed states when the server commanded it.
 
+unsigned long long RetryAuthTime = 0; //Stores the next time we should try to auth
+
 void SocketManager(void *pvParameters) {    
   JsonDocument wsresp;
   #ifndef WebsocketUART
@@ -60,6 +62,8 @@ void SocketManager(void *pvParameters) {
       //Determine how to act based on the key at the top-level;
       if(wsin.containsKey("authTo")){
         //The JSON payload contains information about an attempted auth request from a card recently inserted.
+
+        AuthPending = 0; //The auth we were waiting for came in.
 
         //Needs a rewrite...
         //bool IsAuthed true false
@@ -120,7 +124,12 @@ void SocketManager(void *pvParameters) {
             //take the incoming API state and change it to our internal state
             String IncomingState = APIStateToInternal(infoObj["state"][0]["state"]);
             if(IncomingState != "Fault"){
-              State = IncomingState;
+              if(IncomingState == "Unlocked"){
+                //WE don't want to go to unlocked.
+                State = "Idle";
+              } else{
+                State = IncomingState;
+              }
               ChangeBeep = 1;
               StateSource = "COMMANDED";
               if(DebugMode){
@@ -222,9 +231,9 @@ void SocketManager(void *pvParameters) {
             if(DebugMode){
               Serial.println(F("Restart Ordered."));
             }
-            xSemaphoreTake(StateMutex, portMAX_DELAY);
+            //xSemaphoreTake(StateMutex, portMAX_DELAY);
             settings.putString("LastState", State);
-            xSemaphoreGive(StateMutex);
+            //xSemaphoreGive(StateMutex);
             delay(10);
             State = "Restart";
             ServerStateSet = 1;
@@ -264,9 +273,9 @@ void SocketManager(void *pvParameters) {
               if(DebugMode){
                 Serial.println(F("Restart Ordered."));
               }
-              xSemaphoreTake(StateMutex, portMAX_DELAY);
+              //xSemaphoreTake(StateMutex, portMAX_DELAY);
               settings.putString("LastState", State);
-              xSemaphoreGive(StateMutex);
+              //xSemaphoreGive(StateMutex);
               delay(10);
               State = "Restart";
               ServerStateSet = 1;
@@ -395,6 +404,13 @@ void SocketManager(void *pvParameters) {
       SendInfoMessage = 0;
     }
 
+    if(!VerifyID && AuthPending && (RetryAuthTime <= millis64())){
+      //We've been waiting for an auth response and haven't gotten it yet. Let's send the auth message again.
+      RetryAuthTime = millis64() + 500;
+      VerifyID = 1;
+      Serial.println(F("Haven't heard back on our auth in 500mS, trying it again..."));
+    }
+    
     //1: Authenticating an ID
     if(VerifyID && !WSSend){
       JsonObject authTo = wsresp["authTo"].to<JsonObject>();
@@ -402,6 +418,7 @@ void SocketManager(void *pvParameters) {
       authTo["cardTagID"] = UID;
       WSSend = 1;
       VerifyID = 0;
+      AuthPending = 1;
     }
     //2: There's an error message to send
     if(ReadyToSend && !WSSend){
@@ -577,7 +594,7 @@ void StartWebsocket(){
   //New API requires some info in the header of the Websocket starting:
   String ExtraHeader = "device-sn:" + SerialNumber + "\r\ndevice-key:" + Key;
   socket.setExtraHeaders(ExtraHeader.c_str());
-  //socket.begin(Server.c_str(), 80, "/api/devices/cores/access/ws");
+  //socket.begin(Server.c_str(), 3000, "/api/devices/cores/access/ws");
   socket.beginSslWithCA(Server.c_str(), 443, "/api/devices/cores/access/ws", root_ca);
 
   if(DebugMode){

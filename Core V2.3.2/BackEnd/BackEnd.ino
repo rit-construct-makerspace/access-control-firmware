@@ -27,7 +27,7 @@ USBConfig: Allows programatic changing of settings over USB
 */
 
 //Settings
-#define Version "1.5.1"
+#define Version "1.5.3"
 #define Hardware "2.3.2-LE"
 #define MAX_DEVICES 10 //How many possible temperature sensors to scan for
 #define OTA_URL "https://raw.githubusercontent.com/rit-construct-makerspace/access-control-firmware/refs/heads/main/otadirectory.json"
@@ -165,6 +165,7 @@ bool UpdateAddressBuffer = 1;            //Set to 1 to tell the Temperature moni
 bool AddressBufferValid = 0;             //This is a flag we set to 1 to tell the SocketManager it is OK to send our buffer of devices. 
 bool RestartWhenIdle = 0;                //Set to 1 to restart the device the next time the state is idle.
 String APIOldState;                      //Stores the old state in an API-friendly way for reporting.
+bool AuthPending;                        //Stores if we are waiting for an auth response, to make sure a message wasn't dropped or lost.
 
 //For handling OneWire devices
 struct Device {
@@ -242,8 +243,8 @@ WebSocketsClient socket;
 //Mutexes:
 SemaphoreHandle_t DebugMutex; //Reserves the USB serial output, priamrily for debugging purposes.
 SemaphoreHandle_t NetworkMutex; //Reserves the network connection
-SemaphoreHandle_t OneWireMutex; //Reserves the OneWire connection. Currently only used for temperature measurement, eventually will measure system integrity.
-SemaphoreHandle_t StateMutex; //Reserves the State string, since it takes a long time to change.
+//SemaphoreHandle_t OneWireMutex; //Reserves the OneWire connection. Currently only used for temperature measurement, eventually will measure system integrity.
+//SemaphoreHandle_t StateMutex; //Reserves the State string, since it takes a long time to change.
 SemaphoreHandle_t MessageMutex; //Reserves the ability to send a message.
 
 extern "C" bool verifyRollbackLater() {
@@ -292,8 +293,8 @@ void setup(){
   //Create mutexes:
   DebugMutex = xSemaphoreCreateMutex();
   NetworkMutex = xSemaphoreCreateMutex();
-  OneWireMutex = xSemaphoreCreateMutex();
-  StateMutex = xSemaphoreCreateMutex();
+  //OneWireMutex = xSemaphoreCreateMutex();
+  //StateMutex = xSemaphoreCreateMutex();
   MessageMutex = xSemaphoreCreateMutex();
 
   Internal.begin(115200, SERIAL_8N1, TOESP, TOTINY);
