@@ -1,8 +1,11 @@
 //ACS V3.0.0 Hardware, running CoreDuino code.
 //This is reduced code for simple applications, and has some limitations.
 
-#define Version "2.0.0"
+#define Version "2.0.1"
 #define Hardware "3.0.0"
+
+//How often you send a status message, in milliseconds
+#define STATUS_INTERVAL 15000 
 
 //Pin Definitions:
   #define SCREEN4 35
@@ -154,6 +157,7 @@ bool WelcomeFlag = 0;
 bool NoNetwork = 1;
 String TapUID; //Stores the UID between cycles for comparison when in tap mode.
 bool UserWelcomed = 0;
+unsigned long long NextStatusTime = 0;
 
 //Variables - Config
 String SerialNumber;
@@ -380,11 +384,7 @@ void setup() {
   //Going forward, we will check the OneWire bus in a different task to make life easier.
   xTaskCreate(BusManager, "BusManager", 2048, NULL, 5, NULL);
 
-  //Time to loop! 
-  if(liveAddressCount == 0){ //Wait for the BusManager to have a valid inventory;
-    Serial.println(F("Waiting for OneWire bus to initialize...")); 
-    delay(10000);
-  }
+  //Time to loop!
   xTaskCreate(MachineState, "MachineState", 4096, NULL, 5, NULL);
   GamerMode = 0; //Disable the startup lighting
 
@@ -514,9 +514,12 @@ void loop() {
       //Send our current status to the server
       SendStatus = 0;
       JsonArray statusChannels = outgoing["channels"].to<JsonArray>();
-      JsonObject statusObject = statusChannels.createNestedObject();
-      statusObject["channelID"] = 0;
-      statusObject["state"] = State;
+      if(State != "WELCOMING"){
+        //We don't send this in welcoming mode
+        JsonObject statusObject = statusChannels.createNestedObject();
+        statusObject["channelID"] = 0;
+        statusObject["state"] = State;
+      }
       outgoing["currentCardTag"] = UID;
       String StatusPayload;
       serializeJson(outgoing, StatusPayload);
@@ -639,6 +642,7 @@ void loop() {
         Serial.println(F(" < on startup."));
       }
       ReportConfig = 1; //Once we get some info, we should send our configuration.
+      SendStatus = 1; //Once we get some info, we should send our status.
     }
     if(NewCommand){
       //Process an incoming command.
@@ -703,6 +707,10 @@ void loop() {
         if(incoming["action"] == "IDENTIFY"){
           Serial.println(F("Server commanded identify."));
           Identify = !Identify;
+          if(!Identify){
+            //Play a single beep to end the identify command.
+            SingleBeep = true;
+          }
         }
 
       }
@@ -915,7 +923,7 @@ String readCDCString( uint32_t timeout = 1000){
 void CheckforConfig(){
   //Called to see if a config JSON has been sent via USB.
   if(Serial.available()){
-    String USBConfig = Serial.readString(20);
+    String USBConfig = readCDCString(20);
     JsonDocument USBJson;
     deserializeJson(USBJson, USBConfig);
     String NewSSID = USBJson["SSID"];

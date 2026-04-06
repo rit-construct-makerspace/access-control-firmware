@@ -5,9 +5,6 @@ There are 3 tasks;
   RestartController - Listens for the front button to be held for 5 seconds, restarts the device. All other reset source throughout the code are handled by this task as well.
 */
 
-#define HIGH_TONE 2000 //Hz
-#define LOW_TONE 1500 //Hz
-
 void AVControl(void *pvParameters){
   unsigned long long OkToLED = 0;
   byte LEDAnimation;
@@ -24,8 +21,12 @@ void AVControl(void *pvParameters){
     vTaskDelay(20 / portTICK_PERIOD_MS);
     //First, set the animation state:
     //Animation triggers are not exclusive, so if statements written in reverse-priority order.
-    if(State.equals("IDLE") || State.equals("WELCOMING")){
+    if(State.equals("IDLE")){
       //Animation 3: Solid Yellow
+      LEDAnimation = 3;
+    }
+    if(State.equals("WELCOMING")){
+      //For now it is solid yellow, TODO switch to a slow blink yellow 10% duty cycle or so to catch user attention.
       LEDAnimation = 3;
     }
     if(PendingApproval || WelcomingPending){
@@ -206,28 +207,21 @@ void AVControl(void *pvParameters){
     
     //After the LED, we need to set up the buzzer.
 
-    Melody = 0; //Set to 0 so if no situations apply, we stop playing
     if(UnlockedBeep || UserWelcomed){
       //The machine has been unlocked
       Melody = 1;
-    }
-    if(AccessDenied){
+    } else if(AccessDenied){
       Melody = 2;
-    }
-    if(State == "FAULT" || FaultBeep){
+    } else if(State == "FAULT" || FaultBeep){
       Melody = 3;
-    }
-    if(SingleBeep){
+    } else if(SingleBeep){
       Melody = 4;
-    }
-    if(Identify){
+    } else if(Identify){
       //Play a constant tone to identify the device
       Melody = 5;
-    }
-    if(Melody == 0){
-      //No tone to play
-      Tone = 0;
-      NewBuzzer = 1;
+    } else if(DonePlaying){
+      //If none of these apply, turn off the buzzer
+      Melody = 0;
     }
     if(Melody != OldMelody){
       //Melody has changed!
@@ -247,10 +241,10 @@ void AVControl(void *pvParameters){
         //Approved tone
         switch (MelodyStep){
           case 0:
-            Tone = LOW_TONE;
+            Tone = 1500;
           break;
           case 1:
-            Tone = HIGH_TONE;
+            Tone = 2000;
           break;
           case 2:
             Tone = 0;
@@ -263,10 +257,10 @@ void AVControl(void *pvParameters){
         //Denied tone
         switch (MelodyStep){
           case 0: 
-            Tone = HIGH_TONE;
+            Tone = 880;
           break;
           case 1:
-            Tone = LOW_TONE;
+            Tone = 440;
           break;
           case 2:
             Tone = 0;
@@ -278,23 +272,24 @@ void AVControl(void *pvParameters){
         //Fault tone
         switch (MelodyStep){
           case 0:
-            Tone = LOW_TONE;
+            Tone = 1000;
           break;
           case 1:
             Tone = 0;
           break;
           case 2:
-            Tone = LOW_TONE;
+            Tone = 1000;
           break;
           case 3:
             Tone = 0;
           break;
           case 4:
-            Tone = LOW_TONE;
+            Tone = 1000;
           break;
           case 5:
             Tone = 0;
             DonePlaying = 1;
+            FaultBeep = 0;
           break;
         }
       break;
@@ -302,7 +297,7 @@ void AVControl(void *pvParameters){
         //Single beep
         switch(MelodyStep){
           case 0:
-            Tone = HIGH_TONE;
+            Tone = 1500;
           break;
           case 1:
             Tone = 0;
@@ -315,11 +310,13 @@ void AVControl(void *pvParameters){
         switch(MelodyStep){
           //No case 0, this basically makes the sound delay before it starts playing.
           case 1:
-            Tone = HIGH_TONE;
+            Tone = 2000;
           break;
           case 2:
-            Tone = LOW_TONE;
+            Tone = 1500;
             MelodyStep = 0;
+            //This one ends when we command it to, so we don't put DonePlaying here.
+            //Instead, the Identify state ends with the change beep.
           break;
         }
       break;

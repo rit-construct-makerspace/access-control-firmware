@@ -2,6 +2,8 @@ void MachineState(void *pvParameters){
   Serial.println(F("MachineState Started."));
   while(1){
     delay(50);
+
+
     //Step 1: Check machine state variables
 
     //Step 1.1: Check for any reason we should be in a fault state
@@ -16,10 +18,26 @@ void MachineState(void *pvParameters){
       }
     }
 
+    //Set our input mode based on if we are welcoming or not.
     if(State == "WELCOMING"){
       InputMode = "TEMP_PRESENT";
     } else{
       InputMode = "INSERT";
+    }
+
+    //Some random cleanup, none of these should be set if there isn't a card present
+    if(!CardPresent){
+      WelcomingPending = false;
+      AccessDenied = false;
+      PendingApproval = false;
+      PendingApproval = false;
+    }
+
+    //See if we have a regular status update to send
+    if(NextStatusTime <= millis64()){
+      //Time to send a status message.
+      SendStatus = 1;
+      NextStatusTime = millis64() + STATUS_INTERVAL;
     }
 
     //Step 1.2: Check for a change to the card. New one? Removed? 
@@ -44,7 +62,7 @@ void MachineState(void *pvParameters){
           WelcomingPending = 1;
         }
         if(NoNetwork){
-          //Give a fault beep
+          //Give a fault beep, reject them immediately
           FaultBeep = 1;
         }
       }
