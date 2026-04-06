@@ -72,6 +72,8 @@
   #include "USB.h"
   #include <esp_system.h>
   #include <esp_mac.h>
+  #include "esp_efuse.h"
+  #include "esp_efuse_table.h"
 
 //Objects:
   Preferences settings;
@@ -83,8 +85,8 @@
   WebSocketsClient socket;
   MQTTPubSub::PubSubClient<256> mqtt;
   OneWire ds(ONEWIRE); 
-  Adafruit_NeoPixel CBI(1, LED, NEO_GRB + NEO_KHZ800);
-  USBCDC USBSerial;
+  Adafruit_NeoPixel CBI(1, LED, NEO_RGB + NEO_KHZ800);
+  //USBCDC Serial;
 
 extern "C" bool verifyRollbackLater() {
   //This code is run to verify the OTA before actual setup.
@@ -131,7 +133,7 @@ bool RequestReset = 0; //Other tasks can set this to 1 to tell the ResetControll
 String ResetReason; //Tells the RestartController why we are restarting.
 bool Access = 0; //Used to tell the frontend to enable the access signal to the bus. 
 String UID; //Stores the UID of the user currently using the machine.
-String FoundUID; //Stores the last-found UID
+String FoundUID = ""; //Stores the last-found UID
 bool ChangeBeep = 0; //Lets the frontend know to beep.
 bool FaultBeep = 0; //We use the 3 beep normally for fault to indicate cannot welcome/auth due to no network, to differentiate from welcome/auth denied.
 
@@ -148,6 +150,7 @@ String LastState = "UNKNOWN"; //Stores what the state was previously, to detect 
 String PreservedLastState = "UNKNOWN";
 bool LockWhenIdle = 0;
 bool RestartWhenIdle = 0;
+bool WelcomeFlag = 0;
 bool NoNetwork = 1;
 String TapUID; //Stores the UID between cycles for comparison when in tap mode.
 bool UserWelcomed = 0;
@@ -174,6 +177,7 @@ bool OTAValid = 0;
 bool OTALocked = 0;
 bool NewWelcome = 0;
 String WelcomeResponse;
+bool WelcomingPending = 0;
 
 //Variables - MQTT Outgoing
 String BaseTopic; //Used to store the root topic that all others are appended to.
@@ -225,35 +229,70 @@ void setup() {
   pinMode(BUZZER, OUTPUT);
   noTone(BUZZER);
   CBI.begin();
+  CBI.setBrightness(50);
   CBI.setPixelColor(0, 255, 0, 0);
   CBI.show();
 
-  USBSerial.begin();
-  USB.begin();
-  USBSerial.println(F("STARTUP"));
-  delay(2000);
+  xTaskCreate(AVControl, "AVControl", 2048, NULL, 5, NULL);
+  xTaskCreate(RestartController, "RestartController", 2048, NULL, 5, NULL);
+
+  Serial.begin(115200);
+  //USB.begin();
+  //Serial.setDebugOutput(true);
+  Serial.println(F("STARTUP"));
+  Serial.flush();
+  delay(500);
 
   //Start SPIFFS:
   if(!SPIFFS.begin(1)){
-    USBSerial.println(F("SPIFFS Mount Failed!"));
+    Serial.println(F("SPIFFS Mount Failed!"));
     delay(1000);
     ESP.restart();
   }
 
   //Load settings from memory
 
-  //Get our serial number, in V3.0.0 hardware this is our base MAC
-  SerialNumber = getBaseMacAddress();
-  USBSerial.print(F("Device Serial Number / WiFi MAC Address: "));
-  USBSerial.println(SerialNumber);
+  //Get our serial number;
+  // The ID is 128 bits = 16 bytes
+  uint8_t unique_id[16]; 
+  
+  // ESP_EFUSE_OPTIONAL_UNIQUE_ID is the constant defined in the IDF table
+  esp_err_t err = esp_efuse_read_field_blob(ESP_EFUSE_OPTIONAL_UNIQUE_ID, unique_id, 128);
+
+  if (err == ESP_OK) {
+    Serial.print("Serial Number: ");
+    for (int i = 0; i < 16; i++) {
+      if (unique_id[i] < 0x10) SerialNumber += "0"; // Lead with zero if byte < 16
+      SerialNumber += String(unique_id[i], HEX);
+    }
+    SerialNumber.toUpperCase();
+    Serial.print(SerialNumber);
+    Serial.println();
+  } else {
+    Serial.printf("Error reading eFuse: 0x%X\n", err);
+    Serial.println("Note: This ID may not exist on original ESP32 (Non-S2/S3) models.");
+  }
+
+  //Get our MAC address for printing, in V3.0.0 hardware this is our base MAC
+  Serial.print(F("WiFi MAC Address: "));
+  Serial.println(getBaseMacAddress());
 
   settings.begin("settings", false);
+
+  Serial.println(F("Have a config for me? I'll wait a second..."));
+  delay(1000);
+  CheckforConfig();
+
   Server = settings.getString("Server");
   if(Server == NULL){
     //We don't have a valid config?
     while(1){
-      USBSerial.println(F("Missing config. Please provide a JSON with the following keys: "));
-      USBSerial.println(F("WiFi SSID, WiFi Password, Server, Server Key, Timezone, MakerspaceID"));
+      Serial.println(F("Missing config. Please provide a JSON with the following keys: "));
+      Serial.println(F("WiFi SSID, WiFi Password, Server, Server Key, Timezone, MakerspaceID"));
+      Serial.print(F("Device WiFi MAC Address: "));
+      Serial.println(getBaseMacAddress());
+      Serial.print(F("Device Serial Number: "));
+      Serial.println(SerialNumber);
       CBI.setPixelColor(0, 0, 0, 255);
       CBI.show();
       delay(1000);
@@ -280,16 +319,20 @@ void setup() {
   rtc.offset = TimezoneHr * 3600;
   MakerspaceID = settings.getString("MakerspaceID").toInt();
 
-  //Create tasks to handle the internal reading, writing to the frontend.
-  xTaskCreate(AVControl, "AVControl", 1024, NULL, 5, NULL);
-  xTaskCreate(RestartController, "RestartController", 1024, NULL, 5, NULL);
-  xTaskCreate(MachineState, "MachineState", 1024, NULL, 5, NULL);
+  Serial.println(F("Settings loaded."));
+  Serial.flush();
+
+  Serial.println(F("Started Tasks."));
+  Serial.flush();
 
   //Start SPI here, in case we want to use Ethernet in the future. 
   //SCK, MISO, MOSI, SS
-  SPI.begin(SCKPin, MISOPin, MOSIPin);
+  pinMode(NFCCS, OUTPUT);
+  SPI.begin(SCKPin, MISOPin, MOSIPin, -1);
 
-  //Connect to the network before we continue.
+  Serial.println(F("Started SPI."));
+  Serial.flush();
+
   WiFi.mode(WIFI_STA);
   WiFi.begin(SSID, Password);
   WiFi.setSleep(false);
@@ -307,13 +350,12 @@ void setup() {
   ota.OverrideDevice("ACS Core");
   ota.EnableSerialDebug();
   int otaresp = ota.CheckForOTAUpdate("https://raw.githubusercontent.com/rit-construct-makerspace/access-control-firmware/refs/heads/main/otadirectory.json", Version);
-  USBSerial.print(F("OTA Response: "));
-  USBSerial.println(errtext(otaresp));
+  Serial.print(F("OTA Response: "));
+  Serial.println(errtext(otaresp));
 
   //If we made it past the OTA, then we are ready for normal operation.
 
   //Start the NFC reader, make sure it is working as expected. 
-  pinMode(NFCCS, OUTPUT);
   mfrc630_AN1102_recommended_registers(MFRC630_PROTO_ISO14443A_106_MILLER_MANCHESTER);
   mfrc630_write_reg(0x28, 0x8E);
   mfrc630_write_reg(0x29, 0x15);
@@ -321,15 +363,16 @@ void setup() {
   mfrc630_write_reg(0x2B, 0x06);
 
   //We should initialize the OneWire bus here, check for the right devices, etc.
-  USBSerial.println(F("Starting OneWire..."));
+  Serial.println(F("Starting OneWire..."));
+  discoverDevices();
   loadInventoryFromFile();
   if(deviceCount == 0){
-     USBSerial.println(F("Inventory empty! Scanning to initialize..."));
+     Serial.println(F("Inventory empty! Scanning to initialize..."));
      discoverDevices(); // This sets the initial baseline
      saveInventoryToFile(); // Save it so it's not empty next time
   }
   //We should also immediately do a OneWire integrity check.
-  USBSerial.println(F("Checking Bus Integrity..."));
+  Serial.println(F("Checking Bus Integrity..."));
   checkBusHealth();
   updateBusTemperatures();
   refreshLiveAddressBuffer();
@@ -338,10 +381,11 @@ void setup() {
   xTaskCreate(BusManager, "BusManager", 2048, NULL, 5, NULL);
 
   //Time to loop! 
-  while(liveAddressCount == 0){ //Wait for the BusManager to have a valid inventory;
-    delay(1000);
-    USBSerial.println(F("Waiting for OneWire bus to initialize...")); 
+  if(liveAddressCount == 0){ //Wait for the BusManager to have a valid inventory;
+    Serial.println(F("Waiting for OneWire bus to initialize...")); 
+    delay(10000);
   }
+  xTaskCreate(MachineState, "MachineState", 4096, NULL, 5, NULL);
   GamerMode = 0; //Disable the startup lighting
 
 }
@@ -391,20 +435,23 @@ void loop() {
     if(StateChange){
       //Send report of a changed state
       StateChange = 0;
-      JsonArray stateChannels = outgoing["channels"].to<JsonArray>();
-      JsonObject stateObject = stateChannels.createNestedObject();
-      stateObject["channelID"] = 0;
-      stateObject["fromState"] = PreservedLastState;
-      stateObject["toState"] = State;
-      stateObject["reason"] = StateChangeReason;
-      outgoing["currentCardTag"] = UID;
-      String StateChangePayload;
-      serializeJson(outgoing, StateChangePayload);
-      outgoing.clear();
-      String StateChangeTopic = BaseTopic + "/stateChange";
-      publish(StateChangeTopic, StateChangePayload);
-      //At the end, set change reason to nothing:
-      StateChangeReason = "";
+      if(State != "WELCOMING"){
+        //We don't report state change when we are in welcoming.
+        JsonArray stateChannels = outgoing["channels"].to<JsonArray>();
+        JsonObject stateObject = stateChannels.createNestedObject();
+        stateObject["channelID"] = 0;
+        stateObject["fromState"] = PreservedLastState;
+        stateObject["toState"] = State;
+        stateObject["reason"] = StateChangeReason;
+        outgoing["currentCardTag"] = UID;
+        String StateChangePayload;
+        serializeJson(outgoing, StateChangePayload);
+        outgoing.clear();
+        String StateChangeTopic = BaseTopic + "/stateChange";
+        publish(StateChangeTopic, StateChangePayload);
+        //At the end, set change reason to nothing:
+        StateChangeReason = "";
+      }
     }
     if(ReportConfig){
       //Report the current configuration
@@ -438,6 +485,7 @@ void loop() {
       JsonObject flags = outgoing["flags"].to<JsonObject>();
       flags["lockWhenIdle"] = LockWhenIdle;
       flags["restartWhenIdle"] = RestartWhenIdle;
+      flags["welcoming"] = WelcomeFlag;
       String FWVer = "CoreDuino " + String(Version);
       outgoing["firmware"] = FWVer;
       String ConfigPayload;
@@ -455,6 +503,7 @@ void loop() {
         //We don't know what state we should be in, so request it. 
         infoFields.add("STATE");
       }
+      infoFields.add("FLAGS"); //Check our flags, mostly for welcoming
       String InfoPayload;
       serializeJson(outgoing, InfoPayload);
       outgoing.clear();
@@ -495,7 +544,7 @@ void loop() {
       esp_ota_get_state_partition(running_partition, &ota_state);
       if(ota_state == ESP_OTA_IMG_PENDING_VERIFY){
         esp_ota_mark_app_valid_cancel_rollback();
-        USBSerial.println(F("OTA update marked valid."));
+        Serial.println(F("OTA update marked valid."));
         Message = "OTA update marked valid.";
         MessageToSend = 1;
       }
@@ -513,21 +562,21 @@ void loop() {
       PendingApproval = false;
       if(State == "IDLE"){
         if(IsAuthed){
-          USBSerial.println(F("Access Granted!"));
+          Serial.println(F("Access Granted!"));
           if(AuthID == UID){
-            USBSerial.println(F("UIDs match. Unlocking."));
+            Serial.println(F("UIDs match. Unlocking."));
             State = "UNLOCKED";
             StateChangeReason = "AUTHED"; 
             UnlockedBeep = true;
           }
         } else{
-          USBSerial.println(F("Access Denied!"));
+          Serial.println(F("Access Denied!"));
           if(CardPresent){
             AccessDenied = 1;
           }
         }
       } else{
-        USBSerial.println(F("Ignoring auth due to invalid state."));
+        Serial.println(F("Ignoring auth due to invalid state."));
       }
     }
     if(NewInfo){
@@ -538,8 +587,36 @@ void loop() {
       if(incoming.containsKey("time")){
         unsigned long long millisecondTime = incoming["time"];
         rtc.setTime(millisecondTime/1000);
-        USBSerial.print(F("Time set to: "));
-        USBSerial.println(rtc.getDateTime(true));
+        Serial.print(F("Time set to: "));
+        Serial.println(rtc.getDateTime(true));
+      }
+      if(incoming.containsKey("flags")){
+        JsonObject flagObj = incoming["flags"].as<JsonObject>();
+        if(flagObj.containsKey("lockWhenIdle")){
+          LockWhenIdle = flagObj["lockWhenIdle"].as<bool>();
+          Serial.print(F("Server set LockWhenIdle to: "));
+          Serial.println(LockWhenIdle);
+        }
+        if(flagObj.containsKey("restartWhenIdle")){
+          RestartWhenIdle = flagObj["restartWhenIdle"].as<bool>();
+          Serial.print(F("Server set RestartWhenIdle to: "));
+          Serial.println(RestartWhenIdle);
+        }
+        if(flagObj.containsKey("welcoming")){
+          if(WelcomeFlag != flagObj["welcoming"].as<bool>()){
+            WelcomeFlag = flagObj["welcoming"].as<bool>();
+            if(WelcomeFlag){
+            Serial.println(F("Server flag set to enter welcoming mode."));
+            State = "WELCOMING";
+            } else{
+              Serial.println(F("Server flag unset for welcoming mode. Entering state 'UNKNOWN'"));
+              State = "UNKNOWN";
+              StateChangeReason = "SERVER_COMMANDED";
+              //We should ask what state we should be in
+              RequestInfo = 1;
+            }
+          }
+        }
       }
       if((incoming.containsKey("state")) && (State == "UNKNOWN")){
         State = incoming["state"][0]["state"] | "UNKNOWN";
@@ -557,11 +634,11 @@ void loop() {
           //If we used to be faulted, restart in lockout instead.
           State = "LOCKED_OUT";
         }
-        USBSerial.print(F("State set to > "));
-        USBSerial.print(State);
-        USBSerial.println(F(" < on startup."));
+        Serial.print(F("State set to > "));
+        Serial.print(State);
+        Serial.println(F(" < on startup."));
       }
-      
+      ReportConfig = 1; //Once we get some info, we should send our configuration.
     }
     if(NewCommand){
       //Process an incoming command.
@@ -569,7 +646,10 @@ void loop() {
       deserializeJson(incoming, CommandResponse);
       //State change command
       if(incoming.containsKey("toState")){
-        State = incoming["toState"][0]["state"] | "UNKNOWN";
+        if(State != "WELCOMING"){
+          //We never command state out of welcoming since it is set by flags
+          State = incoming["toState"][0]["state"] | "UNKNOWN";
+        }
         if(State == "UNLOCKED" && !CardPresent){
           //Don't unlock if no card present
           State = "IDLE";
@@ -591,6 +671,21 @@ void loop() {
           RestartWhenIdle = flagObj["restartWhenIdle"].as<bool>();
           Serial.print(F("Server set RestartWhenIdle to: "));
           Serial.println(RestartWhenIdle);
+        }
+        if(flagObj.containsKey("welcoming")){
+          if(WelcomeFlag != flagObj["welcoming"].as<bool>()){
+            WelcomeFlag = flagObj["welcoming"].as<bool>();
+            if(WelcomeFlag){
+            Serial.println(F("Server flag set to enter welcoming mode."));
+            State = "WELCOMING";
+            } else{
+              Serial.println(F("Server flag unset for welcoming mode. Entering state 'UNKNOWN'"));
+              State = "UNKNOWN";
+              StateChangeReason = "SERVER_COMMANDED";
+              //We should ask what state we should be in
+              RequestInfo = 1;
+            }
+          }
         }
       }
       //Action to do something
@@ -616,22 +711,22 @@ void loop() {
       //Response to welcoming a user
       NewWelcome = 0;
       deserializeJson(incoming, WelcomeResponse);
-      bool IsWelcomed = incoming["isWelcome"];
+      bool IsWelcomed = incoming["welcomed"];
       String WelcomeID = incoming["cardTagID"];
       String WelcomeReason = incoming["reason"];
       if(IsWelcomed){
         //User was welcomed into the space properly.
-        USBSerial.println(F("User welcomed!"));
+        Serial.println(F("User welcomed!"));
         if(UID == WelcomeID){
           //The user's card is still here, so beep and light up.
           UserWelcomed = 1;
         } else{
-          USBSerial.println(F("But their card isn't here anymore, so we will skip the lights/sounds."));
+          Serial.println(F("But their card isn't here anymore, so we will skip the lights/sounds."));
         }
       } else{
         //User was denied entry into the space.
-        USBSerial.print(F("User denied! Reason: "));
-        USBSerial.println(WelcomeReason);
+        Serial.print(F("User denied! Reason: "));
+        Serial.println(WelcomeReason);
         AccessDenied = 1; //Act like we denied the user access
       }
     }
@@ -640,13 +735,13 @@ void loop() {
     if(SendPing){
       String PingTopic = BaseTopic + "/ping";
       publish(PingTopic, "Ping!");
-      USBSerial.println(F("Ping sent."));
+      //Serial.println(F("Ping sent."));
       SendPing = 0;
       NextPingTime = millis64() + 1000;
     }
     
   } else{
-    USBSerial.println(F("No network?"));
+    Serial.println(F("No network?"));
     NoNetwork = true;
     NetworkConnect();
   }
@@ -659,7 +754,7 @@ void callback_percent(int offset, int totallength) {
   static int prev_percent = -1;
   int percent = 100 * offset / totallength;
   if (percent != prev_percent) {
-    USBSerial.printf("Updating %d of %d (%02d%%)...\n", offset, totallength, 100 * offset / totallength);
+    Serial.printf("Updating %d of %d (%02d%%)...\n", offset, totallength, 100 * offset / totallength);
     prev_percent = percent;
   }
 }
@@ -700,62 +795,62 @@ uint64_t millis64(){
 void NetworkConnect(){
   //Check the WiFi first
   if(WiFi.status() != WL_CONNECTED){
-    USBSerial.println(F("No WiFi? Waiting for reconnect"));
+    Serial.println(F("No WiFi? Waiting for reconnect"));
     while(WiFi.status() != WL_CONNECTED){
-      USBSerial.print(".");
+      Serial.print(".");
       delay(500);
     }
-    USBSerial.println(F(" Connected!"));
+    Serial.println(F(" Connected!"));
   }
   
   //Start our websocket connection
   socket.disconnect();
-  socket.begin("129.21.61.154", 3000, "/mqtt", "mqtt"); //Test broker running on Stephen computer. 
-  //socket.beginSslWithCA(Server.c_str(), 443, "/mqtt", root_ca, "mqtt");
+  //socket.begin("129.21.61.154", 3000, "/mqtt", "mqtt"); //Test broker running on Stephen computer. 
+  socket.beginSslWithCA(Server.c_str(), 443, "/mqtt", root_ca, "mqtt");
   socket.setReconnectInterval(2000); //Attempt to reconnect every 2 seconds if we lose connection
-  USBSerial.println(F("Connecting to MQTT Broker"));
+  Serial.println(F("Connecting to MQTT Broker"));
   while(!mqtt.connect(SerialNumber, SerialNumber, Key)){ //Use serial number as unique ID, username, and key as password.
-    USBSerial.print(".");
+    Serial.print(".");
     delay(1000);
   } 
-  USBSerial.println(F(" MQTT Connected!"));
+  Serial.println(F(" MQTT Connected!"));
 
   //Subscribe to all MQTT topics relevant to us;
   BaseTopic = "makerspace/" + String(MakerspaceID) + "/device/" + SerialNumber;
   String SubAuth = BaseTopic + "/authTo/response";
   mqtt.subscribe(SubAuth, 2, [](const String& payload, const size_t size) {
-    USBSerial.print(F("AuthTo Response: "));
-    USBSerial.println(payload);
+    Serial.print(F("AuthTo Response: "));
+    Serial.println(payload);
     AuthResponse = payload;
     NewAuth = 1;
     OTAValid = 1;
   });
   String SubInfo = BaseTopic + "/info/response";
   mqtt.subscribe(SubInfo, 2, [](const String& payload, const size_t size) {
-    USBSerial.print(F("Info Response: "));
-    USBSerial.println(payload);
+    Serial.print(F("Info Response: "));
+    Serial.println(payload);
     InfoResponse = payload;
     NewInfo = 1;
     OTAValid = 1;
   });
   String SubCommand = BaseTopic + "/command";
   mqtt.subscribe(SubCommand, 2, [](const String& payload, const size_t size) {
-    USBSerial.print(F("Command Input: "));
-    USBSerial.println(payload);
+    Serial.print(F("Command Input: "));
+    Serial.println(payload);
     CommandResponse = payload;
     NewCommand = 1;
     OTAValid = 1;
   });
   String SubPing = BaseTopic + "/ping";
   mqtt.subscribe(SubPing, 2, [](const String& payload, const size_t size) {
-    USBSerial.println(F("Ping Loopback."));
+    //Serial.println(F("Ping Loopback."));
     NewPing = 1;
     OTAValid = 1;
   });
   String SubWelcome = BaseTopic + "/welcome/response";
   mqtt.subscribe(SubWelcome, 2, [](const String& payload, const size_t size) {
-    USBSerial.print(F("Welcome Response: "));
-    USBSerial.println(payload);
+    Serial.print(F("Welcome Response: "));
+    Serial.println(payload);
     WelcomeResponse = payload;
     NewWelcome = 1;
     OTAValid = 1;
@@ -764,17 +859,19 @@ void NetworkConnect(){
   NoNetwork = false;
 
   //We should request and report things when we (re)connect
-  ReportConfig = 1;
   RequestInfo = 1;
   SendPing = 1;
   NextPingTime = millis64() + 1000;
 }
 
 void publish(String Topic, String Payload){
-  USBSerial.print(F("Publishing "));
-  USBSerial.print(Payload);
-  USBSerial.print(F(" to topic "));
-  USBSerial.println(Topic);
+  if(Payload != "Ping!"){
+    //No point in printing the ping payload constantly
+    Serial.print(F("Publishing "));
+    Serial.print(Payload);
+    Serial.print(F(" to topic "));
+    Serial.println(Topic);
+  }
   mqtt.publish(Topic, Payload, false, 2); //Send not retained at QoS 2
 }
 
@@ -787,7 +884,7 @@ void mfrc630_SPI_transfer(const uint8_t* tx, uint8_t* rx, uint16_t len) {
 
 // Select the chip and start an SPI transaction.
 void mfrc630_SPI_select() {
-  SPI.beginTransaction(SPISettings(10000000, MSBFIRST, SPI_MODE0));  // gain control of SPI bus
+  SPI.beginTransaction(SPISettings(2000000, MSBFIRST, SPI_MODE0));  // gain control of SPI bus
   digitalWrite(NFCCS, LOW);
 }
 
@@ -801,10 +898,10 @@ String readCDCString( uint32_t timeout = 1000){
   String result = "";
   unsigned long long startMillis = millis64();
   while(millis64() - startMillis < timeout){
-    size_t availableBytes = USBSerial.available();
+    size_t availableBytes = Serial.available();
     if(availableBytes > 0){
       uint8_t buf[availableBytes];
-      size_t readCount = USBSerial.read(buf, availableBytes);
+      size_t readCount = Serial.read(buf, availableBytes);
       for(size_t i = 0; i < readCount; i++){
         result += (char)buf[i];
       }
@@ -817,58 +914,58 @@ String readCDCString( uint32_t timeout = 1000){
 
 void CheckforConfig(){
   //Called to see if a config JSON has been sent via USB.
-  if(USBSerial.available()){
-    String USBConfig = readCDCString(20);
+  if(Serial.available()){
+    String USBConfig = Serial.readString(20);
     JsonDocument USBJson;
     deserializeJson(USBJson, USBConfig);
     String NewSSID = USBJson["SSID"];
-    if(NewSSID){
-      USBSerial.print(F("Set WiFi SSID to: "));
-      USBSerial.println(NewSSID);
+    if(USBJson["SSID"].is<String>()){
+      Serial.print(F("Set WiFi SSID to: "));
+      Serial.println(NewSSID);
       settings.putString("SSID", NewSSID);
     } else{
-      USBSerial.println(F("Kept old WiFi SSID."));
+      Serial.println(F("Kept old WiFi SSID."));
     }
     String NewPassword = USBJson["Password"];
-    if(NewPassword){
-      USBSerial.print(F("Set WiFi password to: "));
-      USBSerial.println(NewPassword);
+    if(USBJson["Password"].is<String>()){
+      Serial.print(F("Set WiFi password to: "));
+      Serial.println(NewPassword);
       settings.putString("Password", NewPassword);
     } else{
-      USBSerial.println(F("Kept old WiFi password."));
+      Serial.println(F("Kept old WiFi password."));
     }
     String NewServer = USBJson["Server"];
-    if(NewServer){
-      USBSerial.print(F("Set server to: "));
-      USBSerial.println(NewServer);
+    if(USBJson["Server"].is<String>()){
+      Serial.print(F("Set server to: "));
+      Serial.println(NewServer);
       settings.putString("Server", NewServer);
     } else{
-      USBSerial.println(F("Kept old server."));
+      Serial.println(F("Kept old server."));
     }
     String NewKey = USBJson["Key"];
-    if(NewKey){
-      USBSerial.println(F("Set a new key (not printed for security)"));
+    if(USBJson["Key"].is<String>()){
+      Serial.println(F("Set a new key (not printed for security)"));
       settings.putString("Key", NewKey);
     } else{
-      USBSerial.println(F("Kept old key."));
+      Serial.println(F("Kept old key."));
     }
     String NewTimezone = USBJson["Timezone"];
-    if(NewTimezone){
-      USBSerial.print(F("Set timezone to: "));
-      USBSerial.println(NewTimezone);
+    if(USBJson["Timezone"].is<String>()){
+      Serial.print(F("Set timezone to: "));
+      Serial.println(NewTimezone);
       settings.putString("Timezone", NewTimezone);
     } else{
-      USBSerial.println(F("Kept old timezone."));
+      Serial.println(F("Kept old timezone."));
     }
     String NewMakerspaceID = USBJson["MakerspaceID"];
-    if(NewMakerspaceID){
-      USBSerial.print(F("Set makerspace ID to: "));
-      USBSerial.println(NewMakerspaceID);
+    if(USBJson["MakerspaceID"].is<String>()){
+      Serial.print(F("Set makerspace ID to: "));
+      Serial.println(NewMakerspaceID);
       settings.putString("MakerspaceID", NewMakerspaceID);
     } else{
-      USBSerial.println(F("Kept old makerspace ID."));
+      Serial.println(F("Kept old makerspace ID."));
     }
-    USBSerial.println(F("Above settings have been saved to memory. Restart device to apply settings."));
+    Serial.println(F("Above settings have been saved to memory. Restart device to apply settings."));
   }
 }
 

@@ -1,6 +1,6 @@
 //Re-write of ACS Core firmware to make it simpler, faster. Uses just one mega loop for everything.
 
-#define Version "2.0.0"
+#define Version "2.0.1"
 #define Hardware "2.3.2-LE"
 #define DebugMode 1
 
@@ -343,6 +343,9 @@ void loop() {
   //Step 0: Call the MQTT updater;
   mqtt.update();
 
+  //Step 1: Check for config changes;
+  CheckforConfig();
+
   //Step 4: Communicate with the server
 
   //Only do all this if we have a connection
@@ -548,7 +551,7 @@ void loop() {
         State = incoming["toState"][0]["state"] | "UNKNOWN";
         if(State == "UNLOCKED" && !CardPresent){
           //Don't unlock if no card present
-          State = "IDLE"
+          State = "IDLE";
         }
         StateChangeReason = "COMMANDED";
         SingleBeep = 1;
@@ -593,7 +596,7 @@ void loop() {
     if(SendPing){
       String PingTopic = BaseTopic + "/ping";
       publish(PingTopic, "Ping!");
-      Serial.println(F("Ping sent."));
+      //Serial.println(F("Ping sent."));
       SendPing = 0;
       NextPingTime = millis64() + 1000;
     }
@@ -603,7 +606,7 @@ void loop() {
     NoNetwork = true;
     NetworkConnect();
   }
-
+  delay(20);
 }
 
 void callback_percent(int offset, int totallength) {
@@ -663,8 +666,8 @@ void NetworkConnect(){
   
   //Start our websocket connection
   socket.disconnect();
-  socket.begin("129.21.61.154", 3000, "/mqtt", "mqtt"); //Test broker running on Stephen computer. 
-  //socket.beginSslWithCA(Server.c_str(), 443, "/mqtt", root_ca, "mqtt");
+  //socket.begin("129.21.61.154", 3000, "/mqtt", "mqtt"); //Test broker running on Stephen computer. 
+  socket.beginSslWithCA(Server.c_str(), 443, "/mqtt", root_ca, "mqtt");
   socket.setReconnectInterval(2000); //Attempt to reconnect every 2 seconds if we lose connection
   Serial.println(F("Connecting to MQTT Broker"));
   while(!mqtt.connect(SerialNumber, SerialNumber, Key)){ //Use serial number as unique ID, username, and key as password.
@@ -701,7 +704,7 @@ void NetworkConnect(){
   });
   String SubPing = BaseTopic + "/ping";
   mqtt.subscribe(SubPing, 2, [](const String& payload, const size_t size) {
-    Serial.println(F("Ping Loopback."));
+    //Serial.println(F("Ping Loopback."));
     NewPing = 1;
     OTAValid = 1;
   });
@@ -716,9 +719,71 @@ void NetworkConnect(){
 }
 
 void publish(String Topic, String Payload){
-  Serial.print(F("Publishing "));
-  Serial.print(Payload);
-  Serial.print(F(" to topic "));
-  Serial.println(Topic);
+  if(Payload != "Ping!"){
+    //No point in printing the ping payload constantly
+    Serial.print(F("Publishing "));
+    Serial.print(Payload);
+    Serial.print(F(" to topic "));
+    Serial.println(Topic);
+  }
   mqtt.publish(Topic, Payload, false, 2); //Send not retained at QoS 2
+}
+
+void CheckforConfig(){
+  //Called to see if a config JSON has been sent via USB.
+  if(Serial.available()){
+    Serial.setTimeout(20);
+    String USBConfig = Serial.readString();
+    JsonDocument USBJson;
+    deserializeJson(USBJson, USBConfig);
+    String NewSSID = USBJson["SSID"];
+    if(USBJson["SSID"].is<String>()){
+      Serial.print(F("Set WiFi SSID to: "));
+      Serial.println(NewSSID);
+      settings.putString("SSID", NewSSID);
+    } else{
+      Serial.println(F("Kept old WiFi SSID."));
+    }
+    String NewPassword = USBJson["Password"];
+    if(USBJson["Password"].is<String>()){
+      Serial.print(F("Set WiFi password to: "));
+      Serial.println(NewPassword);
+      settings.putString("Password", NewPassword);
+    } else{
+      Serial.println(F("Kept old WiFi password."));
+    }
+    String NewServer = USBJson["Server"];
+    if(USBJson["Server"].is<String>()){
+      Serial.print(F("Set server to: "));
+      Serial.println(NewServer);
+      settings.putString("Server", NewServer);
+    } else{
+      Serial.println(F("Kept old server."));
+    }
+    String NewKey = USBJson["Key"];
+    if(USBJson["Key"].is<String>()){
+      Serial.println(F("Set a new key (not printed for security)"));
+      settings.putString("Key", NewKey);
+    } else{
+      Serial.println(F("Kept old key."));
+    }
+    String NewTimezone = USBJson["Timezone"];
+    if(USBJson["Timezone"].is<String>()){
+      Serial.print(F("Set timezone to: "));
+      Serial.println(NewTimezone);
+      settings.putString("Timezone", NewTimezone);
+    } else{
+      Serial.println(F("Kept old timezone."));
+    }
+    String NewMakerspaceID = USBJson["MakerspaceID"];
+    if(USBJson["MakerspaceID"].is<String>()){
+      Serial.print(F("Set makerspace ID to: "));
+      Serial.println(NewMakerspaceID);
+      int tempid = NewMakerspaceID.toInt();
+      settings.putInt("MakerspaceID", tempid);
+    } else{
+      Serial.println(F("Kept old makerspace ID."));
+    }
+    Serial.println(F("Above settings have been saved to memory. Restart device to apply settings."));
+  }
 }

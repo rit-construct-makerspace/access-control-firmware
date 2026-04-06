@@ -136,7 +136,7 @@ void MachineState(void *pvParameters){
       if(NewPing){
         //We got a ping response as expected.
         NewPing = 0;
-        Serial.println(F("Ping response OK."));
+        //Serial.println(F("Ping response OK."));
       } else{
         Serial.println(F("Didn't get a ping response?"));
         NoNetwork = true;

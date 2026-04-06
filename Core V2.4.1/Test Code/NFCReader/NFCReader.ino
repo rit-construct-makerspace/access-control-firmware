@@ -49,7 +49,6 @@
 */
 
 #include "USB.h"
-USBCDC USBSerial;
 
 // Pin to select the hardware, the NSS pin. 
 #define CHIP_SELECT 6

@@ -1,4 +1,5 @@
 void MachineState(void *pvParameters){
+  Serial.println(F("MachineState Started."));
   while(1){
     delay(50);
     //Step 1: Check machine state variables
@@ -15,37 +16,17 @@ void MachineState(void *pvParameters){
       }
     }
 
+    if(State == "WELCOMING"){
+      InputMode = "TEMP_PRESENT";
+    } else{
+      InputMode = "INSERT";
+    }
+
     //Step 1.2: Check for a change to the card. New one? Removed? 
-
-    //Let's first ask the NFC reader for the card (if one is there)
-    uint16_t atqa = mfrc630_iso14443a_REQA();
-
-    if (atqa != 0) {  // Are there any cards that answered?
-      uint8_t sak;
-      uint8_t uid[10] = {0};  // uids are maximum of 10 bytes long.
-
-      // Select the card and discover its uid.
-      uint8_t uid_len = mfrc630_iso14443a_select(uid, &sak);
-
-      if (uid_len != 0) {  // did we get a UID?
-        for (uint8_t i=0; i<uid_len; i++){
-        if (uid[i] < 16){
-            FoundUID += "0"; 
-            FoundUID += String(uid[i], HEX);
-          } else {
-            FoundUID += String(uid[i], HEX);;
-          }
-        }
-        FoundUID.toUpperCase();
-      } else {
-        USBSerial.print("Could not determine UID, perhaps some cards don't play");
-        USBSerial.print(" well with the other cards? Or too many collisions?\n");
-      }
-      //Print the UID if it is a new one
-      if(!CardPresent){
-        USBSerial.print(F("Found UID: "));
-        USBSerial.println(FoundUID);
-      }
+    FoundUID = NFCCardFound();
+    if(FoundUID == ""){
+      //Double check there really isn't a card present
+      FoundUID = NFCCardFound();
     }
     
     //Then, what state are we in? Tap? Insert? 
@@ -53,13 +34,14 @@ void MachineState(void *pvParameters){
       //If we are in TEMP_PRESENT mode, we look for a card no matter what.
 
     if(InputMode == "TEMP_PRESENT"){
-      if(!CardPresent){
+      if(!CardPresent && FoundUID.length() > 2){
         //Accept the current card as the actual card.
-        CardPresent = 1;
+        CardPresent = true;
         UID = FoundUID;
-        if(State == "WELCOMING" && !NoNetwork){
+        if(State == "WELCOMING"){
           //Let's welcome the user to the makerspace
           SendWelcome = 1;
+          WelcomingPending = 1;
         }
         if(NoNetwork){
           //Give a fault beep
@@ -69,7 +51,7 @@ void MachineState(void *pvParameters){
     } else{ //INSERT
       if(!CardPresent && !digitalRead(DET1) && !digitalRead(DET2)){
         //New card inserted!
-        CardPresent = 1;
+        CardPresent = true;
         UID = FoundUID;
         if(State == "IDLE" && !NoNetwork){
           //Let's check for auth with the server
@@ -82,7 +64,7 @@ void MachineState(void *pvParameters){
           //Fault beep and deny the user due to no network
           FaultBeep = true;
           AccessDenied = true;
-          USBSerial.println(F("Access denied due to no network!"));
+          Serial.println(F("Access denied due to no network!"));
         } else{
           //Auto-deny the user
           AccessDenied = true;
@@ -95,11 +77,16 @@ void MachineState(void *pvParameters){
 
     //In TEMP_PRESENT mode, we do this based on the card no longer being detected by UID.
     if(InputMode == "TEMP_PRESENT"){
-      if(FoundUID != UID){
+      if(CardPresent && !FoundUID.equalsIgnoreCase(UID)){
         //Either found no UID or UID we found is different
-        CardPresent = 0;
+        Serial.print(F("Card "));
+        Serial.print(UID);
+        Serial.print(F(" replaced with "));
+        Serial.println(FoundUID);
+        CardPresent = false;
         UID = "";
         SendWelcome = 0;
+        WelcomingPending = 0;
         UserWelcomed = 0;
         AccessDenied = 0;
       }
@@ -120,18 +107,12 @@ void MachineState(void *pvParameters){
 
     //Step 1.3: Check if the state has changed since last time we went through the loop.
     if(State != LastState){
-      USBSerial.print(F("State changed from "));
-      USBSerial.print(LastState);
-      USBSerial.print(F(" to "));
-      USBSerial.println(State);
+      Serial.print(F("State changed from "));
+      Serial.print(LastState);
+      Serial.print(F(" to "));
+      Serial.println(State);
       PreservedLastState = LastState;
       LastState = State;
-      if(State == "WELCOMING"){
-        //In welcoming, we detect card by tap
-        InputMode = "TEMP_PRESENT";
-      } else{
-        InputMode = "INSERT";
-      }
       if(State == "UNLOCKED" || State == "ALWAYS_ON"){
         Access = 1;
       } else{
@@ -161,12 +142,50 @@ void MachineState(void *pvParameters){
       if(NewPing){
         //We got a ping response as expected.
         NewPing = 0;
-        USBSerial.println(F("Ping response OK."));
+        //Serial.println(F("Ping response OK."));
       } else{
-        USBSerial.println(F("Didn't get a ping response?"));
+        Serial.println(F("Didn't get a ping response?"));
         NoNetwork = true;
       }
       SendPing = 1;
     }
   }
+}
+
+String NFCCardFound(){
+  //Let's first ask the NFC reader for the card (if one is there)
+  
+  String ReturnedID = "";
+  
+  uint16_t atqa = mfrc630_iso14443a_REQA();
+
+  if (atqa != 0) {  // Are there any cards that answered?
+    uint8_t sak;
+    uint8_t uid[10] = {0};  // uids are maximum of 10 bytes long.
+
+    // Select the card and discover its uid.
+    uint8_t uid_len = mfrc630_iso14443a_select(uid, &sak);
+    if (uid_len != 0) {  // did we get a UID?
+      for (uint8_t i=0; i<uid_len; i++){
+      if (uid[i] < 16){
+          ReturnedID += "0"; 
+          ReturnedID += String(uid[i], HEX);
+        } else {
+          ReturnedID += String(uid[i], HEX);;
+        }
+      }
+      ReturnedID.toLowerCase();
+      //Serial.print(F("Found UID :"));
+      //Serial.println(ReturnedID);
+    } else {
+      Serial.print("Could not determine UID, perhaps some cards don't play");
+      Serial.print(" well with the other cards? Or too many collisions?\n");
+      ReturnedID = "";
+    }
+  } else{
+    //Did not find a UID
+    //Serial.println(F("Didn't find a card."));
+    ReturnedID = "";
+  }
+  return ReturnedID;
 }

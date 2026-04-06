@@ -1,7 +1,6 @@
 /* 
 These tasks are responsible for communicating with the frontend, handling things like switch states, LED and buzzer control, etc.
 There are 3 tasks;
-  InternalSerial - Handles sending data to and receiving data from the frontend controller.
   AVControl - Converts flags from other tasks into a series of LED lights and buzzer tones.
   RestartController - Listens for the front button to be held for 5 seconds, restarts the device. All other reset source throughout the code are handled by this task as well.
 */
@@ -20,6 +19,7 @@ void AVControl(void *pvParameters){
   byte DonePlaying;
   byte MelodyStep;
   uint64_t MelodyTime = 0;
+  Serial.println(F("AVControl Started."));
   while(1){
     vTaskDelay(20 / portTICK_PERIOD_MS);
     //First, set the animation state:
@@ -28,7 +28,7 @@ void AVControl(void *pvParameters){
       //Animation 3: Solid Yellow
       LEDAnimation = 3;
     }
-    if(PendingApproval){
+    if(PendingApproval || WelcomingPending){
       //Animation 4: Flashing Yellow
       LEDAnimation = 4;
     }
@@ -190,6 +190,10 @@ void AVControl(void *pvParameters){
         }
       break;
       }
+
+      CBI.setPixelColor(0, Red, Green, Blue);
+      CBI.show();
+      /*
       //If we are here, there is a new LED to send.
       if(OkToLED <= millis64()){
         //We enforce updates slower than 3Hz here to ensure no strobing or race conditions
@@ -197,6 +201,7 @@ void AVControl(void *pvParameters){
         CBI.setPixelColor(0, Red, Green, Blue);
         CBI.show();
       }
+      */
     }
     
     //After the LED, we need to set up the buzzer.
@@ -332,6 +337,7 @@ void AVControl(void *pvParameters){
 
 void RestartController(void *pvParameters){
   unsigned long long ButtonTime = 0;
+  Serial.println(F("RestartController Started"));
   while(1){
     //First, check if the button is being held to trigger a restart;
     delay(100);
@@ -351,6 +357,9 @@ void RestartController(void *pvParameters){
     }
     //Next, check if anything has asked for the device to be restarted.
     if(RequestReset){
+      Serial.print(F("Restarting. Source: "));
+      Serial.println(ResetReason);
+      Serial.flush();
       CBI.setPixelColor(0, 255, 0, 0);
       CBI.show();
       settings.putString("ResetReason",ResetReason);

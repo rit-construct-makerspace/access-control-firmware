@@ -45,49 +45,59 @@ void BusManager(void *pvParameters){
 }
 
 void loadInventoryFromFile() {
-  //Gets the expected list of OneWire devices from memory.
   if (!SPIFFS.exists("/inventory.dat")) {
-    USBSerial.println("No inventory file found. System is uninitialized.");
+    Serial.println("No inventory file found. System is uninitialized.");
     deviceCount = 0;
     return;
   }
 
   File file = SPIFFS.open("/inventory.dat", FILE_READ);
-  deviceCount = file.read(); // First byte is the count
+  int storedCount = file.read();
+  
+  // Validation: Check if file is empty (-1) or suspiciously large
+  if (storedCount < 0) {
+    Serial.println("Error: Inventory file is empty or corrupted.");
+    deviceCount = 0;
+    file.close();
+    return;
+  }
+
+  deviceCount = (byte)storedCount; 
   
   for (int i = 0; i < deviceCount; i++) {
+    // Check if there is actually enough data left in the file for an 8-byte address
+    if (file.available() < 8) break; 
+
     file.read(sensorList[i].address, 8);
-    USBSerial.print("Loaded Address: ");
-    printAddress(sensorList[i].address);
-    USBSerial.println();
-    // Fetch stored HighTemp from the physical chip now that we have the address
-    byte data[9];
-    if (readScratchpad(sensorList[i].address, data)) {
-      sensorList[i].highTempLimit = data[2];
-    }
+    
+    // ... rest of your code ...
   }
 
   file.close();
-  USBSerial.print("Loaded "); USBSerial.print((int)deviceCount); USBSerial.println(" devices from SPIFFS.");
+  Serial.print("Loaded "); Serial.print((int)deviceCount); Serial.println(" devices from SPIFFS.");
 }
 
 void discoverDevices() {
-  //Discovers and categorizes all devices in a deployment.
   byte addr[8];
   deviceCount = 0;
   ds.reset_search();
-  USBSerial.println("\n--- Scanning Bus ---");
+  Serial.println("\n--- Scanning Bus ---");
+
   while (ds.search(addr) && deviceCount < 10) {
     if (OneWire::crc8(addr, 7) != addr[7]) continue;
     for (int i = 0; i < 8; i++) sensorList[deviceCount].address[i] = addr[i];
     
     sensorList[deviceCount].classification = fetchMetadata(addr, sensorList[deviceCount].deviceType, sensorList[deviceCount].highTempLimit);
     
-    USBSerial.print("["); USBSerial.print(deviceCount); USBSerial.print("] ID: ");
+    Serial.print("["); Serial.print(deviceCount); Serial.print("] ID: ");
     printAddress(sensorList[deviceCount].address);
-    USBSerial.print(" | HighLimit: "); USBSerial.print(sensorList[deviceCount].highTempLimit);
-    USBSerial.print(" | Class: "); USBSerial.println(sensorList[deviceCount].classification);
     deviceCount++;
+  }
+
+  if (deviceCount == 0) {
+    Serial.println("No devices found. Bus is empty?");
+  } else {
+    Serial.print("Scan complete. Found: "); Serial.println(deviceCount);
   }
 }
 
@@ -95,7 +105,7 @@ void saveInventoryToFile() {
   //Saves the current list of debices to SPIFFs, treating it as a valid deployment. 
   File file = SPIFFS.open("/inventory.dat", FILE_WRITE);
   if (!file) {
-    USBSerial.println("Error: Could not create inventory file!");
+    Serial.println("Error: Could not create inventory file!");
     return;
   }
 
@@ -108,7 +118,7 @@ void saveInventoryToFile() {
   }
   
   file.close();
-  USBSerial.println("Inventory locked to SPIFFS.");
+  Serial.println("Inventory locked to SPIFFS.");
   SealBroken = false; //Reset the seal
 }
 
@@ -118,50 +128,26 @@ void checkBusHealth() {
   bool currentMismatch = false;
   bool responded[10] = {false};
 
+  // --- 0. Physical Presence Check ---
+  // ds.reset() returns 0 if at least one device pulses.
+  // It returns 1 if the bus stays high (No devices).
+  byte presence = ds.reset();
+  
+  if (presence == 1 && deviceCount > 0) {
+      Serial.println("SECURITY ALERT: Entire bus is unresponsive!");
+      currentMismatch = true;
+  }
+
   // --- 1. Initial Full Bus Scan ---
   ds.reset_search();
   while (ds.search(addr)) {
-    if (OneWire::crc8(addr, 7) != addr[7]) continue;
-
-    bool foundInInventory = false;
-    for (int i = 0; i < deviceCount; i++) {
-      if (memcmp(addr, sensorList[i].address, 8) == 0) {
-        foundInInventory = true;
-        responded[i] = true;
-        sensorList[i].isOnline = true;
-        liveCount++;
-        break;
-      }
-    }
-    
-    // Check for "New/Unexpected" devices (Intruders)
-    if (!foundInInventory) {
-      USBSerial.print("SECURITY ALERT: Unknown device detected: ");
-      printAddress(addr);
-      USBSerial.println();
-      currentMismatch = true; 
-    }
+    // ... (Your existing search logic) ...
   }
 
   // --- 2. Verified Retry for Missing Devices ---
+  // This loop naturally skips if deviceCount is 0.
   for (int i = 0; i < deviceCount; i++) {
-    if (!responded[i]) {
-      // Use a targeted scratchpad read instead of a general bus reset.
-      // If the device is missing, the bus floats high, CRC fails, and this returns false.
-      byte dummyData[9];
-      if (readScratchpad(sensorList[i].address, dummyData)) { 
-        responded[i] = true;
-        sensorList[i].isOnline = true;
-        liveCount++;
-      } else {
-        // Still missing after targeted communication attempt
-        USBSerial.print("SECURITY ALERT: Missing device: ");
-        printAddress(sensorList[i].address);
-        USBSerial.println();
-        currentMismatch = true;
-        sensorList[i].isOnline = false;
-      }
-    }
+    // ... (Your existing retry logic) ...
   }
 
   // --- 3. Final Count Comparison ---
@@ -169,12 +155,15 @@ void checkBusHealth() {
     currentMismatch = true;
   }
 
-  // --- 4. State Management & Terminal Fault Logic ---
+  // --- 4. State Management ---
   if (currentMismatch) {
     if (!SealBroken) {
       Serial.println("BUS SEAL RUPTURED!");
       SealBroken = true;
     }
+  } else if (deviceCount == 0 && presence == 1) {
+      // Logic for a confirmed healthy, empty bus
+      Serial.println("Bus Health: Verified Empty & Stable.");
   }
 }
 
@@ -200,15 +189,17 @@ void updateBusTemperatures() {
         sensorList[i].isAlarming = true;
         //If this specific sensor is alarming, the whole system is Overtemp
         OverTemp = true; 
-        USBSerial.println(F("Overtemperature detected!"));
-        USBSerial.print("Device ");
+        Serial.println(F("Overtemperature detected!"));
+        Serial.print("Device ");
         for(int j = 0; j < 8; j++){
-          USBSerial.print(sensorList[i].address[j]);
-          USBSerial.print(":");
+          Serial.print(sensorList[i].address[j]);
+          Serial.print(":");
         }
-        USBSerial.print(F(" is at "));
-        USBSerial.print(sensorList[i].currentTemp);
-        USBSerial.println("!");
+        Serial.print(F(" is at "));
+        Serial.print(sensorList[i].currentTemp);
+        Serial.print(" with a limit of ");
+        Serial.print(sensorList[i].highTempLimit);
+        Serial.println("!");
       } else {
         sensorList[i].isAlarming = false;
       }
@@ -250,6 +241,11 @@ uint32_t fetchMetadata(byte addr[8], byte &outType, byte &outHigh) {
   byte data[9];
   if (readScratchpad(addr, data)) {
     outHigh = data[2]; // TH is our High Temp Limit
+    if(outHigh < 10){
+      //This is not right, set to a normal value?
+      Serial.println(F("Overriding OneWire temperature limit for being too low."));
+      outHigh = 50;
+    }
     outType = (data[3] >> 3) & 0x07;
     
     uint32_t combined = 0;
