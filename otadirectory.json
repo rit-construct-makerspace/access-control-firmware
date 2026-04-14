@@ -9,8 +9,8 @@
     {
       "Device": "ACS Core",
       "Config": "3.0.0",
-      "Version": "2.0.1",
-      "URL": "https://github.com/rit-construct-makerspace/access-control-firmware/releases/download/Coreduino-V2.0.1/CoreDuino.ino.bin"
+      "Version": "2.0.4",
+      "URL": "https://github.com/rit-construct-makerspace/access-control-firmware/releases/download/Coreduino-V2.0.4/coreduino204.bin"
     }
   ]
 }
