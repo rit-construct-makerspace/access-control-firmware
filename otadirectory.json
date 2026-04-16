@@ -3,8 +3,8 @@
     {
       "Device": "ACS Core",
       "Config": "2.3.2-LE",
-      "Version": "2.0.4",
-      "URL": "https://github.com/rit-construct-makerspace/access-control-firmware/releases/download/Core-V2.0.4/core204.bin"
+      "Version": "2.0.5",
+      "URL": "https://github.com/rit-construct-makerspace/access-control-firmware/releases/download/Core-V2.0.5/core205.bin"
     },
     {
       "Device": "ACS Core",
