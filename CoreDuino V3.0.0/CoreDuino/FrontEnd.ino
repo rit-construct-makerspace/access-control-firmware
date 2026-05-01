@@ -45,6 +45,11 @@ void AVControl(void *pvParameters){
       //Animation 5: Alternate blue/green
       LEDAnimation = 5;
     }
+    if(ImminentShutdown){
+      //Play a warning alternating between red and green
+      //Used when a machine is unlocked, but we should tell the user to stop.
+      LEDAnimation = 11;
+    }
     if(State.equals("LOCKED_OUT") || AccessDenied){
       //Animation 1: Solid Red
       LEDAnimation = 1;
@@ -178,15 +183,28 @@ void AVControl(void *pvParameters){
           Green = 0;
           Blue = 0;
         }
-        if(AnimationBlock == 2){
+        else if(AnimationBlock == 2){
           Red = 0;
           Green = 255;
           Blue = 0;
         }
-        if(AnimationBlock == 3){
+        else{
           Red = 0;
           Green = 0;
           Blue = 255;
+          AnimationBlock = 0;
+        }
+      break;
+      case 11:
+        //Alternate red-green
+        if(AnimationBlock == 1){
+          Red = 255;
+          Green = 0;
+          Blue = 0;
+        } else{
+          Red = 0;
+          Green = 255;
+          Blue = 0;
           AnimationBlock = 0;
         }
       break;
@@ -354,12 +372,16 @@ void RestartController(void *pvParameters){
     }
     //Next, check if anything has asked for the device to be restarted.
     if(RequestReset){
+      vTaskSuspendAll(); //Stop all other tasks
       Serial.print(F("Restarting. Source: "));
       Serial.println(ResetReason);
       Serial.flush();
       CBI.setPixelColor(0, 255, 0, 0);
       CBI.show();
       settings.putString("ResetReason",ResetReason);
+      //Tell the frontend, if connected;
+      Serial0.println("{\"command\":\"restart\"}");
+      Serial0.flush();
       delay(50);
       ESP.restart();
     }

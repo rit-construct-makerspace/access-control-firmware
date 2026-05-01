@@ -3,15 +3,35 @@ void MachineState(void *pvParameters){
     delay(50);
     //Step 1: Check machine state variables
 
+    bool IntAsserted;
+
+    if(!digitalRead(DB9INT)){
+      //Are you sure?
+      delay(50);
+      IntAsserted = digitalRead(DB9INT);
+    } else{
+      IntAsserted = 1;
+    }
+
     //Step 1.1: Check for any reason we should be in a fault state
-    if(OverTemp || SealBroken || NFCBroken){
-      State = "FAULT";
-      StateChangeReason = "FAULT";
-      if(OverTemp){
-        StateChangeReason = "OVER_TEMP";
-      }
-      if(SealBroken){
-        StateChangeReason = "INTEGRITY_FAIL";
+    if(OverTemp || SealBroken || NFCBroken || !IntAsserted){
+      if(State != "FAULT"){
+        //This is our first time going to the fault state
+        State = "FAULT";
+        StateChangeReason = "FAULT";
+        Message = "ACS Fault!";
+        if(!IntAsserted){
+          Message = "Component Asserted Interrupt!";
+        }
+        if(OverTemp){
+          StateChangeReason = "OVER_TEMP";
+          Message = "Overtemperature!";
+        }
+        if(SealBroken){
+          StateChangeReason = "INTEGRITY_FAIL";
+          Message = "Bus Integrity Broken!";
+        }
+        MessageToSend = 1;
       }
     }
 
@@ -99,6 +119,13 @@ void MachineState(void *pvParameters){
       }
     }
 
+    //See if we have a regular status update to send
+    if(NextStatusTime <= millis64()){
+      //Time to send a status message.
+      SendStatus = 1;
+      NextStatusTime = millis64() + STATUS_INTERVAL;
+    }
+
     //Step 1.3: Check if the state has changed since last time we went through the loop.
     if(State != LastState){
       Serial.print(F("State changed from "));
@@ -124,9 +151,37 @@ void MachineState(void *pvParameters){
       StateChangeReason = "COMMANDED";
       LockWhenIdle = 0;
     }
-    if(RestartWhenIdle && State == "IDLE"){
+    if(RestartWhenUnused && State != "UNLOCKED" && State != "ALWAYS_ON"){
+      //We are in a non-used state, so restart
       RequestReset = 1;
-      while(1);
+      while(1){
+        delay(100);
+      }
+    }
+    if(ScheduledRestart){
+      //It is time for a scheduled restart
+      if(ScheduledRestartTime <= millis64() && ScheduledRestartTime != 0){
+        //Time to force a restart, the user has had 60 seconds to stop.
+        State = "UNKNOWN";
+        Serial.println(F("User has had 60 seconds to end session, forcing scheduled restart."));
+      }
+      if(State == "ALWAYS_ON" || State == "UNLOCKED"){
+        //We should not restart now, someone is using the machine? 
+        //Let the user know we are restarting soon.
+        ImminentShutdown = true;
+        if(ScheduledRestartTime == 0){
+          Serial.println(F("Server commanded scheduled shutdown, but user present? Giving them 60 seconds."));
+          ScheduledRestartTime = millis64() + 60000; //Give them 60 seconds
+        }
+      } else{
+        //Time to execute a restart.
+        Serial.println(F("Executing scheduled restart."));
+        Serial.flush();
+        RequestReset = 1;
+        while(1){
+          delay(100);
+        }
+      }
     }
 
     //Step 1.5: Send Regular ping

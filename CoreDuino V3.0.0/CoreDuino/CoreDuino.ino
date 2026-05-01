@@ -1,7 +1,6 @@
 //ACS V3.0.0 Hardware, running CoreDuino code.
-//This is reduced code for simple applications, and has some limitations.
 
-#define Version "2.0.1"
+#define Version "2.0.7"
 #define Hardware "3.0.0"
 
 //How often you send a status message, in milliseconds
@@ -77,6 +76,8 @@
   #include <esp_mac.h>
   #include "esp_efuse.h"
   #include "esp_efuse_table.h"
+  #include "SparkFun_LIS2DH12.h" //Click here to get the library: http://librarymanager/All#SparkFun_LIS2DH12
+  #include <Wire.h>
 
 //Objects:
   Preferences settings;
@@ -89,6 +90,7 @@
   MQTTPubSub::PubSubClient<256> mqtt;
   OneWire ds(ONEWIRE); 
   Adafruit_NeoPixel CBI(1, LED, NEO_RGB + NEO_KHZ800);
+  SPARKFUN_LIS2DH12 accel;  
   //USBCDC Serial;
 
 extern "C" bool verifyRollbackLater() {
@@ -97,36 +99,38 @@ extern "C" bool verifyRollbackLater() {
   return true;
 }
 
-//SSL Certificate. R12 for make.rit.edu running on Let's Encrypt. Will expire on March 12 2027!
+//SSL Certificate. the ISRG X1 cert that encompasses R12 and R13 for let's encrypt. Expires in 2030?
 const char *root_ca = R"literal(
 -----BEGIN CERTIFICATE-----
-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
+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
-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
+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
 -----END CERTIFICATE-----
 )literal";
 
@@ -148,13 +152,15 @@ String InputMode = "INSERT"; //Stores how we ingest cards.
 bool PendingApproval = 0; //Set to 1 when we have a card present that hasn't been authed yet, this is used for LED animations. 
 bool AccessDenied = 0; //Set to 1 when a card is present but has been denied, for LED animations. 
 bool CardPresent = 0; //Used to track if there is a card present in the machine.
-bool NFCBroken = 0;   //Set to 1 if we lose the NFC reader, needed since the NFC reader is an external component on these boards. 
 String LastState = "UNKNOWN"; //Stores what the state was previously, to detect changes.
 String PreservedLastState = "UNKNOWN";
 bool LockWhenIdle = 0;
-bool RestartWhenIdle = 0;
+bool RestartWhenUnused = 0;
 bool WelcomeFlag = 0;
 bool NoNetwork = 1;
+bool ScheduledRestart = false; //Used to indicate it is time for a regular restart. 
+unsigned long long ScheduledRestartTime = 0; //Used to give the user some breathing room before a shutdown occurs.
+bool ImminentShutdown = false; //Used to let the frontend know to play a flashing warning light
 String TapUID; //Stores the UID between cycles for comparison when in tap mode.
 bool UserWelcomed = 0;
 unsigned long long NextStatusTime = 0;
@@ -187,6 +193,9 @@ bool WelcomingPending = 0;
 String BaseTopic; //Used to store the root topic that all others are appended to.
 String Message; //Info for the history tab
 bool MessageToSend = 0;
+bool LogToSend = 0;
+String Log; //Non-message log to send to the server
+String LogType;
 bool SendAuth = 0;
 bool StateChange = 0;
 bool ReportConfig = 0;
@@ -226,6 +235,11 @@ struct Device {
 
 Device sensorList[10];
 
+//Variables related to any connected screen;
+bool UpdateScreen = false;
+String AuthReason = "";
+String FaultReason = "";
+
 void setup() {
   // put your setup code here, to run once:
 
@@ -233,19 +247,30 @@ void setup() {
   pinMode(BUZZER, OUTPUT);
   noTone(BUZZER);
   CBI.begin();
-  CBI.setBrightness(50);
+  CBI.setBrightness(30);
   CBI.setPixelColor(0, 255, 0, 0);
   CBI.show();
+
+  pinMode(ACCESS, OUTPUT);
+  pinMode(INTERRUPT, INPUT);
+
+  Serial.begin(115200);
+  Serial0.begin(115200, SERIAL_8N1, 44, 43);
+
+  Serial.println(F("STARTUP"));
+  Serial.flush();
+  delay(500);
+
+  sendStartup("Starting Tasks...");
 
   xTaskCreate(AVControl, "AVControl", 2048, NULL, 5, NULL);
   xTaskCreate(RestartController, "RestartController", 2048, NULL, 5, NULL);
 
-  Serial.begin(115200);
-  //USB.begin();
-  //Serial.setDebugOutput(true);
-  Serial.println(F("STARTUP"));
-  Serial.flush();
-  delay(500);
+  //Start i2C
+  Wire.begin(SDA, SCL);
+  accel.begin();
+  accel.setScale(LIS2DH12_2g);
+  accel.setDataRate(LIS2DH12_ODR_10Hz);
 
   //Start SPIFFS:
   if(!SPIFFS.begin(1)){
@@ -287,9 +312,9 @@ void setup() {
   delay(1000);
   CheckforConfig();
 
-  Server = settings.getString("Server");
-  if(Server == NULL){
+  if(!settings.isKey("Server")){
     //We don't have a valid config?
+    sendStartup("ERROR: Missing Config!");
     while(1){
       Serial.println(F("Missing config. Please provide a JSON with the following keys: "));
       Serial.println(F("WiFi SSID, WiFi Password, Server, Server Key, Timezone, MakerspaceID"));
@@ -297,15 +322,11 @@ void setup() {
       Serial.println(getBaseMacAddress());
       Serial.print(F("Device Serial Number: "));
       Serial.println(SerialNumber);
-      CBI.setPixelColor(0, 0, 0, 255);
-      CBI.show();
-      delay(1000);
-      CBI.setPixelColor(0, 0, 0, 0);
-      CBI.show();
       CheckforConfig();
       delay(1000);
     }
   }
+  Server = settings.getString("Server");
   Password = settings.getString("Password");
   if(Password.equalsIgnoreCase("null")){
     //Use a real NULL password.
@@ -326,6 +347,8 @@ void setup() {
   Serial.println(F("Settings loaded."));
   Serial.flush();
 
+  sendStartup("Settings Loaded.");
+
   Serial.println(F("Started Tasks."));
   Serial.flush();
 
@@ -337,16 +360,35 @@ void setup() {
   Serial.println(F("Started SPI."));
   Serial.flush();
 
+  sendStartup("Starting WiFi...");
+
   WiFi.mode(WIFI_STA);
   WiFi.begin(SSID, Password);
   WiFi.setSleep(false);
   WiFi.setAutoReconnect(true);
+  if(WiFi.status() != WL_CONNECTED){
+    WiFi.reconnect(); //Force a manual connect attempt
+    Serial.println(F("Waiting for first WiFi connect"));
+    while(WiFi.status() != WL_CONNECTED){
+      Serial.print(".");
+      delay(500);
+    }
+  }
+  Serial.println(F("WiFi connected."));
+  
+  sendStartup("WiFi Started.");
+  //Also get rid of "No NET" on screen
+  JsonDocument NoNetStart;
+  NoNetStart["noNetwork"] = false;
+  String NoNetToSend;
+  serializeJson(NoNetStart, NoNetToSend);
+  Serial0.println(NoNetToSend);
 
-  mqtt.begin(socket); //Enable MQTT on the websocket
+  delay(500);
 
-  NetworkConnect();
+  sendStartup("Checking for OTA...");
+  Serial.println(F("Checking for OTA..."));
 
-  //If we cared about why we restarted, this'd be the place to handle it.
 
   //Check for an OTA update, install it if there is one present.
   ota.SetCallback(callback_percent);
@@ -359,6 +401,14 @@ void setup() {
 
   //If we made it past the OTA, then we are ready for normal operation.
 
+  sendStartup("Connecting MQTT...");
+
+  mqtt.begin(socket); //Enable MQTT on the websocket
+
+  NetworkConnect();
+
+  //If we cared about why we restarted, this'd be the place to handle it.
+
   //Start the NFC reader, make sure it is working as expected. 
   mfrc630_AN1102_recommended_registers(MFRC630_PROTO_ISO14443A_106_MILLER_MANCHESTER);
   mfrc630_write_reg(0x28, 0x8E);
@@ -368,6 +418,7 @@ void setup() {
 
   //We should initialize the OneWire bus here, check for the right devices, etc.
   Serial.println(F("Starting OneWire..."));
+  sendStartup("Starting OneWire...");
   discoverDevices();
   loadInventoryFromFile();
   if(deviceCount == 0){
@@ -382,11 +433,13 @@ void setup() {
   refreshLiveAddressBuffer();
 
   //Going forward, we will check the OneWire bus in a different task to make life easier.
-  xTaskCreate(BusManager, "BusManager", 2048, NULL, 5, NULL);
+  xTaskCreate(BusManager, "BusManager", 4096, NULL, 5, NULL);
 
   //Time to loop!
   xTaskCreate(MachineState, "MachineState", 4096, NULL, 5, NULL);
   GamerMode = 0; //Disable the startup lighting
+
+  xTaskCreate(SceenController, "ScreenController", 4096, NULL, 5, NULL);
 
 }
 
@@ -404,7 +457,10 @@ void loop() {
   //Only do all this if we have a connection
   if(mqtt.isConnected() && !NoNetwork){
 
-    NoNetwork = false;
+    if(NoNetwork){
+      NoNetwork = false;
+      UpdateScreen = true;
+    }
 
     JsonDocument outgoing; //Json to construct the outgoing message in
 
@@ -412,7 +468,7 @@ void loop() {
     if(MessageToSend){
       //Send a message to the history
       MessageToSend = 0;
-      outgoing["auditLog"] = 1;
+      outgoing["auditLog"] = true; //Print in the history
       outgoing["message"] = Message;
       outgoing["category"] = "message";
       String MessagePayload;
@@ -420,6 +476,19 @@ void loop() {
       outgoing.clear(); //Clear so other sends can use it
       String MessageTopic = BaseTopic + "/log";
       publish(MessageTopic, MessagePayload);
+    }
+    if(LogToSend){
+      //Send a log to the audit logs (not the user-visible history)
+      LogToSend = 0;
+      outgoing["auditLog"] = false; //Don't print in the history
+      outgoing["message"] = Log;
+      outgoing["type"] = LogType;
+      String LogPayload;
+      serializeJson(outgoing, LogPayload);
+      outgoing.clear();
+      String LogTopic = BaseTopic + "/log";
+      publish(LogTopic, LogPayload);
+      LogType = "message"; //Default value unless we say otherwise.
     }
     if(SendAuth){
       //Send an auth request to the server
@@ -484,7 +553,7 @@ void loop() {
       }
       JsonObject flags = outgoing["flags"].to<JsonObject>();
       flags["lockWhenIdle"] = LockWhenIdle;
-      flags["restartWhenIdle"] = RestartWhenIdle;
+      flags["restartWhenUnused"] = RestartWhenUnused;
       flags["welcoming"] = WelcomeFlag;
       String FWVer = "CoreDuino " + String(Version);
       outgoing["firmware"] = FWVer;
@@ -562,6 +631,7 @@ void loop() {
       deserializeJson(incoming, AuthResponse);
       bool IsAuthed = incoming["channels"][0]["approved"].as<bool>();
       String AuthID = incoming["cardTagID"].as<String>();
+      AuthReason = incoming["channels"][0]["reason"].as<String>();
       PendingApproval = false;
       if(State == "IDLE"){
         if(IsAuthed){
@@ -581,6 +651,7 @@ void loop() {
       } else{
         Serial.println(F("Ignoring auth due to invalid state."));
       }
+      UpdateScreen = true;
     }
     if(NewInfo){
       //Process a response to an info request.
@@ -600,10 +671,10 @@ void loop() {
           Serial.print(F("Server set LockWhenIdle to: "));
           Serial.println(LockWhenIdle);
         }
-        if(flagObj.containsKey("restartWhenIdle")){
-          RestartWhenIdle = flagObj["restartWhenIdle"].as<bool>();
-          Serial.print(F("Server set RestartWhenIdle to: "));
-          Serial.println(RestartWhenIdle);
+        if(flagObj.containsKey("restartWhenUnused")){
+          RestartWhenUnused = flagObj["restartWhenUnused"].as<bool>();
+          Serial.print(F("Server set RestartWhenUnused to: "));
+          Serial.println(RestartWhenUnused);
         }
         if(flagObj.containsKey("welcoming")){
           if(WelcomeFlag != flagObj["welcoming"].as<bool>()){
@@ -643,6 +714,7 @@ void loop() {
       }
       ReportConfig = 1; //Once we get some info, we should send our configuration.
       SendStatus = 1; //Once we get some info, we should send our status.
+      UpdateScreen = true;
     }
     if(NewCommand){
       //Process an incoming command.
@@ -671,10 +743,10 @@ void loop() {
           Serial.print(F("Server set LockWhenIdle to: "));
           Serial.println(LockWhenIdle);
         }
-        if(flagObj.containsKey("restartWhenIdle")){
-          RestartWhenIdle = flagObj["restartWhenIdle"].as<bool>();
-          Serial.print(F("Server set RestartWhenIdle to: "));
-          Serial.println(RestartWhenIdle);
+        if(flagObj.containsKey("restartWhenUnused")){
+          RestartWhenUnused = flagObj["restartWhenUnused"].as<bool>();
+          Serial.print(F("Server set RestartWhenUnused to: "));
+          Serial.println(RestartWhenUnused);
         }
         if(flagObj.containsKey("welcoming")){
           if(WelcomeFlag != flagObj["welcoming"].as<bool>()){
@@ -712,8 +784,13 @@ void loop() {
             SingleBeep = true;
           }
         }
+        if(incoming["action"] == "SCHEDULED_RESTART"){
+          Serial.println(F("Server indicated it is time for a scheduled restart."));
+          ScheduledRestart = true;
+        }
 
       }
+      UpdateScreen = true;
     }
     if(NewWelcome){
       //Response to welcoming a user
@@ -737,6 +814,7 @@ void loop() {
         Serial.println(WelcomeReason);
         AccessDenied = 1; //Act like we denied the user access
       }
+      UpdateScreen = true;
     }
 
     //Step 4.4: Send a ping if requested
@@ -751,6 +829,7 @@ void loop() {
   } else{
     Serial.println(F("No network?"));
     NoNetwork = true;
+    UpdateScreen = true;
     NetworkConnect();
   }
 
@@ -764,6 +843,12 @@ void callback_percent(int offset, int totallength) {
   if (percent != prev_percent) {
     Serial.printf("Updating %d of %d (%02d%%)...\n", offset, totallength, 100 * offset / totallength);
     prev_percent = percent;
+    //We should also send it to any attached screen;
+    JsonDocument CoreOTA;
+    CoreOTA["coreOta"] = percent;
+    String CoreOTAString;
+    serializeJson(CoreOTA, CoreOTAString);
+    Serial0.println(CoreOTAString);
   }
 }
 
@@ -802,13 +887,22 @@ uint64_t millis64(){
 
 void NetworkConnect(){
   //Check the WiFi first
+  retryNetwork:
   if(WiFi.status() != WL_CONNECTED){
+    WiFi.reconnect(); //Force a manual connect attempt
     Serial.println(F("No WiFi? Waiting for reconnect"));
+    unsigned long long WiFiTime = millis64() + 15000;
     while(WiFi.status() != WL_CONNECTED){
       Serial.print(".");
       delay(500);
+      if(WiFiTime <= millis64()){
+        Serial.println(F("Failed to connect to WiFi! Retrying..."));
+        goto retryNetwork;
+      }
     }
     Serial.println(F(" Connected!"));
+  } else{
+    Serial.println(F("Already had WiFi connection, skipping to websocket connection."));
   }
   
   //Start our websocket connection
@@ -817,9 +911,14 @@ void NetworkConnect(){
   socket.beginSslWithCA(Server.c_str(), 443, "/mqtt", root_ca, "mqtt");
   socket.setReconnectInterval(2000); //Attempt to reconnect every 2 seconds if we lose connection
   Serial.println(F("Connecting to MQTT Broker"));
+  unsigned long long SocketTime = millis64() + 15000;
   while(!mqtt.connect(SerialNumber, SerialNumber, Key)){ //Use serial number as unique ID, username, and key as password.
     Serial.print(".");
-    delay(1000);
+    delay(500);
+    if(SocketTime <= millis64()){
+      Serial.println(F("Failed to connect to websocket! Retrying network altogether..."));
+      goto retryNetwork;
+    }
   } 
   Serial.println(F(" MQTT Connected!"));
 
@@ -865,11 +964,16 @@ void NetworkConnect(){
   });
 
   NoNetwork = false;
+  UpdateScreen = true;
 
   //We should request and report things when we (re)connect
+  ReportConfig = 1;
   RequestInfo = 1;
   SendPing = 1;
   NextPingTime = millis64() + 1000;
+  LogType = "Network Connected";
+  Log = "Network Connected";
+  LogToSend = true;
 }
 
 void publish(String Topic, String Payload){
@@ -991,4 +1095,13 @@ String getBaseMacAddress() {
   } else {
     return String("00:00:00:00:00:00");
   }
+}
+
+void sendStartup(String Message){
+  JsonDocument Startup;
+  Startup["startupMessage"] = Message;
+  String StartMessageString;
+  serializeJson(Startup, StartMessageString);
+  Serial0.println(StartMessageString);
+  Serial0.flush();
 }

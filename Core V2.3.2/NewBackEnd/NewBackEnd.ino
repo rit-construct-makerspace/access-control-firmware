@@ -1,8 +1,11 @@
 //Re-write of ACS Core firmware to make it simpler, faster. Uses just one mega loop for everything.
 
-#define Version "2.0.1"
+#define Version "2.0.5"
 #define Hardware "2.3.2-LE"
 #define DebugMode 1
+
+//How often to send a status report, in milliseconds
+#define STATUS_INTERVAL 15000
 
 //Pin Definitions:
   const int ETHINT = 13;
@@ -50,6 +53,8 @@
   #include <ping.h>                 //Version 1.6   | Source: https://github.com/marian-craciunescu/ESP32Ping
   #include "esp_ota_ops.h"          //Version 3.1.1 | Inherent to ESP32 Arduino
   #include <MQTTPubSubClient.h> 
+  #include "esp_efuse.h"
+  #include "esp_efuse_table.h"
 
 //Objects:
   Adafruit_PN532 nfc(SCKPin, MISOPin, MOSIPin, NFCCS);
@@ -73,33 +78,33 @@ extern "C" bool verifyRollbackLater() {
 //SSL Certificate. R12 for make.rit.edu running on Let's Encrypt. Will expire on March 12 2027!
 const char *root_ca = R"literal(
 -----BEGIN CERTIFICATE-----
-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
+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
 -----END CERTIFICATE-----
 )literal";
 
@@ -122,8 +127,11 @@ bool NFCBroken = 0;   //Set to 1 if we lose the NFC reader, needed since the NFC
 String LastState = "UNKNOWN"; //Stores what the state was previously, to detect changes.
 String PreservedLastState = "UNKNOWN";
 bool LockWhenIdle = 0;
-bool RestartWhenIdle = 0;
+bool RestartWhenUnused = 0;
 bool NoNetwork = 1;
+bool ScheduledRestart = false; //Used to indicate it is time for a regular restart. 
+unsigned long long ScheduledRestartTime = 0; //Used to give the user some breathing room before a shutdown occurs.
+bool ImminentShutdown = false; //Used to let the frontend know to play a flashing warning light
 
 //Variables - Config
 String SerialNumber;
@@ -150,11 +158,15 @@ bool OTALocked = 0;
 String BaseTopic; //Used to store the root topic that all others are appended to.
 String Message; //Info for the history tab
 bool MessageToSend = 0;
+bool LogToSend = 0;
+String Log; //Non-message log to send to the server
+String LogType;
 bool SendAuth = 0;
 bool StateChange = 0;
 bool ReportConfig = 0;
 bool RequestInfo = 0;
 bool SendStatus = 0;
+unsigned long long NextStatusTime;
 
 //Variables - Inter-Task Communication
 bool SealBroken = 0;  //Set to 1 if there is an incorrect OneWire device on the bus. 
@@ -196,6 +208,8 @@ Device sensorList[10];
 void setup() {
   // put your setup code here, to run once:
 
+  xTaskCreate(OTAWatchdog, "OTAWatchdog", 2048, NULL, 1, NULL);
+
   Serial.begin(115200);
   Serial.println(F("STARTUP"));
   delay(2000);
@@ -203,8 +217,11 @@ void setup() {
   //Start SPIFFS:
   if(!SPIFFS.begin(1)){
     Serial.println(F("SPIFFS Mount Failed!"));
+    Serial.flush();
     delay(1000);
     ESP.restart();
+  } else{
+    Serial.println(F("SPIFFS Mount Done!"));
   }
 
   //Connect to the frontend, set the buzzer off. In case we crashed while we were writing the buzzer.
@@ -219,28 +236,42 @@ void setup() {
   xTaskCreate(InternalSerial, "InternalSerial", 1024, NULL, 5, NULL);
   xTaskCreate(AVControl, "AVControl", 1024, NULL, 5, NULL);
   xTaskCreate(RestartController, "RestartController", 1024, NULL, 5, NULL);
-  xTaskCreate(MachineState, "MachineState", 1024, NULL, 5, NULL);
 
   //Load settings from memory
   settings.begin("settings", false);
-  Server = settings.getString("Server");
-  if(Server == NULL){
-    //We don't have a valid config? Flash blue forever. 
-    //We can't do anything with this to deploy new hardware
-    while(1){
-      Internal.println("L 0,0,0");
-      delay(1000);
-      Internal.println("L 0,0,255");
-      delay(1000);
-    }
-  }
-  SerialNumber = settings.getString("SerialNumber");
   Password = settings.getString("Password");
   if(Password.equalsIgnoreCase("null")){
     //Use a real NULL password.
     Password = "";
   }
   SSID = settings.getString("SSID");
+  if(settings.isKey("SerialNumber")){
+    //Use old-style serial number
+    SerialNumber = settings.getString("SerialNumber");
+    Serial.print(F("Loaded OneWire-based serial number: "));
+    Serial.println(SerialNumber);
+  } else{
+    //Get our eFuse serial number;
+    // The ID is 128 bits = 16 bytes
+    uint8_t unique_id[16]; 
+    
+    // ESP_EFUSE_OPTIONAL_UNIQUE_ID is the constant defined in the IDF table
+    esp_err_t err = esp_efuse_read_field_blob(ESP_EFUSE_OPTIONAL_UNIQUE_ID, unique_id, 128);
+
+    if (err == ESP_OK) {
+      Serial.print("Serial Number: ");
+      for (int i = 0; i < 16; i++) {
+        if (unique_id[i] < 0x10) SerialNumber += "0"; // Lead with zero if byte < 16
+        SerialNumber += String(unique_id[i], HEX);
+      }
+      SerialNumber.toUpperCase();
+      Serial.print(SerialNumber);
+      Serial.println();
+    } else {
+      Serial.printf("Error reading eFuse: 0x%X\n", err);
+      Serial.println("Note: This ID may not exist on original ESP32 (Non-S2/S3) models.");
+    }
+  }
   Server = settings.getString("Server");
   Key = settings.getString("Key");
   int TimezoneHr;
@@ -264,20 +295,32 @@ void setup() {
         break;
       } else{
         Serial.println(F("ERROR! No Makerspace ID. Need to enter one now to continue..."));
+        Serial.print(F("Serial Number: "));
+        Serial.println(SerialNumber);
       }
     }
   }
   MakerspaceID = settings.getInt("MakerspaceID");
+
+  Serial.println(F("Got a config for me?"));
+  delay(3000);
+  CheckforConfig();
 
   //Connect to the network before we continue.
   WiFi.mode(WIFI_STA);
   WiFi.begin(SSID, Password);
   WiFi.setSleep(false);
   WiFi.setAutoReconnect(true);
-
-  mqtt.begin(socket); //Enable MQTT on the websocket
-
-  NetworkConnect();
+  Serial.print(F("MAC Address: "));
+  Serial.println(WiFi.macAddress());
+  if(WiFi.status() != WL_CONNECTED){
+    WiFi.reconnect(); //Force a manual connect attempt
+    Serial.println(F("No WiFi? Waiting for reconnect"));
+    while(WiFi.status() != WL_CONNECTED){
+      Serial.print(".");
+      delay(500);
+    }
+  }
 
   //If we cared about why we restarted, this'd be the place to handle it.
 
@@ -291,6 +334,12 @@ void setup() {
   Serial.println(errtext(otaresp));
 
   //If we made it past the OTA, then we are ready for normal operation.
+  mqtt.begin(socket); //Enable MQTT on the websocket
+
+  NetworkConnect();
+
+  //Start the machine state
+  xTaskCreate(MachineState, "MachineState", 1024, NULL, 5, NULL);
 
   //Start the NFC reader, make sure it is present.
    uint32_t versiondata;
@@ -359,7 +408,7 @@ void loop() {
     if(MessageToSend){
       //Send a message to the history
       MessageToSend = 0;
-      outgoing["auditLog"] = 1;
+      outgoing["auditLog"] = true;
       outgoing["message"] = Message;
       outgoing["category"] = "message";
       String MessagePayload;
@@ -367,6 +416,19 @@ void loop() {
       outgoing.clear(); //Clear so other sends can use it
       String MessageTopic = BaseTopic + "/log";
       publish(MessageTopic, MessagePayload);
+    }
+    if(LogToSend){
+      //Send a log to the audit logs (not the user-visible history)
+      LogToSend = 0;
+      outgoing["auditLog"] = false;
+      outgoing["message"] = Log;
+      outgoing["type"] = LogType;
+      String LogPayload;
+      serializeJson(outgoing, LogPayload);
+      outgoing.clear();
+      String LogTopic = BaseTopic + "/log";
+      publish(LogTopic, LogPayload);
+      LogType = "message"; //Default value unless we say otherwise.
     }
     if(SendAuth){
       //Send an auth request to the server
@@ -428,7 +490,9 @@ void loop() {
       }
       JsonObject flags = outgoing["flags"].to<JsonObject>();
       flags["lockWhenIdle"] = LockWhenIdle;
-      flags["restartWhenIdle"] = RestartWhenIdle;
+      flags["restartWhenUnused"] = RestartWhenUnused;
+      String FWVer = "ShlugDuino V" + String(Version); 
+      outgoing["firmware"] = FWVer;
       String ConfigPayload;
       serializeJson(outgoing, ConfigPayload);
       outgoing.clear();
@@ -539,6 +603,9 @@ void loop() {
         Serial.print(F("State set to > "));
         Serial.print(State);
         Serial.println(F(" < on startup."));
+
+        //Always send a status report when we get new info
+        SendStatus = 1;
       }
       
     }
@@ -566,10 +633,10 @@ void loop() {
           Serial.print(F("Server set LockWhenIdle to: "));
           Serial.println(LockWhenIdle);
         }
-        if(flagObj.containsKey("restartWhenIdle")){
-          RestartWhenIdle = flagObj["restartWhenIdle"].as<bool>();
-          Serial.print(F("Server set RestartWhenIdle to: "));
-          Serial.println(RestartWhenIdle);
+        if(flagObj.containsKey("restartWhenUnused")){
+          RestartWhenUnused = flagObj["restartWhenUnused"].as<bool>();
+          Serial.print(F("Server set RestartWhenUnused to: "));
+          Serial.println(RestartWhenUnused);
         }
       }
       //Action to do something
@@ -587,6 +654,10 @@ void loop() {
         if(incoming["action"] == "IDENTIFY"){
           Serial.println(F("Server commanded identify."));
           Identify = !Identify;
+        }
+        if(incoming["action"] == "SCHEDULED_RESTART"){
+          Serial.println(F("Server indicated it is time for a scheduled restart."));
+          ScheduledRestart = true;
         }
 
       }
@@ -606,6 +677,7 @@ void loop() {
     NoNetwork = true;
     NetworkConnect();
   }
+
   delay(20);
 }
 
@@ -655,13 +727,22 @@ uint64_t millis64(){
 
 void NetworkConnect(){
   //Check the WiFi first
+  retryNetwork:
   if(WiFi.status() != WL_CONNECTED){
+    WiFi.reconnect(); //Force a manual connect attempt
     Serial.println(F("No WiFi? Waiting for reconnect"));
+    unsigned long long WiFiTime = millis64() + 15000;
     while(WiFi.status() != WL_CONNECTED){
       Serial.print(".");
       delay(500);
+      if(WiFiTime <= millis64()){
+        Serial.println(F("Failed to connect to WiFi! Retrying..."));
+        goto retryNetwork;
+      }
     }
     Serial.println(F(" Connected!"));
+  } else{
+    Serial.println(F("Already had WiFi connection, skipping to websocket connection."));
   }
   
   //Start our websocket connection
@@ -670,9 +751,14 @@ void NetworkConnect(){
   socket.beginSslWithCA(Server.c_str(), 443, "/mqtt", root_ca, "mqtt");
   socket.setReconnectInterval(2000); //Attempt to reconnect every 2 seconds if we lose connection
   Serial.println(F("Connecting to MQTT Broker"));
+  unsigned long long SocketTime = millis64() + 15000;
   while(!mqtt.connect(SerialNumber, SerialNumber, Key)){ //Use serial number as unique ID, username, and key as password.
     Serial.print(".");
-    delay(1000);
+    delay(500);
+    if(SocketTime <= millis64()){
+      Serial.println(F("Failed to connect to websocket! Retrying network altogether..."));
+      goto retryNetwork;
+    }
   } 
   Serial.println(F(" MQTT Connected!"));
 
@@ -716,6 +802,9 @@ void NetworkConnect(){
   RequestInfo = 1;
   SendPing = 1;
   NextPingTime = millis64() + 1000;
+  LogType = "Network Connected";
+  Log = "Network Connected";
+  LogToSend = true;
 }
 
 void publish(String Topic, String Payload){
@@ -785,5 +874,31 @@ void CheckforConfig(){
       Serial.println(F("Kept old makerspace ID."));
     }
     Serial.println(F("Above settings have been saved to memory. Restart device to apply settings."));
+  }
+}
+
+void OTAWatchdog(void *pvParameters){
+  bool OTATimeout = false;
+  while(1){
+    delay(10);
+    //This task reverts an OTA if not marked valid in 60 seconds.
+    if(!OTATimeout && (millis64() >= 60000)){
+      OTATimeout = 1;
+      const esp_partition_t *running_partition = esp_ota_get_running_partition();
+      esp_ota_img_states_t ota_state;
+      esp_ota_get_state_partition(running_partition, &ota_state);
+
+      if(ota_state == ESP_OTA_IMG_PENDING_VERIFY){
+        Serial.println(F("OTA update timer failed after 60 seconds."));
+        Serial.println(F("Reverting firmware."));
+        settings.putString("ResetReason","OTA-Revert");
+        esp_ota_mark_app_invalid_rollback_and_reboot();
+      } else{
+        Serial.println(F("OTA update timer passed. Disabling."));
+      }
+    }
+    if(OTATimeout){
+      vTaskSuspend(NULL);
+    }
   }
 }

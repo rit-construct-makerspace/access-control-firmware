@@ -4,6 +4,9 @@ The Bus Manager is responsible for everything OneWire related
   * Checking for bus integrity
 */
 
+#define MAX_ALLOWED_MISSES 3 // Number of consecutive missed scans before faulting
+int missingScanCount = 0;    // Tracks consecutive failures
+
 void BusManager(void *pvParameters){
   unsigned long long OneWireTime = 0;      //Next time we should check the bus.
   struct Device {
@@ -15,7 +18,7 @@ void BusManager(void *pvParameters){
     bool isAlarming;         
     bool isOnline;           
   };
-  Device sensorList[5];
+  Device sensorList[10];
   while(1){
     //Step 1: Check if we are commanded to seal the bus;
     if(ReSealBus){
@@ -45,7 +48,6 @@ void BusManager(void *pvParameters){
 }
 
 void loadInventoryFromFile() {
-  //Gets the expected list of OneWire devices from memory.
   if (!SPIFFS.exists("/inventory.dat")) {
     Serial.println("No inventory file found. System is uninitialized.");
     deviceCount = 0;
@@ -53,18 +55,25 @@ void loadInventoryFromFile() {
   }
 
   File file = SPIFFS.open("/inventory.dat", FILE_READ);
-  deviceCount = file.read(); // First byte is the count
+  int storedCount = file.read();
+  
+  // Validation: Check if file is empty (-1) or suspiciously large
+  if (storedCount < 0) {
+    Serial.println("Error: Inventory file is empty or corrupted.");
+    deviceCount = 0;
+    file.close();
+    return;
+  }
+
+  deviceCount = (byte)storedCount; 
   
   for (int i = 0; i < deviceCount; i++) {
+    // Check if there is actually enough data left in the file for an 8-byte address
+    if (file.available() < 8) break; 
+
     file.read(sensorList[i].address, 8);
-    Serial.print("Loaded Address: ");
-    printAddress(sensorList[i].address);
-    Serial.println();
-    // Fetch stored HighTemp from the physical chip now that we have the address
-    byte data[9];
-    if (readScratchpad(sensorList[i].address, data)) {
-      sensorList[i].highTempLimit = data[2];
-    }
+    
+    // ... rest of your code ...
   }
 
   file.close();
@@ -72,11 +81,11 @@ void loadInventoryFromFile() {
 }
 
 void discoverDevices() {
-  //Discovers and categorizes all devices in a deployment.
   byte addr[8];
   deviceCount = 0;
   ds.reset_search();
   Serial.println("\n--- Scanning Bus ---");
+
   while (ds.search(addr) && deviceCount < 10) {
     if (OneWire::crc8(addr, 7) != addr[7]) continue;
     for (int i = 0; i < 8; i++) sensorList[deviceCount].address[i] = addr[i];
@@ -85,9 +94,13 @@ void discoverDevices() {
     
     Serial.print("["); Serial.print(deviceCount); Serial.print("] ID: ");
     printAddress(sensorList[deviceCount].address);
-    Serial.print(" | HighLimit: "); Serial.print(sensorList[deviceCount].highTempLimit);
-    Serial.print(" | Class: "); Serial.println(sensorList[deviceCount].classification);
     deviceCount++;
+  }
+
+  if (deviceCount == 0) {
+    Serial.println("No devices found. Bus is empty?");
+  } else {
+    Serial.print("Scan complete. Found: "); Serial.println(deviceCount);
   }
 }
 
@@ -114,66 +127,90 @@ void saveInventoryToFile() {
 
 void checkBusHealth() {
   byte addr[8];
-  int liveCount = 0;
-  bool currentMismatch = false;
-  bool responded[10] = {false};
+  // Note: Ensure this boolean array size matches your maximum possible devices.
+  // Currently your struct array is 'Device sensorList[5];'
+  bool foundExpected[10] = {false}; 
+  bool unexpectedDeviceFound = false;
+  bool missingExpectedDevice = false;
 
-  // --- 1. Initial Full Bus Scan ---
-  ds.reset_search();
-  while (ds.search(addr)) {
-    if (OneWire::crc8(addr, 7) != addr[7]) continue;
-
-    bool foundInInventory = false;
-    for (int i = 0; i < deviceCount; i++) {
-      if (memcmp(addr, sensorList[i].address, 8) == 0) {
-        foundInInventory = true;
-        responded[i] = true;
-        sensorList[i].isOnline = true;
-        liveCount++;
-        break;
+  // --- 0. Physical Presence Check ---
+  byte busEmpty = ds.reset();
+  if (busEmpty == 0) {
+    if (deviceCount > 0) {
+      Serial.println("SECURITY ALERT: Entire bus is unresponsive!");
+      missingExpectedDevice = true;
+    } else {
+      Serial.println("Bus Health: Verified Empty & Stable.");
+      return; 
+    }
+  } else {
+    // --- 1. Full Bus Scan & Address Matching ---
+    ds.reset_search();
+    
+    while (ds.search(addr)) {
+      if (OneWire::crc8(addr, 7) == addr[7]) {
+        bool addressMatched = false;
+        
+        // Compare found address against our known inventory
+        for (int i = 0; i < deviceCount; i++) {
+          if (memcmp(addr, sensorList[i].address, 8) == 0) {
+            foundExpected[i] = true;
+            addressMatched = true;
+            break;
+          }
+        }
+        
+        if (!addressMatched) {
+          Serial.print("SECURITY ALERT: Unexpected device detected: ");
+          printAddress(addr);
+          Serial.println();
+          unexpectedDeviceFound = true;
+        }
+      } else {
+        Serial.println("Warning: Communication noise detected (CRC Mismatch)");
       }
     }
-    
-    // Check for "New/Unexpected" devices (Intruders)
-    if (!foundInInventory) {
-      Serial.print("SECURITY ALERT: Unknown device detected: ");
-      printAddress(addr);
-      Serial.println();
-      currentMismatch = true; 
-    }
-  }
 
-  // --- 2. Verified Retry for Missing Devices ---
-  for (int i = 0; i < deviceCount; i++) {
-    if (!responded[i]) {
-      // Use a targeted scratchpad read instead of a general bus reset.
-      // If the device is missing, the bus floats high, CRC fails, and this returns false.
-      byte dummyData[9];
-      if (readScratchpad(sensorList[i].address, dummyData)) { 
-        responded[i] = true;
-        sensorList[i].isOnline = true;
-        liveCount++;
-      } else {
-        // Still missing after targeted communication attempt
-        Serial.print("SECURITY ALERT: Missing device: ");
+    // --- 2. Check for Missing Expected Devices ---
+    for (int i = 0; i < deviceCount; i++) {
+      if (!foundExpected[i]) {
+        missingExpectedDevice = true;
+        Serial.print("Warning: Expected device missing this scan: ");
         printAddress(sensorList[i].address);
         Serial.println();
-        currentMismatch = true;
-        sensorList[i].isOnline = false;
       }
     }
   }
 
-  // --- 3. Final Count Comparison ---
-  if (liveCount != deviceCount) {
-    currentMismatch = true;
-  }
-
-  // --- 4. State Management & Terminal Fault Logic ---
-  if (currentMismatch) {
+  // --- 3. State Management ---
+  if (unexpectedDeviceFound) {
+    // Immediate failure for unexpected hardware
     if (!SealBroken) {
-      Serial.println("BUS SEAL RUPTURED!");
+      Serial.println("BUS SEAL RUPTURED! (Unexpected hardware detected)");
       SealBroken = true;
+    }
+    missingScanCount = 0; 
+  } 
+  else if (missingExpectedDevice) {
+    // Incremental failure for missing hardware
+    missingScanCount++;
+    Serial.print("Missing device scan count: ");
+    Serial.print(missingScanCount);
+    Serial.print(" / ");
+    Serial.println(MAX_ALLOWED_MISSES);
+
+    if (missingScanCount >= MAX_ALLOWED_MISSES && !SealBroken) {
+      Serial.println("BUS SEAL RUPTURED! (Device unresponsive for too long)");
+      SealBroken = true;
+    }
+  } 
+  else {
+    // Perfect scan: All expected devices present, no unexpected devices
+    missingScanCount = 0; // Reset the tolerance counter
+    
+    if (SealBroken) {
+      Serial.println("Bus Health Restored. All devices verified.");
+      SealBroken = false;
     }
   }
 }
@@ -196,6 +233,11 @@ void updateBusTemperatures() {
       int16_t raw = (data[1] << 8) | data[0];
       sensorList[i].currentTemp = (float)raw / 16.0;
       
+      //Check if we have a valid temperature limit before we continue
+      if(sensorList[i].highTempLimit <= 30){
+        sensorList[i].highTempLimit = 60;
+      }
+
       if (sensorList[i].currentTemp >= (float)sensorList[i].highTempLimit) {
         sensorList[i].isAlarming = true;
         //If this specific sensor is alarming, the whole system is Overtemp
@@ -208,6 +250,8 @@ void updateBusTemperatures() {
         }
         Serial.print(F(" is at "));
         Serial.print(sensorList[i].currentTemp);
+        Serial.print(" with a limit of ");
+        Serial.print(sensorList[i].highTempLimit);
         Serial.println("!");
       } else {
         sensorList[i].isAlarming = false;
@@ -250,6 +294,11 @@ uint32_t fetchMetadata(byte addr[8], byte &outType, byte &outHigh) {
   byte data[9];
   if (readScratchpad(addr, data)) {
     outHigh = data[2]; // TH is our High Temp Limit
+    if(outHigh < 10){
+      //This is not right, set to a normal value?
+      Serial.println(F("Overriding OneWire temperature limit for being too low."));
+      outHigh = 50;
+    }
     outType = (data[3] >> 3) & 0x07;
     
     uint32_t combined = 0;

@@ -115,6 +115,11 @@ void AVControl(void *pvParameters){
       //Animation 5: Alternate blue/green
       LEDAnimation = 5;
     }
+    if(ImminentShutdown){
+      //Play a warning alternating between red and green
+      //Used when a machine is unlocked, but we should tell the user to stop.
+      LEDAnimation = 11;
+    }
     if(State.equals("LOCKED_OUT") || AccessDenied){
       //Animation 1: Solid Red
       LEDAnimation = 1;
@@ -257,6 +262,19 @@ void AVControl(void *pvParameters){
           Red = 0;
           Green = 0;
           Blue = 255;
+          AnimationBlock = 0;
+        }
+      break;
+      case 11:
+        //Alternate red-green
+        if(AnimationBlock == 1){
+          Red = 255;
+          Green = 0;
+          Blue = 0;
+        } else{
+          Red = 0;
+          Green = 255;
+          Blue = 0;
           AnimationBlock = 0;
         }
       break;

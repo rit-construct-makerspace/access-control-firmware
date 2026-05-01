@@ -3,18 +3,26 @@ void MachineState(void *pvParameters){
   while(1){
     delay(50);
 
-
-    //Step 1: Check machine state variables
-
     //Step 1.1: Check for any reason we should be in a fault state
-    if(OverTemp || SealBroken || NFCBroken){
-      State = "FAULT";
-      StateChangeReason = "FAULT";
-      if(OverTemp){
-        StateChangeReason = "OVER_TEMP";
-      }
-      if(SealBroken){
-        StateChangeReason = "INTEGRITY_FAIL";
+    if(OverTemp || SealBroken){
+      if(State != "FAULT"){
+        //This is our first time going to the fault state
+        State = "FAULT";
+        StateChangeReason = "FAULT";
+        Message = "ACS Fault!";
+        FaultReason = "ACS Fault!";
+        if(OverTemp){
+          StateChangeReason = "OVER_TEMP";
+          Message = "Overtemperature!";
+          FaultReason = "Overtemperature!";
+        }
+        if(SealBroken){
+          StateChangeReason = "INTEGRITY_FAIL";
+          Message = "Bus Integrity Broken!";
+          FaultReason = "Bus Integrity!";
+        }
+        MessageToSend = 1;
+        UpdateScreen = true;
       }
     }
 
@@ -82,10 +90,12 @@ void MachineState(void *pvParameters){
           //Fault beep and deny the user due to no network
           FaultBeep = true;
           AccessDenied = true;
+          AuthReason = "No network, try again soon or talk to staff.";
           Serial.println(F("Access denied due to no network!"));
         } else{
           //Auto-deny the user
           AccessDenied = true;
+          AuthReason = "Incorrect state, machine must be in \"IDLE\" mode to activate.";
           Serial.println(F("Auto-denied due to bad state."));
         }
       }
@@ -140,6 +150,14 @@ void MachineState(void *pvParameters){
       if(StateChangeReason == ""){
         StateChangeReason = "UNKNOWN";
       }
+      UpdateScreen = true;
+    }
+
+    if(State == "ALWAYS_ON" || State == "UNLOCKED"){
+      //Unlock the machine
+      digitalWrite(ACCESS, HIGH);
+    } else{
+      digitalWrite(ACCESS, LOW);
     }
 
     //Step 1.4: Check for and execute any flags;
@@ -148,9 +166,39 @@ void MachineState(void *pvParameters){
       StateChangeReason = "COMMANDED";
       LockWhenIdle = 0;
     }
-    if(RestartWhenIdle && State == "IDLE"){
+    if(RestartWhenUnused && State != "UNLOCKED" && State != "ALWAYS_ON"){
+      Serial.println(F("Executing restart-when-unused flag."));
+      Serial.flush();
+      delay(5);
       RequestReset = 1;
-      while(1);
+      while(1){
+        delay(100);
+      }
+    }
+    if(ScheduledRestart){
+      //It is time for a scheduled restart
+      if(ScheduledRestartTime <= millis64() && ScheduledRestartTime != 0){
+        //Time to force a restart, the user has had 60 seconds to stop.
+        State = "UNKNOWN";
+        Serial.println(F("User has had 60 seconds to end session, forcing scheduled restart."));
+      }
+      if(State == "ALWAYS_ON" || State == "UNLOCKED"){
+        //We should not restart now, someone is using the machine? 
+        //Let the user know we are restarting soon.
+        ImminentShutdown = true;
+        if(ScheduledRestartTime == 0){
+          Serial.println(F("Server commanded scheduled shutdown, but user present? Giving them 60 seconds."));
+          ScheduledRestartTime = millis64() + 60000; //Give them 60 seconds
+        }
+      } else{
+        //Time to execute a restart.
+        Serial.println(F("Executing scheduled restart."));
+        Serial.flush();
+        RequestReset = 1;
+        while(1){
+          delay(100);
+        }
+      }
     }
 
     //Step 1.5: Send Regular ping
