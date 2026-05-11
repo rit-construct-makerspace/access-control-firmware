@@ -4,6 +4,8 @@ void MachineState(void *pvParameters){
     delay(50);
 
     //Step 1.1: Check for any reason we should be in a fault state
+    //Temporarily disabled due to too many false positives
+    /*
     if(OverTemp || SealBroken){
       if(State != "FAULT"){
         //This is our first time going to the fault state
@@ -25,6 +27,7 @@ void MachineState(void *pvParameters){
         UpdateScreen = true;
       }
     }
+    */
 
     //Set our input mode based on if we are welcoming or not.
     if(State == "WELCOMING"){

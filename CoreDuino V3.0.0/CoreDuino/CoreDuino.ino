@@ -1,6 +1,6 @@
 //ACS V3.0.0 Hardware, running CoreDuino code.
 
-#define Version "2.0.7"
+#define Version "2.0.8"
 #define Hardware "3.0.0"
 
 //How often you send a status message, in milliseconds
