@@ -1,6 +1,6 @@
 //Re-write of ACS Core firmware to make it simpler, faster. Uses just one mega loop for everything.
 
-#define Version "2.0.7"
+#define Version "2.0.9"
 #define Hardware "2.3.2-LE"
 #define DebugMode 1
 
@@ -66,7 +66,7 @@
   ESP32OTAPull ota;
   ESP32Time rtc;
   WebSocketsClient socket;
-  MQTTPubSub::PubSubClient<256> mqtt;
+  MQTTPubSub::PubSubClient<512> mqtt;
   OneWire ds(TEMP); 
 
 extern "C" bool verifyRollbackLater() {
@@ -74,6 +74,41 @@ extern "C" bool verifyRollbackLater() {
   //Since we are handling OTA verification ourselves, we just return true.
   return true;
 }
+
+//SSL Certificate. the ISRG X1 cert that encompasses R12 and R13 for let's encrypt. Expires in 2030?
+const char *root_ca = R"literal(
+-----BEGIN CERTIFICATE-----
+MIIFazCCA1OgAwIBAgIRAIIQz7DSQONZRGPgu2OCiwAwDQYJKoZIhvcNAQELBQAw
+TzELMAkGA1UEBhMCVVMxKTAnBgNVBAoTIEludGVybmV0IFNlY3VyaXR5IFJlc2Vh
+cmNoIEdyb3VwMRUwEwYDVQQDEwxJU1JHIFJvb3QgWDEwHhcNMTUwNjA0MTEwNDM4
+WhcNMzUwNjA0MTEwNDM4WjBPMQswCQYDVQQGEwJVUzEpMCcGA1UEChMgSW50ZXJu
+ZXQgU2VjdXJpdHkgUmVzZWFyY2ggR3JvdXAxFTATBgNVBAMTDElTUkcgUm9vdCBY
+MTCCAiIwDQYJKoZIhvcNAQEBBQADggIPADCCAgoCggIBAK3oJHP0FDfzm54rVygc
+h77ct984kIxuPOZXoHj3dcKi/vVqbvYATyjb3miGbESTtrFj/RQSa78f0uoxmyF+
+0TM8ukj13Xnfs7j/EvEhmkvBioZxaUpmZmyPfjxwv60pIgbz5MDmgK7iS4+3mX6U
+A5/TR5d8mUgjU+g4rk8Kb4Mu0UlXjIB0ttov0DiNewNwIRt18jA8+o+u3dpjq+sW
+T8KOEUt+zwvo/7V3LvSye0rgTBIlDHCNAymg4VMk7BPZ7hm/ELNKjD+Jo2FR3qyH
+B5T0Y3HsLuJvW5iB4YlcNHlsdu87kGJ55tukmi8mxdAQ4Q7e2RCOFvu396j3x+UC
+B5iPNgiV5+I3lg02dZ77DnKxHZu8A/lJBdiB3QW0KtZB6awBdpUKD9jf1b0SHzUv
+KBds0pjBqAlkd25HN7rOrFleaJ1/ctaJxQZBKT5ZPt0m9STJEadao0xAH0ahmbWn
+OlFuhjuefXKnEgV4We0+UXgVCwOPjdAvBbI+e0ocS3MFEvzG6uBQE3xDk3SzynTn
+jh8BCNAw1FtxNrQHusEwMFxIt4I7mKZ9YIqioymCzLq9gwQbooMDQaHWBfEbwrbw
+qHyGO0aoSCqI3Haadr8faqU9GY/rOPNk3sgrDQoo//fb4hVC1CLQJ13hef4Y53CI
+rU7m2Ys6xt0nUW7/vGT1M0NPAgMBAAGjQjBAMA4GA1UdDwEB/wQEAwIBBjAPBgNV
+HRMBAf8EBTADAQH/MB0GA1UdDgQWBBR5tFnme7bl5AFzgAiIyBpY9umbbjANBgkq
+hkiG9w0BAQsFAAOCAgEAVR9YqbyyqFDQDLHYGmkgJykIrGF1XIpu+ILlaS/V9lZL
+ubhzEFnTIZd+50xx+7LSYK05qAvqFyFWhfFQDlnrzuBZ6brJFe+GnY+EgPbk6ZGQ
+3BebYhtF8GaV0nxvwuo77x/Py9auJ/GpsMiu/X1+mvoiBOv/2X/qkSsisRcOj/KK
+NFtY2PwByVS5uCbMiogziUwthDyC3+6WVwW6LLv3xLfHTjuCvjHIInNzktHCgKQ5
+ORAzI4JMPJ+GslWYHb4phowim57iaztXOoJwTdwJx4nLCgdNbOhdjsnvzqvHu7Ur
+TkXWStAmzOVyyghqpZXjFaH3pO3JLF+l+/+sKAIuvtd7u+Nxe5AW0wdeRlN8NwdC
+jNPElpzVmbUq4JUagEiuTDkHzsxHpFKVK7q4+63SM1N95R1NbdWhscdCb+ZAJzVc
+oyi3B43njTOQ5yOf+1CceWxG1bQVs5ZufpsMljq4Ui0/1lvh+wjChP4kqKOJ2qxq
+4RgqsahDYVvTH9w7jXbyLeiNdd8XM2w9U/t7y0Ff/9yi0GE44Za4rF2LN9d11TPA
+mRGunUHBcnWEvgJBQl9nJEiU0Zsnvgc/ubhPgXRR4Xq37Z0j4r7g1SgEEzwxA57d
+emyPxgcYxn/eR44/KJ4EBs+lVDR3veyJm+kXQ99b21/+jh5Xos1AnX5iItreGCc=
+-----END CERTIFICATE-----
+)literal";
 
 //Variables - Inter-Task Communication
 bool GamerMode = 1;  //Set to 0 to disable gamer mode, i.e. cycle RGB. Used during boot.
@@ -306,7 +341,7 @@ void setup() {
   NetworkConnect();
 
   //Start the machine state
-  xTaskCreate(MachineState, "MachineState", 1024, NULL, 5, NULL);
+  xTaskCreate(MachineState, "MachineState", 4096, NULL, 5, NULL);
 
   //Start the NFC reader, make sure it is present.
    uint32_t versiondata;
@@ -356,16 +391,22 @@ void setup() {
 void loop() {
   // put your main code here, to run repeatedly:
 
-  //Step 0: Call the MQTT updater;
-  mqtt.update();
+  //Step 0: Call the MQTT updater constantly while we wait 50mS;
+  uint64_t nextloop = millis64() + 50;
+  while(nextloop >= millis64()){
+    mqtt.update();
+    delay(1);
+  }
 
   //Step 1: Check for config changes;
   CheckforConfig();
 
   //Step 4: Communicate with the server
 
+  //There is a continue after every possible message in or out, to hopefully slow down how often we have a message to deal with and not overwhelm hardware.
+
   //Only do all this if we have a connection
-  if(mqtt.isConnected() && !NoNetwork){
+  if(mqtt.isConnected() && socket.isConnected() && !NoNetwork){
 
     NoNetwork = false;
 
@@ -383,6 +424,7 @@ void loop() {
       outgoing.clear(); //Clear so other sends can use it
       String MessageTopic = BaseTopic + "/log";
       publish(MessageTopic, MessagePayload);
+      return;
     }
     if(LogToSend){
       //Send a log to the audit logs (not the user-visible history)
@@ -396,6 +438,7 @@ void loop() {
       String LogTopic = BaseTopic + "/log";
       publish(LogTopic, LogPayload);
       LogType = "message"; //Default value unless we say otherwise.
+      return;
     }
     if(SendAuth){
       //Send an auth request to the server
@@ -407,6 +450,7 @@ void loop() {
       outgoing.clear();
       String AuthTopic = BaseTopic + "/authTo/request";
       publish(AuthTopic, AuthPayload);
+      return;
     }
     if(StateChange){
       //Send report of a changed state
@@ -425,6 +469,7 @@ void loop() {
       publish(StateChangeTopic, StateChangePayload);
       //At the end, set change reason to nothing:
       StateChangeReason = "";
+      return;
     }
     if(ReportConfig){
       //Report the current configuration
@@ -465,6 +510,7 @@ void loop() {
       outgoing.clear();
       String ConfigTopic = BaseTopic + "/config/report";
       publish(ConfigTopic, ConfigPayload);
+      return;
     }
     if(RequestInfo){
       //Request information from the server
@@ -480,6 +526,7 @@ void loop() {
       outgoing.clear();
       String InfoTopic = BaseTopic + "/info/request";
       publish(InfoTopic, InfoPayload);
+      return;
     }
     if(SendStatus){
       //Send our current status to the server
@@ -494,6 +541,7 @@ void loop() {
       outgoing.clear();
       String StatusTopic = BaseTopic + "/status";
       publish(StatusTopic, StatusPayload);
+      return;
     }
 
     //Step 4.2: If we got a message, mark the OTA as secure.
@@ -509,6 +557,7 @@ void loop() {
         Message = "OTA update marked valid.";
         MessageToSend = 1;
       }
+      return;
     }
 
     JsonDocument incoming; //Json doucment to parse the incoming
@@ -539,6 +588,7 @@ void loop() {
       } else{
         Serial.println(F("Ignoring auth due to invalid state."));
       }
+      return;
     }
     if(NewInfo){
       //Process a response to an info request.
@@ -574,7 +624,7 @@ void loop() {
         //Always send a status report when we get new info
         SendStatus = 1;
       }
-      
+      return;
     }
     if(NewCommand){
       //Process an incoming command.
@@ -628,6 +678,7 @@ void loop() {
         }
 
       }
+      return;
     }
 
     //Step 4.4: Send a ping if requested
@@ -637,6 +688,7 @@ void loop() {
       //Serial.println(F("Ping sent."));
       SendPing = 0;
       NextPingTime = millis64() + 1000;
+      return;
     }
     
   } else{
@@ -645,7 +697,6 @@ void loop() {
     NetworkConnect();
   }
 
-  delay(20);
 }
 
 void callback_percent(int offset, int totallength) {
@@ -714,8 +765,7 @@ void NetworkConnect(){
   
   //Start our websocket connection
   socket.disconnect();
-  //socket.begin("129.21.61.154", 3000, "/mqtt", "mqtt"); //Test broker running on Stephen computer. 
-  socket.beginSSL(Server.c_str(), 443, "/mqtt", NULL, "mqtt");
+  socket.beginSslWithCA(Server.c_str(), 443, "/mqtt", root_ca, "mqtt");
   socket.setReconnectInterval(2000); //Attempt to reconnect every 2 seconds if we lose connection
   Serial.println(F("Connecting to MQTT Broker"));
   unsigned long long SocketTime = millis64() + 15000;

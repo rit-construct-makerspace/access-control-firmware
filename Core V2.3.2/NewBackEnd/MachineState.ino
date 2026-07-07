@@ -44,7 +44,7 @@ void MachineState(void *pvParameters){
         byte NFCRetryCount = 0;
         bool success;                                //Determines if an NFC read was successful
         uint8_t uid[] = { 0, 0, 0, 0, 0, 0, 0, 0 };  // Buffer to store the returned UID
-        uint8_t uidLength;                           // Length of the UID (4 or 7 bytes depending on ISO14443A card type)
+        uint8_t uidLength = 0;                           // Length of the UID (4 or 7 bytes depending on ISO14443A card type)
         while(NFCRetryCount <= 5){
           //Power cycle the NFC reader
           digitalWrite(NFCPWR, HIGH);
@@ -53,6 +53,7 @@ void MachineState(void *pvParameters){
           vTaskDelay(10 / portTICK_PERIOD_MS);
           nfc.wakeup();
           nfc.setPassiveActivationRetries(0xFF);
+          delay(10); //Let the bus stabilize
           //Attempt to read the card via NFC:
           success = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, &uid[0], &uidLength, 500);
           if(success){
@@ -78,15 +79,18 @@ void MachineState(void *pvParameters){
         digitalWrite(NFCRST, LOW);
         digitalWrite(NFCPWR, LOW);
         UID = "";
-        Serial.print(F("Card: "));
-        for (uint8_t i = 0; i < uidLength; i++) {
-          Serial.print(uid[i], HEX);
-          Serial.print(" ");
-          char buf[3] = {0};
-          snprintf(buf, sizeof(buf), "%02x", uid[i]);
-          UID += String(buf);
+        if(uidLength > 0){
+          Serial.print(F("Card: "));
+          for (uint8_t i = 0; i < uidLength; i++) {
+            Serial.print(uid[i], HEX);
+            Serial.print(" ");
+            char buf[3] = {0};
+            snprintf(buf, sizeof(buf), "%02x", uid[i]);
+            UID += String(buf);
+          }
+          Serial.println(" Found.");
         }
-        Serial.println(" Found.");
+        delay(10);
         if(State == "IDLE" && !NoNetwork){
           //Let's check with the server
           PendingApproval = true;
