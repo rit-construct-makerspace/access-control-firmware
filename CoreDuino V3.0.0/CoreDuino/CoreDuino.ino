@@ -1,6 +1,6 @@
 //ACS V3.0.0 Hardware, running CoreDuino code.
 
-#define Version "2.0.8"
+#define Version "2.1.0"
 #define Hardware "3.0.0"
 
 //How often you send a status message, in milliseconds
@@ -78,6 +78,7 @@
   #include "esp_efuse_table.h"
   #include "SparkFun_LIS2DH12.h" //Click here to get the library: http://librarymanager/All#SparkFun_LIS2DH12
   #include <Wire.h>
+  #include <mbedtls/md.h>          //Inherent to ESP32
 
 //Objects:
   Preferences settings;
@@ -99,40 +100,9 @@ extern "C" bool verifyRollbackLater() {
   return true;
 }
 
-//SSL Certificate. the ISRG X1 cert that encompasses R12 and R13 for let's encrypt. Expires in 2030?
-const char *root_ca = R"literal(
------BEGIN CERTIFICATE-----
-MIIFazCCA1OgAwIBAgIRAIIQz7DSQONZRGPgu2OCiwAwDQYJKoZIhvcNAQELBQAw
-TzELMAkGA1UEBhMCVVMxKTAnBgNVBAoTIEludGVybmV0IFNlY3VyaXR5IFJlc2Vh
-cmNoIEdyb3VwMRUwEwYDVQQDEwxJU1JHIFJvb3QgWDEwHhcNMTUwNjA0MTEwNDM4
-WhcNMzUwNjA0MTEwNDM4WjBPMQswCQYDVQQGEwJVUzEpMCcGA1UEChMgSW50ZXJu
-ZXQgU2VjdXJpdHkgUmVzZWFyY2ggR3JvdXAxFTATBgNVBAMTDElTUkcgUm9vdCBY
-MTCCAiIwDQYJKoZIhvcNAQEBBQADggIPADCCAgoCggIBAK3oJHP0FDfzm54rVygc
-h77ct984kIxuPOZXoHj3dcKi/vVqbvYATyjb3miGbESTtrFj/RQSa78f0uoxmyF+
-0TM8ukj13Xnfs7j/EvEhmkvBioZxaUpmZmyPfjxwv60pIgbz5MDmgK7iS4+3mX6U
-A5/TR5d8mUgjU+g4rk8Kb4Mu0UlXjIB0ttov0DiNewNwIRt18jA8+o+u3dpjq+sW
-T8KOEUt+zwvo/7V3LvSye0rgTBIlDHCNAymg4VMk7BPZ7hm/ELNKjD+Jo2FR3qyH
-B5T0Y3HsLuJvW5iB4YlcNHlsdu87kGJ55tukmi8mxdAQ4Q7e2RCOFvu396j3x+UC
-B5iPNgiV5+I3lg02dZ77DnKxHZu8A/lJBdiB3QW0KtZB6awBdpUKD9jf1b0SHzUv
-KBds0pjBqAlkd25HN7rOrFleaJ1/ctaJxQZBKT5ZPt0m9STJEadao0xAH0ahmbWn
-OlFuhjuefXKnEgV4We0+UXgVCwOPjdAvBbI+e0ocS3MFEvzG6uBQE3xDk3SzynTn
-jh8BCNAw1FtxNrQHusEwMFxIt4I7mKZ9YIqioymCzLq9gwQbooMDQaHWBfEbwrbw
-qHyGO0aoSCqI3Haadr8faqU9GY/rOPNk3sgrDQoo//fb4hVC1CLQJ13hef4Y53CI
-rU7m2Ys6xt0nUW7/vGT1M0NPAgMBAAGjQjBAMA4GA1UdDwEB/wQEAwIBBjAPBgNV
-HRMBAf8EBTADAQH/MB0GA1UdDgQWBBR5tFnme7bl5AFzgAiIyBpY9umbbjANBgkq
-hkiG9w0BAQsFAAOCAgEAVR9YqbyyqFDQDLHYGmkgJykIrGF1XIpu+ILlaS/V9lZL
-ubhzEFnTIZd+50xx+7LSYK05qAvqFyFWhfFQDlnrzuBZ6brJFe+GnY+EgPbk6ZGQ
-3BebYhtF8GaV0nxvwuo77x/Py9auJ/GpsMiu/X1+mvoiBOv/2X/qkSsisRcOj/KK
-NFtY2PwByVS5uCbMiogziUwthDyC3+6WVwW6LLv3xLfHTjuCvjHIInNzktHCgKQ5
-ORAzI4JMPJ+GslWYHb4phowim57iaztXOoJwTdwJx4nLCgdNbOhdjsnvzqvHu7Ur
-TkXWStAmzOVyyghqpZXjFaH3pO3JLF+l+/+sKAIuvtd7u+Nxe5AW0wdeRlN8NwdC
-jNPElpzVmbUq4JUagEiuTDkHzsxHpFKVK7q4+63SM1N95R1NbdWhscdCb+ZAJzVc
-oyi3B43njTOQ5yOf+1CceWxG1bQVs5ZufpsMljq4Ui0/1lvh+wjChP4kqKOJ2qxq
-4RgqsahDYVvTH9w7jXbyLeiNdd8XM2w9U/t7y0Ff/9yi0GE44Za4rF2LN9d11TPA
-mRGunUHBcnWEvgJBQl9nJEiU0Zsnvgc/ubhPgXRR4Xq37Z0j4r7g1SgEEzwxA57d
-emyPxgcYxn/eR44/KJ4EBs+lVDR3veyJm+kXQ99b21/+jh5Xos1AnX5iItreGCc=
------END CERTIFICATE-----
-)literal";
+NetworkClientSecure networkclient;
+
+String RootCert; //Stores the root certificate loaded from SPIFFS
 
 //Variables - Inter-Task Communication
 bool GamerMode = 1;  //Set to 0 to disable gamer mode, i.e. cycle RGB. Used during boot.
@@ -277,6 +247,18 @@ void setup() {
     Serial.println(F("SPIFFS Mount Failed!"));
     delay(1000);
     ESP.restart();
+  }
+
+  //Load the TLS cert from SPIFFS
+  File file = SPIFFS.open("/cert.txt", FILE_READ);
+  if(!file){
+    Serial.println(F("No cert found in SPIFFS!"));
+    RootCert = "Nothing here!";
+  } else{
+    RootCert = "";
+    while(file.available()){
+      RootCert += (char)file.read();
+    }
   }
 
   //Load settings from memory
@@ -907,8 +889,116 @@ void NetworkConnect(){
   
   //Start our websocket connection
   socket.disconnect();
-  //socket.begin("129.21.61.154", 3000, "/mqtt", "mqtt"); //Test broker running on Stephen computer. 
-  socket.beginSslWithCA(Server.c_str(), 443, "/mqtt", root_ca, "mqtt");
+  const char* global_ca_pointer = RootCert.c_str();
+  socket.beginSslWithCA(Server.c_str(), 443, "/mqtt", global_ca_pointer, "mqtt");
+  //Give the socket some time to stabilize:
+  unsigned long long wsTimeout = millis64() + 5000;
+  while(!socket.isConnected() && millis64() <= wsTimeout){
+    socket.loop();
+    delay(2);
+  }
+  //Did the socket work?
+  if(!socket.isConnected()){
+    Serial.println(F("Websocket connection failed..."));
+    socket.disconnect();
+    //Is the server alive?
+    if(!Ping.ping(Server.c_str())){
+      //Server is not responding?
+      Serial.println(F("Cannot ping the server. No network?"));
+      NoNetwork = true;
+      return;
+    } else{
+      Serial.println(F("Server is online. Bad TLS cert?"));
+      Serial.println(F("Getting new TLS certs from server."));
+      networkclient.setInsecure();
+      networkclient.connect(Server.c_str(), 443);
+      
+      networkclient.print("GET /api/rootCA HTTP/1.1\r\n");
+      networkclient.print("Host: ");
+      networkclient.print(Server.c_str());
+      networkclient.print("\r\n");
+
+      networkclient.print("shlug-sn: ");
+      networkclient.print(SerialNumber.c_str());
+      networkclient.print("\r\n");
+      
+      networkclient.print("Connection: close\r\n");
+      
+      // End of headers boundary
+      networkclient.print("\r\n");
+
+      while (networkclient.connected()) {
+        String line = networkclient.readStringUntil('\n');
+        if (line == "\r") {
+          Serial.println("Headers received, body:");
+          break;
+        }
+      }
+      unsigned long timeout = millis();
+      while (networkclient.available() == 0) {
+        if (millis() - timeout > 5000) { // 5 second timeout
+          Serial.println("!!! Client Timeout awaiting body! !!!");
+          networkclient.stop();
+          return;
+        }
+        delay(10); 
+      }
+
+      // The body is a JSON, let's capture it in a string.
+      String TLSPayload;
+      while(networkclient.available()){
+        char c = networkclient.read();
+        TLSPayload += c;
+      }
+      
+      Serial.println(TLSPayload);
+      networkclient.stop(); // Always close the socket when finished!
+
+      //Parse the JSON payload
+      JsonDocument TLSJson;
+      deserializeJson(TLSJson, TLSPayload);
+      //Before we accept the new cert, we should check the SHA-256
+      String SHATLS = TLSJson["sha"];
+      String NewCert = TLSJson["cert"];
+      //The SHA is the hash of [SerialNumber]:[Password]:[Cert]
+      Serial.print(F("JSON Hash:       ")); Serial.println(SHATLS);
+      Serial.print(F("Calculated Hash: ")); Serial.println(getSHA256(SerialNumber + ":" + Key + ":" + NewCert));
+      if(SHATLS.equalsIgnoreCase(getSHA256(SerialNumber + ":" + Key + ":" + NewCert))){
+       //The hashes match!
+       Serial.println(F("TLS cert was verified. Saving to memory..."));
+       SPIFFS.remove("/cert.txt");
+       File file = SPIFFS.open("/cert.txt", FILE_WRITE);
+       //Need to change the written /n to an actual newline, clean up any other oddities in the file:
+       NewCert.replace("\\n","\n");
+       NewCert.replace("\r","");
+       NewCert.replace("\"","");
+       NewCert.trim();
+       NewCert += "\n";
+       if(file.print(NewCert)){
+        file.close();
+        RootCert = NewCert;
+        Serial.println(F("New cert has been saved. Regular operation can now resume."));
+        Serial.println(F("Our new cert is:"));
+        Serial.println(RootCert);
+        Serial.flush();
+        delay(10);
+        goto retryNetwork;
+       } else{
+        Serial.println(F("Unknown error, could not write new cert to file?"));
+       }
+
+      } else{
+        //The hashes did not match, potental attack in progress!
+        State = "FAULT";
+        NoNetwork = true;
+        while(1){
+          Serial.println(F("CRITICAL ERROR: ATTEMPT WAS MADE TO LOAD BAD TLS CERTS!"));
+          delay(1000);
+        }
+      }
+
+    }
+  } //If not this, the connection worked and we can continue.
   socket.setReconnectInterval(2000); //Attempt to reconnect every 2 seconds if we lose connection
   Serial.println(F("Connecting to MQTT Broker"));
   unsigned long long SocketTime = millis64() + 15000;
@@ -954,17 +1044,8 @@ void NetworkConnect(){
     NewPing = 1;
     OTAValid = 1;
   });
-  String SubWelcome = BaseTopic + "/welcome/response";
-  mqtt.subscribe(SubWelcome, 2, [](const String& payload, const size_t size) {
-    Serial.print(F("Welcome Response: "));
-    Serial.println(payload);
-    WelcomeResponse = payload;
-    NewWelcome = 1;
-    OTAValid = 1;
-  });
 
   NoNetwork = false;
-  UpdateScreen = true;
 
   //We should request and report things when we (re)connect
   ReportConfig = 1;
@@ -1104,4 +1185,35 @@ void sendStartup(String Message){
   serializeJson(Startup, StartMessageString);
   Serial0.println(StartMessageString);
   Serial0.flush();
+}
+
+String getSHA256(String input) {
+  // Create a buffer to hold the 32-byte (256-bit) hash output
+  byte shaResult[32];
+  
+  // Initialize the mbedTLS message digest context
+  mbedtls_md_context_t ctx;
+  mbedtls_md_type_t md_type = MBEDTLS_MD_SHA256;
+  
+  mbedtls_md_init(&ctx);
+  mbedtls_md_setup(&ctx, mbedtls_md_info_from_type(md_type), 0);
+  mbedtls_md_starts(&ctx);
+  
+  // Provide the input string and its length to the hash function
+  mbedtls_md_update(&ctx, (const unsigned char*) input.c_str(), input.length());
+  
+  // Finalize the hash computation and store it in shaResult
+  mbedtls_md_finish(&ctx, shaResult);
+  mbedtls_md_free(&ctx);
+  
+  // Convert the 32-byte binary hash into a readable Hex String
+  String hashStr = "";
+  for(int i=0; i<32; i++) {
+    if(shaResult[i] < 16) {
+      hashStr += "0"; // Add leading zero for single-digit hex values
+    }
+    hashStr += String(shaResult[i], HEX);
+  }
+  
+  return hashStr;
 }
