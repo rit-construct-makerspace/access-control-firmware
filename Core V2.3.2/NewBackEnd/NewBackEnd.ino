@@ -1,6 +1,6 @@
 //Re-write of ACS Core firmware to make it simpler, faster. Uses just one mega loop for everything.
 
-#define Version "2.0.9"
+#define Version "2.1.0"
 #define Hardware "2.3.2-LE"
 #define DebugMode 1
 
@@ -53,8 +53,9 @@
   #include <ping.h>                 //Version 1.6   | Source: https://github.com/marian-craciunescu/ESP32Ping
   #include "esp_ota_ops.h"          //Version 3.1.1 | Inherent to ESP32 Arduino
   #include <MQTTPubSubClient.h> 
-  #include "esp_efuse.h"
-  #include "esp_efuse_table.h"
+  #include "esp_efuse.h"           //Inherent to ESP32
+  #include "esp_efuse_table.h"     //Inherent to ESP32
+  #include <mbedtls/md.h>          //Inherent to ESP32
 
 //Objects:
   Adafruit_PN532 nfc(SCKPin, MISOPin, MOSIPin, NFCCS);
@@ -207,6 +208,10 @@ struct Device {
 
 Device sensorList[10];
 
+NetworkClientSecure networkclient;
+
+String RootCert; //Stores the root certificate loaded from SPIFFS
+
 void setup() {
   // put your setup code here, to run once:
 
@@ -224,6 +229,18 @@ void setup() {
     ESP.restart();
   } else{
     Serial.println(F("SPIFFS Mount Done!"));
+  }
+
+  //Load the TLS cert from SPIFFS
+  File file = SPIFFS.open("/cert.txt", FILE_READ);
+  if(!file){
+    Serial.println(F("No cert found in SPIFFS!"));
+    RootCert = "Nothing here!";
+  } else{
+    RootCert = "";
+    while(file.available()){
+      RootCert += (char)file.read();
+    }
   }
 
   //Connect to the frontend, set the buzzer off. In case we crashed while we were writing the buzzer.
@@ -765,7 +782,116 @@ void NetworkConnect(){
   
   //Start our websocket connection
   socket.disconnect();
-  socket.beginSslWithCA(Server.c_str(), 443, "/mqtt", root_ca, "mqtt");
+  const char* global_ca_pointer = RootCert.c_str();
+  socket.beginSslWithCA(Server.c_str(), 443, "/mqtt", global_ca_pointer, "mqtt");
+  //Give the socket some time to stabilize:
+  unsigned long long wsTimeout = millis64() + 5000;
+  while(!socket.isConnected() && millis64() <= wsTimeout){
+    socket.loop();
+    delay(2);
+  }
+  //Did the socket work?
+  if(!socket.isConnected()){
+    Serial.println(F("Websocket connection failed..."));
+    socket.disconnect();
+    //Is the server alive?
+    if(!Ping.ping(Server.c_str())){
+      //Server is not responding?
+      Serial.println(F("Cannot ping the server. No network?"));
+      NoNetwork = true;
+      return;
+    } else{
+      Serial.println(F("Server is online. Bad TLS cert?"));
+      Serial.println(F("Getting new TLS certs from server."));
+      networkclient.setInsecure();
+      networkclient.connect(Server.c_str(), 443);
+      
+      networkclient.print("GET /api/rootCA HTTP/1.1\r\n");
+      networkclient.print("Host: ");
+      networkclient.print(Server.c_str());
+      networkclient.print("\r\n");
+
+      networkclient.print("shlug-sn: ");
+      networkclient.print(SerialNumber.c_str());
+      networkclient.print("\r\n");
+      
+      networkclient.print("Connection: close\r\n");
+      
+      // End of headers boundary
+      networkclient.print("\r\n");
+
+      while (networkclient.connected()) {
+        String line = networkclient.readStringUntil('\n');
+        if (line == "\r") {
+          Serial.println("Headers received, body:");
+          break;
+        }
+      }
+      unsigned long timeout = millis();
+      while (networkclient.available() == 0) {
+        if (millis() - timeout > 5000) { // 5 second timeout
+          Serial.println("!!! Client Timeout awaiting body! !!!");
+          networkclient.stop();
+          return;
+        }
+        delay(10); 
+      }
+
+      // The body is a JSON, let's capture it in a string.
+      String TLSPayload;
+      while(networkclient.available()){
+        char c = networkclient.read();
+        TLSPayload += c;
+      }
+      
+      Serial.println(TLSPayload);
+      networkclient.stop(); // Always close the socket when finished!
+
+      //Parse the JSON payload
+      JsonDocument TLSJson;
+      deserializeJson(TLSJson, TLSPayload);
+      //Before we accept the new cert, we should check the SHA-256
+      String SHATLS = TLSJson["sha"];
+      String NewCert = TLSJson["cert"];
+      //The SHA is the hash of [SerialNumber]:[Password]:[Cert]
+      Serial.print(F("JSON Hash:       ")); Serial.println(SHATLS);
+      Serial.print(F("Calculated Hash: ")); Serial.println(getSHA256(SerialNumber + ":" + Key + ":" + NewCert));
+      if(SHATLS.equalsIgnoreCase(getSHA256(SerialNumber + ":" + Key + ":" + NewCert))){
+       //The hashes match!
+       Serial.println(F("TLS cert was verified. Saving to memory..."));
+       SPIFFS.remove("/cert.txt");
+       File file = SPIFFS.open("/cert.txt", FILE_WRITE);
+       //Need to change the written /n to an actual newline, clean up any other oddities in the file:
+       NewCert.replace("\\n","\n");
+       NewCert.replace("\r","");
+       NewCert.replace("\"","");
+       NewCert.trim();
+       NewCert += "\n";
+       if(file.print(NewCert)){
+        file.close();
+        RootCert = NewCert;
+        Serial.println(F("New cert has been saved. Regular operation can now resume."));
+        Serial.println(F("Our new cert is:"));
+        Serial.println(RootCert);
+        Serial.flush();
+        delay(10);
+        goto retryNetwork;
+       } else{
+        Serial.println(F("Unknown error, could not write new cert to file?"));
+       }
+
+      } else{
+        //The hashes did not match, potental attack in progress!
+        State = "FAULT";
+        NoNetwork = true;
+        while(1){
+          Serial.println(F("CRITICAL ERROR: ATTEMPT WAS MADE TO LOAD BAD TLS CERTS!"));
+          delay(1000);
+        }
+      }
+
+    }
+  } //If not this, the connection worked and we can continue.
   socket.setReconnectInterval(2000); //Attempt to reconnect every 2 seconds if we lose connection
   Serial.println(F("Connecting to MQTT Broker"));
   unsigned long long SocketTime = millis64() + 15000;
@@ -918,4 +1044,35 @@ void OTAWatchdog(void *pvParameters){
       vTaskSuspend(NULL);
     }
   }
+}
+
+String getSHA256(String input) {
+  // Create a buffer to hold the 32-byte (256-bit) hash output
+  byte shaResult[32];
+  
+  // Initialize the mbedTLS message digest context
+  mbedtls_md_context_t ctx;
+  mbedtls_md_type_t md_type = MBEDTLS_MD_SHA256;
+  
+  mbedtls_md_init(&ctx);
+  mbedtls_md_setup(&ctx, mbedtls_md_info_from_type(md_type), 0);
+  mbedtls_md_starts(&ctx);
+  
+  // Provide the input string and its length to the hash function
+  mbedtls_md_update(&ctx, (const unsigned char*) input.c_str(), input.length());
+  
+  // Finalize the hash computation and store it in shaResult
+  mbedtls_md_finish(&ctx, shaResult);
+  mbedtls_md_free(&ctx);
+  
+  // Convert the 32-byte binary hash into a readable Hex String
+  String hashStr = "";
+  for(int i=0; i<32; i++) {
+    if(shaResult[i] < 16) {
+      hashStr += "0"; // Add leading zero for single-digit hex values
+    }
+    hashStr += String(shaResult[i], HEX);
+  }
+  
+  return hashStr;
 }
