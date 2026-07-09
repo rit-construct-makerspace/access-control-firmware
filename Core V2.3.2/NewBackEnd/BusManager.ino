@@ -183,7 +183,7 @@ void checkBusHealth() {
   }
 
   // --- 3. State Management ---
-  if (unexpectedDeviceFound) {
+  if (unexpectedDeviceFound && BUS_CHECK) {
     // Immediate failure for unexpected hardware
     if (!SealBroken) {
       Serial.println("BUS SEAL RUPTURED! (Unexpected hardware detected)");
@@ -199,7 +199,7 @@ void checkBusHealth() {
     Serial.print(" / ");
     Serial.println(MAX_ALLOWED_MISSES);
 
-    if (missingScanCount >= MAX_ALLOWED_MISSES && !SealBroken) {
+    if (missingScanCount >= MAX_ALLOWED_MISSES && !SealBroken && BUS_CHECK) {
       Serial.println("BUS SEAL RUPTURED! (Device unresponsive for too long)");
       SealBroken = true;
     }

@@ -1,11 +1,14 @@
 //Re-write of ACS Core firmware to make it simpler, faster. Uses just one mega loop for everything.
 
-#define Version "2.1.0"
+#define Version "2.1.1"
 #define Hardware "2.3.2-LE"
 #define DebugMode 1
 
 //How often to send a status report, in milliseconds
 #define STATUS_INTERVAL 15000
+
+//Set to true to enable bus integrity checks. This may cause issues in V2.X hardware running on long cable lengths! 
+#define BUS_CHECK false
 
 //Pin Definitions:
   const int ETHINT = 13;
@@ -823,7 +826,7 @@ void NetworkConnect(){
       Serial.print(F("Calculated Hash: ")); Serial.println(getSHA256(SerialNumber + ":" + Key + ":" + NewCert));
       if(SHATLS.equalsIgnoreCase(getSHA256(SerialNumber + ":" + Key + ":" + NewCert))){
        //The hashes match!
-       Serial.println(F("TLS cert was verified. Saving to memory..."));
+       Serial.println(F("TLS cert was verified."));
        SPIFFS.remove("/cert.txt");
        File file = SPIFFS.open("/cert.txt", FILE_WRITE);
        //Need to change the written /n to an actual newline, clean up any other oddities in the file:
@@ -832,18 +835,33 @@ void NetworkConnect(){
        NewCert.replace("\"","");
        NewCert.trim();
        NewCert += "\n";
-       if(file.print(NewCert)){
-        file.close();
-        RootCert = NewCert;
-        Serial.println(F("New cert has been saved. Regular operation can now resume."));
-        Serial.println(F("Our new cert is:"));
-        Serial.println(RootCert);
-        Serial.flush();
-        delay(10);
-        goto retryNetwork;
-       } else{
-        Serial.println(F("Unknown error, could not write new cert to file?"));
-       }
+       //We should check if the new cert is any different from the root cert so we are not just overwriting things.
+        if(RootCert.equals(NewCert)){
+          Serial.println(F("The new cert is the same as the old cert? Must be a false alarm."));
+          Serial.println(F("Disregarding loading new cert, going to retry the network..."));
+          LogToSend = true;
+          LogType = "network";
+          Log = "Attempt to load identical cert";
+          goto retryNetwork;
+        } else{
+          if(file.print(NewCert)){
+            file.close();
+            RootCert = NewCert;
+            Serial.println(F("New cert has been saved. Regular operation can now resume."));
+            Serial.println(F("Our new cert is:"));
+            Serial.println(RootCert);
+            Serial.flush();
+            delay(10);
+            //Send a message to indicate we updated our cert;
+            LogToSend = true;
+            LogType = "network";
+            Log = "New cert loaded";
+            goto retryNetwork;
+          } else{
+            Serial.println(F("Unknown error, could not write new cert to file?"));
+          }
+        }
+
 
       } else{
         //The hashes did not match, potental attack in progress!
@@ -910,9 +928,12 @@ void NetworkConnect(){
   RequestInfo = 1;
   SendPing = 1;
   NextPingTime = millis64() + 1000;
-  LogType = "Network Connected";
-  Log = "Network Connected";
-  LogToSend = true;
+  //Don't overwrite more important logs, like getting a new cert.
+  if(!LogToSend){
+    LogType = "network";
+    "Network Connected";
+    LogToSend = true;
+  }
 }
 
 void publish(String Topic, String Payload){

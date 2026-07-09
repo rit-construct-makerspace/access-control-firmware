@@ -17,21 +17,24 @@ void MachineState(void *pvParameters){
     if(OverTemp || SealBroken || NFCBroken || !IntAsserted){
       if(State != "FAULT"){
         //This is our first time going to the fault state
-        State = "FAULT";
-        StateChangeReason = "FAULT";
-        Message = "ACS Fault!";
         if(!IntAsserted){
+          StateChangeReason = "FAULT";
           Message = "Component Asserted Interrupt!";
+          MessageToSend = 1;
         }
         if(OverTemp){
+          State = "FAULT";
           StateChangeReason = "OVER_TEMP";
           Message = "Overtemperature!";
+          MessageToSend = 1;
         }
-        if(SealBroken){
+        if(SealBroken && BUS_CHECK){
+          //We only do this if the bus is broken.
+          State = "FAULT";
           StateChangeReason = "INTEGRITY_FAIL";
           Message = "Bus Integrity Broken!";
+          MessageToSend = 1;
         }
-        MessageToSend = 1;
       }
     }
 
