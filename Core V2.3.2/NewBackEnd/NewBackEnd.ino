@@ -1,6 +1,6 @@
 //Re-write of ACS Core firmware to make it simpler, faster. Uses just one mega loop for everything.
 
-#define Version "2.1.1"
+#define Version "2.1.2"
 #define Hardware "2.3.2-LE"
 #define DebugMode 1
 
@@ -852,27 +852,23 @@ void NetworkConnect(){
             Serial.println(RootCert);
             Serial.flush();
             delay(10);
-            //Send a message to indicate we updated our cert;
-            LogToSend = true;
-            LogType = "network";
-            Log = "New cert loaded";
             goto retryNetwork;
           } else{
+            NoNetwork = true;
             Serial.println(F("Unknown error, could not write new cert to file?"));
+            goto retryNetwork;
           }
         }
-
-
       } else{
         //The hashes did not match, potental attack in progress!
         State = "FAULT";
         NoNetwork = true;
-        while(1){
-          Serial.println(F("CRITICAL ERROR: ATTEMPT WAS MADE TO LOAD BAD TLS CERTS!"));
-          delay(1000);
-        }
+        Serial.println(F("CRITICAL ERROR: ATTEMPT WAS MADE TO LOAD BAD TLS CERTS!"));
+        Message = "Attmpted to load cert with bad hash?";
+        MessageToSend = true;
+        delay(1000);
+        goto retryNetwork;
       }
-
     }
   } //If not this, the connection worked and we can continue.
   socket.setReconnectInterval(2000); //Attempt to reconnect every 2 seconds if we lose connection

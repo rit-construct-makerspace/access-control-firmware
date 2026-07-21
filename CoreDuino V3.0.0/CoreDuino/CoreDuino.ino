@@ -1,6 +1,6 @@
 //ACS V3.0.0 Hardware, running CoreDuino code.
 
-#define Version "2.1.0"
+#define Version "2.1.2"
 #define Hardware "3.0.0"
 
 //How often you send a status message, in milliseconds
@@ -942,6 +942,8 @@ void NetworkConnect(){
           return;
         }
         delay(10); 
+        NoNetwork = true;
+        goto retryNetwork;
       }
 
       // The body is a JSON, let's capture it in a string.
@@ -984,19 +986,22 @@ void NetworkConnect(){
         delay(10);
         goto retryNetwork;
        } else{
+        NoNetwork = true;
         Serial.println(F("Unknown error, could not write new cert to file?"));
+        goto retryNetwork;
        }
 
       } else{
         //The hashes did not match, potental attack in progress!
         State = "FAULT";
         NoNetwork = true;
-        while(1){
-          Serial.println(F("CRITICAL ERROR: ATTEMPT WAS MADE TO LOAD BAD TLS CERTS!"));
-          delay(1000);
-        }
+        FaultReason = "TLS hash does not match!";
+        Serial.println(F("CRITICAL ERROR: ATTEMPT WAS MADE TO LOAD BAD TLS CERTS!"));
+        Message = "Attmpted to load cert with bad hash?";
+        MessageToSend = true;
+        delay(1000);
+        goto retryNetwork;
       }
-
     }
   } //If not this, the connection worked and we can continue.
   socket.setReconnectInterval(2000); //Attempt to reconnect every 2 seconds if we lose connection
@@ -1038,6 +1043,14 @@ void NetworkConnect(){
     NewCommand = 1;
     OTAValid = 1;
   });
+  String SubWelcome = BaseTopic + "/welcome/response";
+  mqtt.subscribe(SubWelcome, 2, [](const String& payload, const size_t size) {
+    Serial.print(F("Welcome Response: "));
+    Serial.println(payload);
+    WelcomeResponse = payload;
+    NewWelcome = 1;
+    OTAValid = 1;
+  });
   String SubPing = BaseTopic + "/ping";
   mqtt.subscribe(SubPing, 2, [](const String& payload, const size_t size) {
     //Serial.println(F("Ping Loopback."));
@@ -1046,6 +1059,7 @@ void NetworkConnect(){
   });
 
   NoNetwork = false;
+  UpdateScreen = true;
 
   //We should request and report things when we (re)connect
   ReportConfig = 1;
