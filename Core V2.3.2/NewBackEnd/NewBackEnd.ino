@@ -1,6 +1,6 @@
 //Re-write of ACS Core firmware to make it simpler, faster. Uses just one mega loop for everything.
 
-#define Version "2.1.2"
+#define Version "2.1.3"
 #define Hardware "2.3.2-LE"
 #define DebugMode 1
 
@@ -59,6 +59,7 @@
   #include "esp_efuse.h"           //Inherent to ESP32
   #include "esp_efuse_table.h"     //Inherent to ESP32
   #include <mbedtls/md.h>          //Inherent to ESP32
+  #include <stdio.h>
 
 //Objects:
   Adafruit_PN532 nfc(SCKPin, MISOPin, MOSIPin, NFCCS);
@@ -103,6 +104,7 @@ bool NoNetwork = 1;
 bool ScheduledRestart = false; //Used to indicate it is time for a regular restart. 
 unsigned long long ScheduledRestartTime = 0; //Used to give the user some breathing room before a shutdown occurs.
 bool ImminentShutdown = false; //Used to let the frontend know to play a flashing warning light
+volatile unsigned long HobbsSeconds = 0; //Tracks how long the equipment has been running for.
 
 //Variables - Config
 String SerialNumber;
@@ -110,7 +112,6 @@ String Password;
 String SSID;
 String Server;
 String Key;
-int MakerspaceID;
 
 //Variables - MQTT Incoming
 String AuthResponse; 
@@ -179,6 +180,8 @@ Device sensorList[10];
 NetworkClientSecure networkclient;
 
 String RootCert; //Stores the root certificate loaded from SPIFFS
+
+void IRAM_ATTR onTimerCallback(void* arg);
 
 void setup() {
   // put your setup code here, to run once:
@@ -268,27 +271,6 @@ void setup() {
     TimezoneHr = -4; //Hardcoded EST
   }
   rtc.offset = TimezoneHr * 3600;
-  //Special handler, since deployed hardware doesn't have a makerspace ID currently.
-  if(!settings.isKey("MakerspaceID")){
-    while(1){
-      delay(1000);
-      if(Serial.available()){
-        String incoming = Serial.readString();
-        incoming.trim();
-        MakerspaceID = incoming.toInt();
-        settings.putInt("MakerspaceID", MakerspaceID);
-        Serial.print(F("Makerspace ID Set to: "));
-        Serial.println(MakerspaceID);
-        break;
-      } else{
-        Serial.println(F("ERROR! No Makerspace ID. Need to enter one now to continue..."));
-        Serial.print(F("Serial Number: "));
-        Serial.println(SerialNumber);
-      }
-    }
-  }
-  MakerspaceID = settings.getInt("MakerspaceID");
-
   Serial.println(F("Got a config for me?"));
   delay(3000);
   CheckforConfig();
@@ -364,6 +346,23 @@ void setup() {
 
   //Going forward, we will check the OneWire bus in a different task to make life easier.
   xTaskCreate(BusManager, "BusManager", 2048, NULL, 5, NULL);
+
+  //Initialize a precise timer for the Hobbs Timer
+  Serial.println(F("Starting Critical Timer for Hobbs Time..."));
+  const esp_timer_create_args_t timer_args = {
+    .callback = &onTimerCallback,  // The function to run
+    .arg = NULL,                   // Arguments passed to the function (optional)
+    .name = "one_second_timer"     // Name for debugging
+  };
+  esp_timer_handle_t periodic_timer;
+  esp_err_t err = esp_timer_create(&timer_args, &periodic_timer);
+  if (err == ESP_OK) {
+    //Start the timer to repeat every 1,000,000 microseconds (1 second)
+    esp_timer_start_periodic(periodic_timer, 1000000);
+    Serial.println("Timer started successfully!");
+  } else {
+    Serial.printf("Timer creation failed with error: %d\n", err);
+  }
 
   //Time to loop! 
   while(liveAddressCount == 0){ //Wait for the BusManager to have a valid inventory;
@@ -506,6 +505,10 @@ void loop() {
         //We don't know what state we should be in, so request it. 
         infoFields.add("STATE");
       }
+      if(HobbsSeconds == 0){
+        //We do not know what the Hobbs timer should be at, let's request that.
+        infoFields.add("HOBBS_TIME");
+      }
       String InfoPayload;
       serializeJson(outgoing, InfoPayload);
       outgoing.clear();
@@ -520,6 +523,7 @@ void loop() {
       JsonObject statusObject = statusChannels.createNestedObject();
       statusObject["channelID"] = 0;
       statusObject["state"] = State;
+      statusObject["hobbsTime"] = HobbsSeconds;
       outgoing["currentCardTag"] = UID;
       String StatusPayload;
       serializeJson(outgoing, StatusPayload);
@@ -609,6 +613,12 @@ void loop() {
         //Always send a status report when we get new info
         SendStatus = 1;
       }
+      if(incoming.containsKey("hobbsTime")){
+        HobbsSeconds = incoming["hobbsTime"][0]["hobbsTime"];
+        Serial.print(F("Hobbs timer set to: "));
+        Serial.print(HobbsSeconds);
+        Serial.println(F(" seconds."));
+      }
       return;
     }
     if(NewCommand){
@@ -640,6 +650,13 @@ void loop() {
           Serial.print(F("Server set RestartWhenUnused to: "));
           Serial.println(RestartWhenUnused);
         }
+      }
+      //Set HobbsTime
+      if(incoming.containsKey("hobbsTime")){
+        HobbsSeconds = incoming["hobbsTime"][0]["hobbsTime"];
+        Serial.print(F("Hobbs timer set to: "));
+        Serial.print(HobbsSeconds);
+        Serial.println(F(" seconds."));
       }
       //Action to do something
       if(incoming.containsKey("action")){
@@ -885,7 +902,7 @@ void NetworkConnect(){
   Serial.println(F(" MQTT Connected!"));
 
   //Subscribe to all MQTT topics relevant to us;
-  BaseTopic = "makerspace/" + String(MakerspaceID) + "/device/" + SerialNumber;
+  BaseTopic =  "makerspace/device/" + SerialNumber;
   String SubAuth = BaseTopic + "/authTo/response";
   mqtt.subscribe(SubAuth, 2, [](const String& payload, const size_t size) {
     Serial.print(F("AuthTo Response: "));
@@ -989,15 +1006,6 @@ void CheckforConfig(){
     } else{
       Serial.println(F("Kept old timezone."));
     }
-    String NewMakerspaceID = USBJson["MakerspaceID"];
-    if(USBJson["MakerspaceID"].is<String>()){
-      Serial.print(F("Set makerspace ID to: "));
-      Serial.println(NewMakerspaceID);
-      int tempid = NewMakerspaceID.toInt();
-      settings.putInt("MakerspaceID", tempid);
-    } else{
-      Serial.println(F("Kept old makerspace ID."));
-    }
     Serial.println(F("Above settings have been saved to memory. Restart device to apply settings."));
   }
 }
@@ -1057,4 +1065,11 @@ String getSHA256(String input) {
   }
   
   return hashStr;
+}
+
+void IRAM_ATTR onTimerCallback(void* arg) {
+  //This is called in an ISR to increment the Hobbs timer very precisely!
+  if(Access){
+    HobbsSeconds++;
+  }
 }

@@ -1,6 +1,6 @@
 //ACS V3.0.0 Hardware, running CoreDuino code.
 
-#define Version "2.1.2"
+#define Version "2.1.3"
 #define Hardware "3.0.0"
 
 //How often you send a status message, in milliseconds
@@ -79,6 +79,7 @@
   #include "SparkFun_LIS2DH12.h" //Click here to get the library: http://librarymanager/All#SparkFun_LIS2DH12
   #include <Wire.h>
   #include <mbedtls/md.h>          //Inherent to ESP32
+  #include <stdio.h>
 
 //Objects:
   Preferences settings;
@@ -172,6 +173,7 @@ bool ReportConfig = 0;
 bool RequestInfo = 0;
 bool SendStatus = 0;
 bool SendWelcome = 0;
+volatile unsigned long HobbsSeconds = 0; //Tracks how long the equipment has been running for.
 
 //Variables - Inter-Task Communication
 bool SealBroken = 0;  //Set to 1 if there is an incorrect OneWire device on the bus. 
@@ -209,6 +211,8 @@ Device sensorList[10];
 bool UpdateScreen = false;
 String AuthReason = "";
 String FaultReason = "";
+
+void IRAM_ATTR onTimerCallback(void* arg); //IRAM task for the Hobbs counter
 
 void setup() {
   // put your setup code here, to run once:
@@ -414,6 +418,23 @@ void setup() {
   updateBusTemperatures();
   refreshLiveAddressBuffer();
 
+  //Initialize a precise timer for the Hobbs Timer
+  Serial.println(F("Starting Critical Timer for Hobbs Time..."));
+  const esp_timer_create_args_t timer_args = {
+    .callback = &onTimerCallback,  // The function to run
+    .arg = NULL,                   // Arguments passed to the function (optional)
+    .name = "one_second_timer"     // Name for debugging
+  };
+  esp_timer_handle_t periodic_timer;
+  err = esp_timer_create(&timer_args, &periodic_timer);
+  if (err == ESP_OK) {
+    //Start the timer to repeat every 1,000,000 microseconds (1 second)
+    esp_timer_start_periodic(periodic_timer, 1000000);
+    Serial.println("Timer started successfully!");
+  } else {
+    Serial.printf("Timer creation failed with error: %d\n", err);
+  }
+
   //Going forward, we will check the OneWire bus in a different task to make life easier.
   xTaskCreate(BusManager, "BusManager", 4096, NULL, 5, NULL);
 
@@ -554,6 +575,10 @@ void loop() {
         //We don't know what state we should be in, so request it. 
         infoFields.add("STATE");
       }
+      if(HobbsSeconds == 0){
+        //We do not know what the Hobbs timer should be at, let's request that.
+        infoFields.add("HOBBS_TIME");
+      }
       infoFields.add("FLAGS"); //Check our flags, mostly for welcoming
       String InfoPayload;
       serializeJson(outgoing, InfoPayload);
@@ -570,6 +595,7 @@ void loop() {
         JsonObject statusObject = statusChannels.createNestedObject();
         statusObject["channelID"] = 0;
         statusObject["state"] = State;
+        statusObject["hobbsTime"] = HobbsSeconds;
       }
       outgoing["currentCardTag"] = UID;
       String StatusPayload;
@@ -694,6 +720,12 @@ void loop() {
         Serial.print(State);
         Serial.println(F(" < on startup."));
       }
+      if(incoming.containsKey("hobbsTime")){
+        HobbsSeconds = incoming["hobbsTime"][0]["hobbsTime"];
+        Serial.print(F("Hobbs timer set to: "));
+        Serial.print(HobbsSeconds);
+        Serial.println(F(" seconds."));
+      }
       ReportConfig = 1; //Once we get some info, we should send our configuration.
       SendStatus = 1; //Once we get some info, we should send our status.
       UpdateScreen = true;
@@ -745,6 +777,13 @@ void loop() {
             }
           }
         }
+      }
+      //Set HobbsTime
+      if(incoming.containsKey("hobbsTime")){
+        HobbsSeconds = incoming["hobbsTime"][0]["hobbsTime"];
+        Serial.print(F("Hobbs timer set to: "));
+        Serial.print(HobbsSeconds);
+        Serial.println(F(" seconds."));
       }
       //Action to do something
       if(incoming.containsKey("action")){
@@ -1018,7 +1057,7 @@ void NetworkConnect(){
   Serial.println(F(" MQTT Connected!"));
 
   //Subscribe to all MQTT topics relevant to us;
-  BaseTopic = "makerspace/" + String(MakerspaceID) + "/device/" + SerialNumber;
+  BaseTopic = "makerspace/device/" + SerialNumber;
   String SubAuth = BaseTopic + "/authTo/response";
   mqtt.subscribe(SubAuth, 2, [](const String& payload, const size_t size) {
     Serial.print(F("AuthTo Response: "));
@@ -1230,4 +1269,11 @@ String getSHA256(String input) {
   }
   
   return hashStr;
+}
+
+void IRAM_ATTR onTimerCallback(void* arg) {
+  //This is called in an ISR to increment the Hobbs timer very precisely!
+  if(Access){
+    HobbsSeconds++;
+  }
 }
