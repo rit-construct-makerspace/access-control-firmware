@@ -21,11 +21,49 @@ void AVControl(void *pvParameters){
     vTaskDelay(20 / portTICK_PERIOD_MS);
     //First, set the animation state:
     //Animation triggers are not exclusive, so if statements written in reverse-priority order.
-    if(State.equals("IDLE")){
+
+    //NEW: Since there are 4 channels, we need to consider all 4 before we set a light.
+    //Lighting should be based on the most permissive level currently available...
+    //i.e. if Ch 1 is unlocked and Ch 2 is locked out, show a light as if we are unlocked
+    //But, any channel being in fault or unknown takes priority.
+    //So, we do a reverse-priority order collection of the states here to use for old lighting code.
+    String LightState = "NOTHING";
+    int highestPriority = 0;
+    for (int i = 0; i < ChannelCount; i++) {
+      int currentPriority = 0;
+
+      // Tier 4 (Absolute Priority): Faults or Unknown states
+      if (State[i] == "FAULT" || State[i] == "UNKNOWN") {
+        currentPriority = 4;
+      } 
+      // Tier 3 (Most Permissive): Active access states
+      else if (State[i] == "UNLOCKED" || State[i] == "ALWAYS_ON") {
+        currentPriority = 3;
+      } 
+      // Tier 2 (Neutral): Waiting for interaction
+      else if (State[i] == "IDLE") {
+        currentPriority = 2;
+      } 
+      // Tier 1 (Least Permissive): Completely locked out
+      else if (State[i] == "LOCKED_OUT") {
+        currentPriority = 1;
+      }
+
+      // If this channel outranks the previous ones, update the LightState
+      if (currentPriority > highestPriority) {
+        highestPriority = currentPriority;
+        LightState = State[i]; // Inherit the actual state string (e.g., grabs "ALWAYS_ON" vs "UNLOCKED")
+      }
+    }
+    if(LightState == "NOTHING"){
+      LightState = "UNKNOWN";
+    }
+
+    if(LightState.equals("IDLE")){
       //Animation 3: Solid Yellow
       LEDAnimation = 3;
     }
-    if(State.equals("WELCOMING")){
+    if(WelcomeMode){
       //For now it is solid yellow, TODO switch to a slow blink yellow 10% duty cycle or so to catch user attention.
       LEDAnimation = 3;
     }
@@ -33,15 +71,15 @@ void AVControl(void *pvParameters){
       //Animation 4: Flashing Yellow
       LEDAnimation = 4;
     }
-    if(State.equals("UNLOCKED") || State.equals("ALWAYS_ON") || UserWelcomed){
+    if(LightState.equals("UNLOCKED") || LightState.equals("ALWAYS_ON") || UserWelcomed){
       //Animation 2: Solid Green
       LEDAnimation = 2;
     }
-    if(State.equals("UNKNOWN") || NoNetwork){
+    if(LightState.equals("UNKNOWN") || NoNetwork){
       //Animation 7: Solid Blue
       LEDAnimation = 7;
     }
-    if((State.equals("UNLOCKED") || State.equals("ALWAYS_ON")) && NoNetwork){
+    if((LightState.equals("UNLOCKED") || LightState.equals("ALWAYS_ON")) && NoNetwork){
       //Animation 5: Alternate blue/green
       LEDAnimation = 5;
     }
@@ -50,7 +88,7 @@ void AVControl(void *pvParameters){
       //Used when a machine is unlocked, but we should tell the user to stop.
       LEDAnimation = 11;
     }
-    if(State.equals("LOCKED_OUT") || AccessDenied){
+    if(LightState.equals("LOCKED_OUT") || AccessDenied){
       //Animation 1: Solid Red
       LEDAnimation = 1;
     }
@@ -62,7 +100,7 @@ void AVControl(void *pvParameters){
       //Animation 8: Solid Purple
       LEDAnimation = 8;
     }
-    if(State.equals("FAULT")){
+    if(LightState.equals("FAULT")){
       LEDAnimation = 0;
     }
     if(GamerMode){
@@ -230,7 +268,7 @@ void AVControl(void *pvParameters){
       Melody = 1;
     } else if(AccessDenied){
       Melody = 2;
-    } else if(State == "FAULT" || FaultBeep){
+    } else if(LightState == "FAULT" || FaultBeep){
       Melody = 3;
     } else if(SingleBeep){
       Melody = 4;

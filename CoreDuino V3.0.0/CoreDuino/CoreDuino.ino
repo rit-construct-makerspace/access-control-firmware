@@ -1,6 +1,6 @@
 //ACS V3.0.0 Hardware, running CoreDuino code.
 
-#define Version "2.1.3"
+#define Version "2.1.4"
 #define Hardware "3.0.0"
 
 //How often you send a status message, in milliseconds
@@ -81,15 +81,17 @@
   #include <mbedtls/md.h>          //Inherent to ESP32
   #include <stdio.h>
 
+  #include "Device.h" //Struct definition in a header so it can be used in multiple places and in function calls
+
 //Objects:
   Preferences settings;
   WiFiClientSecure client;
-  JsonDocument usbjson;
+  JsonDocument ConfigJson;
   HTTPClient http;
   ESP32OTAPull ota;
   ESP32Time rtc;
   WebSocketsClient socket;
-  MQTTPubSub::PubSubClient<256> mqtt;
+  MQTTPubSub::PubSubClient<1024> mqtt;
   OneWire ds(ONEWIRE); 
   Adafruit_NeoPixel CBI(1, LED, NEO_RGB + NEO_KHZ800);
   SPARKFUN_LIS2DH12 accel;  
@@ -117,17 +119,14 @@ bool FaultBeep = 0; //We use the 3 beep normally for fault to indicate cannot we
 
 //Variables - System State
 bool Identify = 0; //Set to 1 to play an identification alarm/buzzer.
-String State = "UNKNOWN"; //State of the machine, uses the WSACS API standard wording (IDLE, UNLOCKED, ALWAYS_ON, LOCKED_OUT, FAULT, UNKNOWN)
-String StateChangeReason; //What caused the state to change
 String InputMode = "INSERT"; //Stores how we ingest cards.
+String DefaultInputMode = "INSERT"; //Stores how we should ingest cards, when not in welcome mode.
 bool PendingApproval = 0; //Set to 1 when we have a card present that hasn't been authed yet, this is used for LED animations. 
 bool AccessDenied = 0; //Set to 1 when a card is present but has been denied, for LED animations. 
 bool CardPresent = 0; //Used to track if there is a card present in the machine.
-String LastState = "UNKNOWN"; //Stores what the state was previously, to detect changes.
-String PreservedLastState = "UNKNOWN";
 bool LockWhenIdle = 0;
 bool RestartWhenUnused = 0;
-bool WelcomeFlag = 0;
+bool WelcomeMode = 0; //If 1, we are acting as a welcome reader and not a normal reader.
 bool NoNetwork = 1;
 bool ScheduledRestart = false; //Used to indicate it is time for a regular restart. 
 unsigned long long ScheduledRestartTime = 0; //Used to give the user some breathing room before a shutdown occurs.
@@ -173,9 +172,11 @@ bool ReportConfig = 0;
 bool RequestInfo = 0;
 bool SendStatus = 0;
 bool SendWelcome = 0;
-volatile unsigned long HobbsSeconds = 0; //Tracks how long the equipment has been running for.
+
+Device sensorList[10];
 
 //Variables - Inter-Task Communication
+bool ConfigOneWire = 0; //Flag to see if we should apply a config to the attached onewire device
 bool SealBroken = 0;  //Set to 1 if there is an incorrect OneWire device on the bus. 
 bool ReSealBus = 0;
 bool OverTemp = 0;    //Set to 1 if there is a device overtemperature on the bus, so we can fault. 
@@ -194,22 +195,33 @@ bool ResetLED = 0; //Set to 1 to take priority over the LED controller, to indic
 bool UnlockedBeep = 0;
 bool SingleBeep = 0;
 
-//For handling OneWire devices
-struct Device {
-  byte address[8];
-  byte deviceType;         
-  byte highTempLimit;      
-  uint32_t classification; 
-  float currentTemp;       
-  bool isAlarming;         
-  bool isOnline;           // <--- Track if it's actually responding
-};
+//Variables - Per-channel tracking (4 channels)
+byte ChannelCount = 0; //Tracks how many channels are actually present, based on OneWire detection.
+bool ChannelAccess[4] = {0, 0, 0, 0};
+String State[4] = {"UNKNOWN", "UNKNOWN", "UNKNOWN", "UNKNOWN"};
+String LastState[4] = {"UNKNOWN", "UNKNOWN", "UNKNOWN", "UNKNOWN"}; //What state we used to be in, used for state change detect.
+String StateChangeReason[4];
+String AuthReason[4];
+String PreservedLastState[4] = {"UNKNOWN", "UNKNOWN", "UNKNOWN", "UNKNOWN"}; //What state we used to be in, but kept until we send it to the server.
+unsigned long TapDuration[4] = {0, 0, 0, 0}; //How long a temporary tap is kept valid for.
+unsigned long long CurrentTapExpires[4] = {0, 0, 0, 0}; //When each channel's timer decays.
+volatile unsigned long HobbsSeconds[4] = {0, 0, 0, 0}; //Tracks how long the equipment has been running for.
 
-Device sensorList[10];
+//Interrupt Response Mode:
+//The device can respond to an interrupt in a few different ways;
+//1: "FAULT" - Immediately put the device into a fault state.
+  //This is the normal operation of the interrupt pin
+//2: "LOCK_TEMP" - Immediately set all channels to locked, but return to IDLE once we are no longer interrupted.
+//3: "IDLE" - Put any unlocked channels into an idle state.
+  //This lets the interrupt pin be used more like a "log out" button.
+//4: "MESSAGE" - Simply notify the server a fauly occurred, but don't do anything.
+  //Useful for situtations where interrupt is used to convey info, but not necessarily shut down access.
+String InterruptResponse = "FAULT";
+bool IsInterrupted = false; //Tracks if we are in a maintained interrupt mode, so we do not constantly re-assert states.
+byte InterruptCount = 0; //Counts how many times we read an interrupt as we cycle, for debouncing.
 
 //Variables related to any connected screen;
 bool UpdateScreen = false;
-String AuthReason = "";
 String FaultReason = "";
 
 void IRAM_ATTR onTimerCallback(void* arg); //IRAM task for the Hobbs counter
@@ -225,8 +237,25 @@ void setup() {
   CBI.setPixelColor(0, 255, 0, 0);
   CBI.show();
 
+  pinMode(BUTTON, INPUT); 
+
   pinMode(ACCESS, OUTPUT);
-  pinMode(INTERRUPT, INPUT);
+  pinMode(INTERRUPT, INPUT_PULLUP);
+
+  //Set up GPIO all as outputs
+  //IODIR HIGH sets level shifter to output mode
+  pinMode(IODIR1, OUTPUT);
+  digitalWrite(IODIR1, HIGH);
+  pinMode(IODIR2, OUTPUT);
+  digitalWrite(IODIR2, HIGH);
+  pinMode(IODIR3, OUTPUT);
+  digitalWrite(IODIR3, HIGH);
+  pinMode(IODIR4, OUTPUT);
+  digitalWrite(IODIR4, HIGH);
+  pinMode(GPIO1, OUTPUT);
+  pinMode(GPIO2, OUTPUT);
+  pinMode(GPIO3, OUTPUT);
+  pinMode(GPIO4, OUTPUT);
 
   Serial.begin(115200);
   Serial0.begin(115200, SERIAL_8N1, 44, 43);
@@ -312,6 +341,38 @@ void setup() {
       delay(1000);
     }
   }
+
+  if(!settings.isKey("ChannelCount")){
+    //ChannelCount is new in 2.1.4, set to 1 if no value
+    settings.putString("ChannelCount", "1");
+  }
+  ChannelCount = settings.getString("ChannelCount").toInt();
+
+  if(!settings.isKey("TapDur0")){
+    //Tap Duration is new in 2.1.4, set to 0 if no value.
+    settings.putUInt("TapDur0", 0);
+    settings.putUInt("TapDur1", 0);
+    settings.putUInt("TapDur2", 0);
+    settings.putUInt("TapDur3", 0);
+  }
+  for(int i = 0; i < 4; i++){
+    String key = "TapDur" + String(i);
+    TapDuration[i] = settings.getUInt(key.c_str());
+  }
+
+  if(!settings.isKey("InputMode")){
+    //InputMode is new in 2.1.4, set to "INSERT" if no value.
+    settings.putString("InputMode", "INSERT");
+  }
+  DefaultInputMode = settings.getString("InputMode");
+  InputMode = DefaultInputMode;
+
+  if(!settings.isKey("IntResp")){
+    //Interrupt Response is new in 2.1.4, set to "FAULT" if no value.
+    settings.putString("IntResp", "FAULT");
+  }
+  InterruptResponse = settings.getString("IntResp");
+
   Server = settings.getString("Server");
   Password = settings.getString("Password");
   if(Password.equalsIgnoreCase("null")){
@@ -449,6 +510,8 @@ void setup() {
 void loop() {
   // put your main code here, to run repeatedly:
 
+  delay(10);
+
   //Step 0: Call the MQTT updater;
   mqtt.update();
 
@@ -468,6 +531,9 @@ void loop() {
     JsonDocument outgoing; //Json to construct the outgoing message in
 
      //Step 4.1: See if we have any outgoing messages, and send them.
+
+     //temp disabled for testing
+
     if(MessageToSend){
       //Send a message to the history
       MessageToSend = 0;
@@ -507,14 +573,26 @@ void loop() {
     if(StateChange){
       //Send report of a changed state
       StateChange = 0;
-      if(State != "WELCOMING"){
+      if(!WelcomeMode){
         //We don't report state change when we are in welcoming.
         JsonArray stateChannels = outgoing["channels"].to<JsonArray>();
-        JsonObject stateObject = stateChannels.createNestedObject();
-        stateObject["channelID"] = 0;
-        stateObject["fromState"] = PreservedLastState;
-        stateObject["toState"] = State;
-        stateObject["reason"] = StateChangeReason;
+        for( int i = 0; i < ChannelCount; i++){
+          if(State[i] != PreservedLastState[i]){
+            JsonObject stateObject = stateChannels.createNestedObject();
+            stateObject["channelID"] = i;
+            stateObject["fromState"] = PreservedLastState[i];
+            stateObject["toState"] = State[i];
+            //The server doesn't recognize the "LOCK_TEMP" state change reason
+            //So we replace if with "LOCAL":
+            if(StateChangeReason[i] == "LOCK_TEMP"){
+              stateObject["reason"] = "LOCAL";
+            } else{
+              stateObject["reason"] = StateChangeReason[i];
+            }
+            //Update the preserved last state;
+            PreservedLastState[i] = State[i];
+          }
+        }
         outgoing["currentCardTag"] = UID;
         String StateChangePayload;
         serializeJson(outgoing, StateChangePayload);
@@ -522,16 +600,17 @@ void loop() {
         String StateChangeTopic = BaseTopic + "/stateChange";
         publish(StateChangeTopic, StateChangePayload);
         //At the end, set change reason to nothing:
-        StateChangeReason = "";
       }
     }
     if(ReportConfig){
       //Report the current configuration
       ReportConfig = 0;
       JsonArray configChannels = outgoing["channels"].to<JsonArray>();
-      JsonObject configObject = configChannels.createNestedObject();
-      configObject["channelID"] = 0;
-      configObject["tempDuration"] = 0;
+      for(int i = 0; i < ChannelCount; i++){
+        JsonObject configObject = configChannels.createNestedObject();
+        configObject["channelID"] = i;
+        configObject["tempDuration"] = TapDuration[i];
+      }
       outgoing["inputMode"] = InputMode;
       JsonObject configDeployment = outgoing["deployment"].to<JsonObject>();
       configDeployment["SN"] = SerialNumber;
@@ -547,9 +626,9 @@ void loop() {
         deviceObj["SN"] = String(addrStr);
         for(int j = 0; j < deviceCount; j++) {
           if(memcmp(liveAddresses[i], sensorList[j].address, 8) == 0) {
-            // Here we grab the deviceType and other data from the struct
-            deviceObj["type"] = sensorList[j].deviceType; 
-            deviceObj["identifier"] = sensorList[j].classification; //Server doesn't expect this yet, but we should send it
+            // Here we grab the deviceMode and other data from the struct
+            deviceObj["type"] = sensorList[j].deviceMode; 
+            deviceObj["identifier"] = sensorList[j].deviceID; //Server doesn't expect this yet, but we should send it
             break;
           }
         }
@@ -557,7 +636,7 @@ void loop() {
       JsonObject flags = outgoing["flags"].to<JsonObject>();
       flags["lockWhenIdle"] = LockWhenIdle;
       flags["restartWhenUnused"] = RestartWhenUnused;
-      flags["welcoming"] = WelcomeFlag;
+      flags["welcoming"] = WelcomeMode;
       String FWVer = "CoreDuino " + String(Version);
       outgoing["firmware"] = FWVer;
       String ConfigPayload;
@@ -571,11 +650,22 @@ void loop() {
       RequestInfo = 0;
       JsonArray infoFields = outgoing["fields"].to<JsonArray>();
       infoFields.add("TIME");
-      if(State == "UNKNOWN"){
+      //Check if any of the states or HobbsTimers are unknown;
+      bool AskForStates = false;
+      bool AskForHobbs = false;
+      for(int i = 0; i < ChannelCount; i++){
+        if(State[i] == "UNKNOWN"){
+          AskForStates = true;
+        }
+        if(HobbsSeconds[i] == 0){
+          AskForHobbs = true;
+        }
+      }
+      if(AskForStates){
         //We don't know what state we should be in, so request it. 
         infoFields.add("STATE");
       }
-      if(HobbsSeconds == 0){
+      if(AskForHobbs){
         //We do not know what the Hobbs timer should be at, let's request that.
         infoFields.add("HOBBS_TIME");
       }
@@ -586,16 +676,18 @@ void loop() {
       String InfoTopic = BaseTopic + "/info/request";
       publish(InfoTopic, InfoPayload);
     }
-    if(SendStatus){
-      //Send our current status to the server
+    if(SendStatus && !anyChannelIs("UNKNOWN")){
+      //Send our current status to the server, we do not send it if we do not know our state. 
       SendStatus = 0;
       JsonArray statusChannels = outgoing["channels"].to<JsonArray>();
-      if(State != "WELCOMING"){
+      if(!WelcomeMode){
         //We don't send this in welcoming mode
-        JsonObject statusObject = statusChannels.createNestedObject();
-        statusObject["channelID"] = 0;
-        statusObject["state"] = State;
-        statusObject["hobbsTime"] = HobbsSeconds;
+        for(int i = 0; i < ChannelCount; i++){
+          JsonObject statusObject = statusChannels.createNestedObject();
+          statusObject["channelID"] = i;
+          statusObject["state"] = State[i];
+          statusObject["hobbsTime"] = HobbsSeconds[i];
+        }
       }
       outgoing["currentCardTag"] = UID;
       String StatusPayload;
@@ -633,31 +725,51 @@ void loop() {
     JsonDocument incoming; //Json doucment to parse the incoming
     
     //Step 4.3: Process any incoming messages
+
     if(NewAuth){
       //Process a response to an auth request.
       NewAuth = 0;
       deserializeJson(incoming, AuthResponse);
-      bool IsAuthed = incoming["channels"][0]["approved"].as<bool>();
       String AuthID = incoming["cardTagID"].as<String>();
-      AuthReason = incoming["channels"][0]["reason"].as<String>();
       PendingApproval = false;
-      if(State == "IDLE"){
-        if(IsAuthed){
-          Serial.println(F("Access Granted!"));
-          if(AuthID == UID){
-            Serial.println(F("UIDs match. Unlocking."));
-            State = "UNLOCKED";
-            StateChangeReason = "AUTHED"; 
-            UnlockedBeep = true;
-          }
-        } else{
-          Serial.println(F("Access Denied!"));
-          if(CardPresent){
-            AccessDenied = 1;
+      bool SendUnlockedBeep = false;
+      bool SendAccessDenied = false;
+      for(JsonVariant v : incoming["channels"].as<JsonArray>()){
+        int ch = v["channelID"] | 0;
+        if(ch >= 0 && ch < ChannelCount){
+          bool IsAuthed = v["approved"].as<bool>();
+          AuthReason[ch] = v["reason"].as<String>();
+          
+          if(State[ch] == "IDLE" || (State[ch] == "UNLOCKED" && InputMode == "TEMP_PRESENT")){ //Unlock only if idle, or re-up unlocked channels if in tap-present mode.
+            if(IsAuthed){
+              Serial.println(F("Access Granted!"));
+              if(AuthID == UID){
+                Serial.println(F("UIDs match. Unlocking."));
+                State[ch] = "UNLOCKED";
+                StateChangeReason[ch] = "AUTHED"; 
+                SendUnlockedBeep = true;
+                if(InputMode == "TEMP_PRESENT"){
+                  //Add all the times now;
+                  CurrentTapExpires[ch] = TapDuration[ch] * 1000 + millis64();
+                }
+              }
+            } else{
+              Serial.println(F("Access Denied!"));
+              if(CardPresent){
+                SendAccessDenied = 1;
+              }
+            }
+          } else{
+            Serial.println(F("Ignoring auth due to improper state."));
           }
         }
-      } else{
-        Serial.println(F("Ignoring auth due to invalid state."));
+      }
+      if(SendUnlockedBeep){
+        //We do it this way so we don't trigger the beep 4 times
+        UnlockedBeep = true;
+      }
+      if(SendAccessDenied){
+        AccessDenied = true;
       }
       UpdateScreen = true;
     }
@@ -665,6 +777,29 @@ void loop() {
       //Process a response to an info request.
       NewInfo = 0;
       deserializeJson(incoming, InfoResponse);
+      //Set the state;
+      if (incoming["state"].is<JsonArray>()) {
+        for (JsonObject item : incoming["state"].as<JsonArray>()) {
+          int id = item["id"] | -1; // Default to -1 if missing
+          
+          // Bounds check to avoid crashing the MCU with array out-of-bounds
+          if (id >= 0 && id < ChannelCount) {
+            State[id] = item["state"].as<String>();
+          }
+        }
+      }
+
+      // Process the "hobbsTime" array
+      if (incoming["hobbsTime"].is<JsonArray>()) {
+        for (JsonObject item : incoming["hobbsTime"].as<JsonArray>()) {
+          // Notice this uses "channelID" instead of "id"
+          int ch = item["channelID"] | -1; 
+          
+          if (ch >= 0 && ch < ChannelCount) {
+            HobbsSeconds[ch] = item["hobbsTime"].as<unsigned long>(); // Adjust variable name/type as needed
+          }
+        }
+      }
       //Set the time;
       if(incoming.containsKey("time")){
         unsigned long long millisecondTime = incoming["time"];
@@ -685,46 +820,54 @@ void loop() {
           Serial.println(RestartWhenUnused);
         }
         if(flagObj.containsKey("welcoming")){
-          if(WelcomeFlag != flagObj["welcoming"].as<bool>()){
-            WelcomeFlag = flagObj["welcoming"].as<bool>();
-            if(WelcomeFlag){
+          if(WelcomeMode != flagObj["welcoming"].as<bool>()){
+            WelcomeMode = flagObj["welcoming"].as<bool>();
+            if(WelcomeMode){
             Serial.println(F("Server flag set to enter welcoming mode."));
-            State = "WELCOMING";
             } else{
               Serial.println(F("Server flag unset for welcoming mode. Entering state 'UNKNOWN'"));
-              State = "UNKNOWN";
-              StateChangeReason = "SERVER_COMMANDED";
+              WelcomeMode = false;
+              for(int i = 0; i < ChannelCount; i++){
+                State[i] = "UNKNOWN";
+                StateChangeReason[i] = "SERVER_COMMANDED";
+              }
               //We should ask what state we should be in
               RequestInfo = 1;
             }
           }
         }
       }
-      if((incoming.containsKey("state")) && (State == "UNKNOWN")){
-        State = incoming["state"][0]["state"] | "UNKNOWN";
-        if(State == "UNLOCKED" || State == "ALWAYS_ON"){
-          //We shouldn't go into these states
-          State = "IDLE";
+      if(incoming.containsKey("state")){
+        //WARNING: Assumes that all channels are sent (should be the case);
+        for(int i = 0; i < ChannelCount; i++){
+          if(State[i] == "UNKNOWN"){
+            State[i] = incoming["state"][i]["state"] | "UNKNOWN";
+            StateChangeReason[i] = "COMMANDED";
+            //We don't go back into these states from an info response.
+            if(State[i] == "UNLOCKED" || State[i] == "ALWAYS_ON"){
+              State[i] = "IDLE";
+            }
+            if(State[i] == "FAULT"){
+              State[i] = "LOCKED_OUT";
+            }
+            Serial.print(F("State of channel "));
+            Serial.print(i);
+            Serial.print(F(" set to > "));
+            Serial.print(State[i]);
+            Serial.println(F(" < on startup."));
+          }
         }
-        StateChangeReason = "COMMANDED";
         SingleBeep = 1;
-        if((State == "UNLOCKED") || (State == "ALWAYS_ON")){
-          //We do not restart into these states;
-          State = "IDLE";
-        }
-        if(State == "FAULT"){
-          //If we used to be faulted, restart in lockout instead.
-          State = "LOCKED_OUT";
-        }
-        Serial.print(F("State set to > "));
-        Serial.print(State);
-        Serial.println(F(" < on startup."));
       }
       if(incoming.containsKey("hobbsTime")){
-        HobbsSeconds = incoming["hobbsTime"][0]["hobbsTime"];
-        Serial.print(F("Hobbs timer set to: "));
-        Serial.print(HobbsSeconds);
-        Serial.println(F(" seconds."));
+        for(int i = 0; i < ChannelCount; i++){
+          HobbsSeconds[i] = incoming["hobbsTime"][i]["hobbsTime"];
+          Serial.print(F("Hobbs timer for channel "));
+          Serial.print(i);
+          Serial.print(F(" set to: "));
+          Serial.print(HobbsSeconds[i]);
+          Serial.println(F(" seconds."));
+        }
       }
       ReportConfig = 1; //Once we get some info, we should send our configuration.
       SendStatus = 1; //Once we get some info, we should send our status.
@@ -736,18 +879,18 @@ void loop() {
       deserializeJson(incoming, CommandResponse);
       //State change command
       if(incoming.containsKey("toState")){
-        if(State != "WELCOMING"){
-          //We never command state out of welcoming since it is set by flags
-          State = incoming["toState"][0]["state"] | "UNKNOWN";
+        JsonArray toStateArray = incoming["toState"].as<JsonArray>();
+        for (JsonVariant v : toStateArray) {
+          int ch = v["channelID"] | 0;
+          if (ch >= 0 && ch < ChannelCount) {
+            State[ch] = v["state"] | "UNKNOWN";
+            if(State[ch] == "UNLOCKED" && !CardPresent){
+              State[ch] = "IDLE";
+            }
+            StateChangeReason[ch] = "COMMANDED";
+          }
         }
-        if(State == "UNLOCKED" && !CardPresent){
-          //Don't unlock if no card present
-          State = "IDLE";
-        }
-        StateChangeReason = "COMMANDED";
         SingleBeep = 1;
-        Serial.print(F("Commanded state to: "));
-        Serial.println(State);
       }
       //Set flags
       if(incoming.containsKey("flags")){
@@ -763,15 +906,16 @@ void loop() {
           Serial.println(RestartWhenUnused);
         }
         if(flagObj.containsKey("welcoming")){
-          if(WelcomeFlag != flagObj["welcoming"].as<bool>()){
-            WelcomeFlag = flagObj["welcoming"].as<bool>();
-            if(WelcomeFlag){
+          if(WelcomeMode != flagObj["welcoming"].as<bool>()){
+            WelcomeMode = flagObj["welcoming"].as<bool>();
+            if(WelcomeMode){
             Serial.println(F("Server flag set to enter welcoming mode."));
-            State = "WELCOMING";
             } else{
               Serial.println(F("Server flag unset for welcoming mode. Entering state 'UNKNOWN'"));
-              State = "UNKNOWN";
-              StateChangeReason = "SERVER_COMMANDED";
+              for(int i = 0; i < ChannelCount; i++){
+                State[i] = "UNKNOWN";
+                StateChangeReason[i] = "SERVER_COMMANDED";
+              }
               //We should ask what state we should be in
               RequestInfo = 1;
             }
@@ -780,10 +924,18 @@ void loop() {
       }
       //Set HobbsTime
       if(incoming.containsKey("hobbsTime")){
-        HobbsSeconds = incoming["hobbsTime"][0]["hobbsTime"];
-        Serial.print(F("Hobbs timer set to: "));
-        Serial.print(HobbsSeconds);
-        Serial.println(F(" seconds."));
+        JsonArray hobbsTimeArray = incoming["hobbsTime"].as<JsonArray>();
+        for (JsonVariant v : hobbsTimeArray) {
+          int ch = v["hobbsTime"] | 0;
+          if (ch >= 0 && ch < ChannelCount) {
+            HobbsSeconds[ch] = v["channelID"] | 0;
+            Serial.print(F("Hobbs timer for channel "));
+            Serial.print(ch);
+            Serial.print(F(" set to: "));
+            Serial.print(HobbsSeconds[ch]);
+            Serial.println(F(" seconds."));
+          }
+        }
       }
       //Action to do something
       if(incoming.containsKey("action")){
@@ -837,7 +989,7 @@ void loop() {
       }
       UpdateScreen = true;
     }
-
+    
     //Step 4.4: Send a ping if requested
     if(SendPing){
       String PingTopic = BaseTopic + "/ping";
@@ -1032,7 +1184,6 @@ void NetworkConnect(){
 
       } else{
         //The hashes did not match, potental attack in progress!
-        State = "FAULT";
         NoNetwork = true;
         FaultReason = "TLS hash does not match!";
         Serial.println(F("CRITICAL ERROR: ATTEMPT WAS MADE TO LOAD BAD TLS CERTS!"));
@@ -1048,6 +1199,7 @@ void NetworkConnect(){
   unsigned long long SocketTime = millis64() + 15000;
   while(!mqtt.connect(SerialNumber, SerialNumber, Key)){ //Use serial number as unique ID, username, and key as password.
     Serial.print(".");
+    socket.loop();
     delay(500);
     if(SocketTime <= millis64()){
       Serial.println(F("Failed to connect to websocket! Retrying network altogether..."));
@@ -1055,6 +1207,7 @@ void NetworkConnect(){
     }
   } 
   Serial.println(F(" MQTT Connected!"));
+  NoNetwork = false;
 
   //Subscribe to all MQTT topics relevant to us;
   BaseTopic = "makerspace/device/" + SerialNumber;
@@ -1140,18 +1293,12 @@ void mfrc630_SPI_unselect() {
   SPI.endTransaction();    // release the SPI bus
 }
 
-String readCDCString( uint32_t timeout = 1000){
+String readCDCString(uint32_t timeout = 20) {
   String result = "";
-  unsigned long long startMillis = millis64();
-  while(millis64() - startMillis < timeout){
-    size_t availableBytes = Serial.available();
-    if(availableBytes > 0){
-      uint8_t buf[availableBytes];
-      size_t readCount = Serial.read(buf, availableBytes);
-      for(size_t i = 0; i < readCount; i++){
-        result += (char)buf[i];
-      }
-      startMillis = millis64();
+  unsigned long long deadline = millis64() + timeout;
+  while (millis64() < deadline) {
+    while (Serial.available() > 0) {
+      result += (char)Serial.read();
     }
     delay(1);
   }
@@ -1162,54 +1309,107 @@ void CheckforConfig(){
   //Called to see if a config JSON has been sent via USB.
   if(Serial.available()){
     String USBConfig = readCDCString(20);
-    JsonDocument USBJson;
-    deserializeJson(USBJson, USBConfig);
-    String NewSSID = USBJson["SSID"];
-    if(USBJson["SSID"].is<String>()){
+    JsonDocument ConfigJson;
+    deserializeJson(ConfigJson, USBConfig);
+    //Is this a Core Config JSON, or a OneWire Config JSON?
+    if(ConfigJson["Type"] == "OneWire"){
+      //This is a onewire json, let's tell the bus manager to handle it.
+      ConfigOneWire = true;
+      return;
+    }
+    String NewSSID = ConfigJson["SSID"];
+    if(ConfigJson["SSID"].is<String>()){
       Serial.print(F("Set WiFi SSID to: "));
       Serial.println(NewSSID);
       settings.putString("SSID", NewSSID);
     } else{
       Serial.println(F("Kept old WiFi SSID."));
     }
-    String NewPassword = USBJson["Password"];
-    if(USBJson["Password"].is<String>()){
+    String NewPassword = ConfigJson["Password"];
+    if(ConfigJson["Password"].is<String>()){
       Serial.print(F("Set WiFi password to: "));
       Serial.println(NewPassword);
       settings.putString("Password", NewPassword);
     } else{
       Serial.println(F("Kept old WiFi password."));
     }
-    String NewServer = USBJson["Server"];
-    if(USBJson["Server"].is<String>()){
+    String NewServer = ConfigJson["Server"];
+    if(ConfigJson["Server"].is<String>()){
       Serial.print(F("Set server to: "));
       Serial.println(NewServer);
       settings.putString("Server", NewServer);
     } else{
       Serial.println(F("Kept old server."));
     }
-    String NewKey = USBJson["Key"];
-    if(USBJson["Key"].is<String>()){
+    String NewKey = ConfigJson["Key"];
+    if(ConfigJson["Key"].is<String>()){
       Serial.println(F("Set a new key (not printed for security)"));
       settings.putString("Key", NewKey);
     } else{
       Serial.println(F("Kept old key."));
     }
-    String NewTimezone = USBJson["Timezone"];
-    if(USBJson["Timezone"].is<String>()){
+    String NewTimezone = ConfigJson["Timezone"];
+    if(ConfigJson["Timezone"].is<String>()){
       Serial.print(F("Set timezone to: "));
       Serial.println(NewTimezone);
       settings.putString("Timezone", NewTimezone);
     } else{
       Serial.println(F("Kept old timezone."));
     }
-    String NewMakerspaceID = USBJson["MakerspaceID"];
-    if(USBJson["MakerspaceID"].is<String>()){
+    String NewMakerspaceID = ConfigJson["MakerspaceID"];
+    if(ConfigJson["MakerspaceID"].is<String>()){
       Serial.print(F("Set makerspace ID to: "));
       Serial.println(NewMakerspaceID);
       settings.putString("MakerspaceID", NewMakerspaceID);
     } else{
       Serial.println(F("Kept old makerspace ID."));
+    }
+    String NewChannelCount = ConfigJson["ChannelCount"];
+    if(ConfigJson["ChannelCount"].is<String>()){
+      Serial.print(F("Set Channel Count to: "));
+      Serial.println(NewChannelCount);
+      settings.putString("ChannelCount", NewChannelCount);
+    } else{
+      Serial.println(F("Kept old ChannelCount."));
+    }
+    String NewInputMode = ConfigJson["InputMode"];
+    if(ConfigJson["InputMode"].is<String>()){
+      Serial.print(F("Set InputMode to: "));
+      Serial.println(NewInputMode);
+      settings.putString("InputMode", NewInputMode);
+    } else{
+      Serial.println(F("Kept old InputMode"));
+    }
+    String NewInterruptResponse = ConfigJson["InterruptResponse"];
+    if(ConfigJson["InterruptResponse"].is<String>()){
+      Serial.print(F("Set interrupt response to: "));
+      Serial.println(NewInterruptResponse);
+      settings.putString("IntResp", NewInterruptResponse);
+    } else{
+      Serial.println(F("Kept old InterruptResponse."));
+    }
+    if (ConfigJson["TapDuration"].is<JsonArray>()) {
+      JsonArray durations = ConfigJson["TapDuration"].as<JsonArray>();
+
+      if (durations.size() == 4) {
+        Serial.print(F("Set Tap Durations (seconds) to: ["));
+        for (int i = 0; i < 4; i++) {
+          uint32_t dur = durations[i].as<uint32_t>();
+          
+          // Unique key for each channel (e.g. "TapDur0", "TapDur1"...)
+          // Note: ESP32 Preferences keys must be 15 characters or less
+          String key = "TapDur" + String(i);
+          settings.putUInt(key.c_str(), dur);
+
+          Serial.print(dur);
+          if (i < 3) Serial.print(F(", "));
+        }
+        Serial.println(F("]"));
+      } else {
+        Serial.println(F("Error: TapDuration must contain exactly 4 values. Kept old values."));
+      }
+    } else {
+      Serial.println(F("Kept old TapDuration."));
     }
     Serial.println(F("Above settings have been saved to memory. Restart device to apply settings."));
   }
@@ -1273,7 +1473,9 @@ String getSHA256(String input) {
 
 void IRAM_ATTR onTimerCallback(void* arg) {
   //This is called in an ISR to increment the Hobbs timer very precisely!
-  if(Access){
-    HobbsSeconds++;
+  for(int i = 0; i < ChannelCount; i++){
+    if(ChannelAccess[i]){
+      HobbsSeconds[i]++;
+    }
   }
 }

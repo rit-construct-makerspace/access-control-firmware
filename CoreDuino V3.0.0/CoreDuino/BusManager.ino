@@ -4,22 +4,18 @@ The Bus Manager is responsible for everything OneWire related
   * Checking for bus integrity
 */
 
-#define MAX_ALLOWED_MISSES 3 // Number of consecutive missed scans before faulting
+#define MAX_ALLOWED_MISSES 6 // Number of consecutive missed scans before faulting
 int missingScanCount = 0;    // Tracks consecutive failures
 
 void BusManager(void *pvParameters){
   unsigned long long OneWireTime = 0;      //Next time we should check the bus.
-  struct Device {
-    byte address[8];
-    byte deviceType;         
-    byte highTempLimit;      
-    uint32_t classification; 
-    float currentTemp;       
-    bool isAlarming;         
-    bool isOnline;           
-  };
-  Device sensorList[10];
+
   while(1){
+    //Step 0: Process any OneWire config we have;
+    if(ConfigOneWire){
+      provisionDeviceViaJSON(ConfigJson);
+      ConfigOneWire = 0;
+    }
     //Step 1: Check if we are commanded to seal the bus;
     if(ReSealBus){
       ReSealBus = false;
@@ -27,8 +23,10 @@ void BusManager(void *pvParameters){
       saveInventoryToFile();
       SealBroken = false;
       //Set state lockout;
-      State = "LOCKED_OUT";
-      StateChangeReason = "LOCAL";
+      for(int i = 0; i < ChannelCount; i++){
+        State[i] = "LOCKED_OUT";
+        StateChangeReason[i] = "LOCAL";
+      }
       //Immediately re-run the bus scan;
       OneWireTime = 0;
     }
@@ -80,6 +78,25 @@ void loadInventoryFromFile() {
   Serial.print("Loaded "); Serial.print((int)deviceCount); Serial.println(" devices from SPIFFS.");
 }
 
+void parseDeviceMetadata(byte* scratchpad, Device* dev) {
+  // 1. High Temp Limit (Byte 2)
+  dev->highTempLimit = scratchpad[2];
+  if(dev->highTempLimit < 10) {
+    Serial.println(F("Failsafe: Overriding OneWire temperature limit."));
+    dev->highTempLimit = 50; 
+  }
+
+  // 2. Device Mode (Byte 3, Bits 5-3)
+  dev->deviceMode = (scratchpad[3] >> 3) & 0x07;
+
+  // 3. Device ID (19 bits total)
+  uint32_t id = 0;
+  id |= ((uint32_t)scratchpad[7] << 11);
+  id |= ((uint32_t)scratchpad[6] << 3);
+  id |= (scratchpad[3] & 0x07);
+  dev->deviceID = id;
+}
+
 void discoverDevices() {
   byte addr[8];
   deviceCount = 0;
@@ -88,12 +105,25 @@ void discoverDevices() {
 
   while (ds.search(addr) && deviceCount < 10) {
     if (OneWire::crc8(addr, 7) != addr[7]) continue;
-    for (int i = 0; i < 8; i++) sensorList[deviceCount].address[i] = addr[i];
     
-    sensorList[deviceCount].classification = fetchMetadata(addr, sensorList[deviceCount].deviceType, sensorList[deviceCount].highTempLimit);
+    // Copy address into struct
+    for (int i = 0; i < 8; i++) {
+        sensorList[deviceCount].address[i] = addr[i];
+    }
     
-    Serial.print("["); Serial.print(deviceCount); Serial.print("] ID: ");
+    // NEW: Read the scratchpad to populate deviceMode, deviceID, and highTempLimit
+    byte data[9];
+    if (readScratchpad(addr, data)) {
+      parseDeviceMetadata(data, &sensorList[deviceCount]);
+    } else {
+      Serial.println(F("Warning: Failed to read scratchpad during discovery."));
+    }
+    
+    Serial.print("["); Serial.print(deviceCount); Serial.print("] Address: ");
     printAddress(sensorList[deviceCount].address);
+    Serial.print(" | Mode: "); Serial.print(sensorList[deviceCount].deviceMode);
+    Serial.print(" | ID: "); Serial.println(sensorList[deviceCount].deviceID);
+    
     deviceCount++;
   }
 
@@ -101,6 +131,38 @@ void discoverDevices() {
     Serial.println("No devices found. Bus is empty?");
   } else {
     Serial.print("Scan complete. Found: "); Serial.println(deviceCount);
+
+    //NEW: Set the number of channels based on what type of device was found.
+    //This is not working, need to figure out why later.
+    /*
+    for(int i = 0; i < deviceCount; i++){
+      //Iterate through each device
+      if(sensorList[i].deviceMode == 1){
+        //1 channel switch
+        if(ChannelCount < 1){
+          ChannelCount = 1;
+        }
+      }
+      if(sensorList[i].deviceMode == 2){
+        //2 channel switch
+        if(ChannelCount < 2){
+          ChannelCount = 2;
+        }
+      }
+      if(sensorList[i].deviceMode == 3){
+        //3 channel switch
+        if(ChannelCount < 3){
+          ChannelCount = 3;
+        }
+      }
+      if(sensorList[i].deviceMode == 4){
+        //4 channel switch
+        if(ChannelCount = 4){
+          ChannelCount = 4;
+        }
+      }
+    }
+    */
   }
 }
 
@@ -127,8 +189,6 @@ void saveInventoryToFile() {
 
 void checkBusHealth() {
   byte addr[8];
-  // Note: Ensure this boolean array size matches your maximum possible devices.
-  // Currently your struct array is 'Device sensorList[5];'
   bool foundExpected[10] = {false}; 
   bool unexpectedDeviceFound = false;
   bool missingExpectedDevice = false;
@@ -215,6 +275,52 @@ void checkBusHealth() {
   }
 }
 
+// Example JSON input: {"mode": 2, "id": 12345, "highTemp": 50}
+void provisionDeviceViaJSON(JsonDocument doc) {
+
+  byte mode = doc["mode"] | 0;
+  uint32_t id = doc["id"] | 0;
+  byte highTemp = doc["highTemp"] | 50;
+
+  // 1. Verify a device is present (Bus must have exactly 1 device)
+  if (ds.reset() == 0) {
+    Serial.println(F("Provisioning Error: No device found on bus."));
+    return;
+  }
+
+  // 2. Calculate Byte 3 (T_L)
+  // Bit 7: forced to 1 (sign bit, ensures temp is negative to disable alarm)
+  // Bit 6: forced to 0
+  // Bits 5-3: Mode
+  // Bits 2-0: ID LSBs
+  byte tl = 0x80 | ((mode & 0x07) << 3) | (id & 0x07);
+  
+  // 3. Extract Bytes 6 and 7 from the ID
+  byte byte6 = (id >> 3) & 0xFF;
+  byte byte7 = (id >> 11) & 0xFF;
+
+  // 4. Write data to the Scratchpad
+  ds.reset();
+  ds.skip();                 // Target the only device attached
+  ds.write(0x4E);            // Write Scratchpad Command
+  ds.write(highTemp);        // Byte 2: T_H
+  ds.write(tl);              // Byte 3: T_L
+  ds.write(0x7F);            // Byte 4: Config (12-bit resolution)
+  ds.write(0xFF);            // Byte 5: Reserved (Write default 0xFF)
+  ds.write(byte6);           // Byte 6: EEPROM 1
+  ds.write(byte7);           // Byte 7: EEPROM 2
+
+  // 5. Commit Scratchpad to EEPROM
+  ds.reset();
+  ds.skip();
+  ds.write(0x48);            // Copy Scratchpad Command
+  
+  // Clones typically require 10-20ms to commit to non-volatile memory
+  vTaskDelay(50 / portTICK_PERIOD_MS); 
+
+  Serial.println(F("Device provisioned and locked to EEPROM successfully."));
+}
+
 void updateBusTemperatures() {
   //Scans through the bus, gets the temperature of every device.
   ds.reset();
@@ -228,6 +334,7 @@ void updateBusTemperatures() {
   for (int i = 0; i < deviceCount; i++) {
     byte data[9];
     if (readScratchpad(sensorList[i].address, data)) {
+      parseDeviceMetadata(data, &sensorList[i]);
       sensorList[i].isOnline = true; 
 
       int16_t raw = (data[1] << 8) | data[0];
@@ -285,22 +392,3 @@ bool readScratchpad(byte addr[8], byte* buffer) {
   return (OneWire::crc8(buffer, 8) == buffer[8]);
 }
 
-uint32_t fetchMetadata(byte addr[8], byte &outType, byte &outHigh) {
-  byte data[9];
-  if (readScratchpad(addr, data)) {
-    outHigh = data[2]; // TH is our High Temp Limit
-    if(outHigh < 10){
-      //This is not right, set to a normal value?
-      Serial.println(F("Overriding OneWire temperature limit for being too low."));
-      outHigh = 50;
-    }
-    outType = (data[3] >> 3) & 0x07;
-    
-    uint32_t combined = 0;
-    combined |= (uint32_t)data[7] << 9; 
-    combined |= (uint32_t)data[6] << 1;
-    combined |= (uint32_t)(data[3] & 0x04) >> 2;
-    return combined & 0x1FFFF;
-  }
-  return 0xFFFFFFFF;
-}

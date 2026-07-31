@@ -14,18 +14,25 @@ void sendCurrent(bool sendTime = false){
     //Send the current time
     CurrentStates["time"] = rtc.getEpoch();
   }
-  if(State == "WELCOMING"){
+  if(WelcomeMode){
     CurrentStates["welcoming"] = true;
   } else{
     CurrentStates["welcoming"] = false;
   }
 
   CurrentStates["noNetwork"] = NoNetwork;
-  CurrentStates["state"] = State;
-  CurrentStates["channels"] = 1; //Always set to 1 for now. 
+  //Channel-related things;
+  CurrentStates["channels"] = ChannelCount;
+  JsonArray stateArray = CurrentStates["state"].to<JsonArray>();
+  JsonArray deniedReasonArray = CurrentStates["deniedReason"].to<JsonArray>();
+  JsonArray expirationArray = CurrentStates["currentAuthExpires"].to<JsonArray>();
+  for(int i = 0; i < ChannelCount; i++){
+    stateArray.add(State[i]);
+    deniedReasonArray.add(AuthReason[i]);
+    expirationArray.add(CurrentTapExpires[i]);
+  }
   CurrentStates["mode"] = InputMode;
   CurrentStates["denied"] = AccessDenied;
-  CurrentStates["deniedReason"] = AuthReason;
   CurrentStates["faultMessage"] = FaultReason;
   CurrentStates["startupMessage"] = ""; //Should be no startup message by the time we make it here.
   CurrentStates["identify"] = Identify;

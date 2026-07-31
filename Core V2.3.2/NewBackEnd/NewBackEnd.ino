@@ -1,6 +1,6 @@
 //Re-write of ACS Core firmware to make it simpler, faster. Uses just one mega loop for everything.
 
-#define Version "2.1.3"
+#define Version "2.1.4"
 #define Hardware "2.3.2-LE"
 #define DebugMode 1
 
@@ -878,7 +878,6 @@ void NetworkConnect(){
         }
       } else{
         //The hashes did not match, potental attack in progress!
-        State = "FAULT";
         NoNetwork = true;
         Serial.println(F("CRITICAL ERROR: ATTEMPT WAS MADE TO LOAD BAD TLS CERTS!"));
         Message = "Attmpted to load cert with bad hash?";
