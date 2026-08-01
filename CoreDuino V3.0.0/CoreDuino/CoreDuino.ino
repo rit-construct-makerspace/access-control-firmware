@@ -80,6 +80,7 @@
   #include <Wire.h>
   #include <mbedtls/md.h>          //Inherent to ESP32
   #include <stdio.h>
+  #include <esp_crc.h>  // ESP32 built-in CRC header
 
   #include "Device.h" //Struct definition in a header so it can be used in multiple places and in function calls
 
@@ -138,7 +139,7 @@ unsigned long long NextStatusTime = 0;
 //Variables - Config
 String SerialNumber;
 String Password;
-String SSID;
+String SSID = "";
 String Server;
 String Key;
 int MakerspaceID;
@@ -223,6 +224,10 @@ byte InterruptCount = 0; //Counts how many times we read an interrupt as we cycl
 //Variables related to any connected screen;
 bool UpdateScreen = false;
 String FaultReason = "";
+String HMIMachineName[4] = {"","","",""};
+String HMIMakerspace;
+String HMIDeviceName;
+String HMIRole;
 
 void IRAM_ATTR onTimerCallback(void* arg); //IRAM task for the Hobbs counter
 
@@ -670,6 +675,7 @@ void loop() {
         infoFields.add("HOBBS_TIME");
       }
       infoFields.add("FLAGS"); //Check our flags, mostly for welcoming
+      infoFields.add("HMI"); //Request human-readable info for any attached interface.
       String InfoPayload;
       serializeJson(outgoing, InfoPayload);
       outgoing.clear();
@@ -796,8 +802,19 @@ void loop() {
           int ch = item["channelID"] | -1; 
           
           if (ch >= 0 && ch < ChannelCount) {
-            HobbsSeconds[ch] = item["hobbsTime"].as<unsigned long>(); // Adjust variable name/type as needed
+            HobbsSeconds[ch] = item["hobbsTime"].as<unsigned long>(); 
           }
+        }
+      }
+      //Process the HMI info:
+      if(incoming.containsKey("hmi")){
+        HMIRole = incoming["hmi"]["role"].as<String>();
+        HMIDeviceName = incoming["hmi"]["deviceName"].as<String>();
+        HMIMakerspace = incoming["hmi"]["makerspace"].as<String>();
+        JsonArray channels = incoming["hmi"]["channels"];
+        for (JsonObject channel : channels){
+          int channelID = channel["channelID"];
+          HMIMachineName[channelID] = channel["pairedEntity"].as<String>();
         }
       }
       //Set the time;
@@ -807,6 +824,7 @@ void loop() {
         Serial.print(F("Time set to: "));
         Serial.println(rtc.getDateTime(true));
       }
+      //Set flags:
       if(incoming.containsKey("flags")){
         JsonObject flagObj = incoming["flags"].as<JsonObject>();
         if(flagObj.containsKey("lockWhenIdle")){
@@ -1060,6 +1078,7 @@ uint64_t millis64(){
 
 void NetworkConnect(){
   //Check the WiFi first
+  byte TLSRetryCount = 0; //Tracks how many failed TLS attempts we had in a row.
   retryNetwork:
   if(WiFi.status() != WL_CONNECTED){
     WiFi.reconnect(); //Force a manual connect attempt
@@ -1100,6 +1119,15 @@ void NetworkConnect(){
       return;
     } else{
       Serial.println(F("Server is online. Bad TLS cert?"));
+      Serial.println(F("Trying TLS certs again to make sure..."));
+      if(TLSRetryCount <=5){
+        Serial.print(F("That was attempt: "));
+        Serial.print(TLSRetryCount);
+        Serial.println(F("/5 attempts before we get new certs."));
+        delay(1000);
+        TLSRetryCount++;
+        goto retryNetwork;
+      }
       Serial.println(F("Getting new TLS certs from server."));
       networkclient.setInsecure();
       networkclient.connect(Server.c_str(), 443);
@@ -1153,7 +1181,7 @@ void NetworkConnect(){
       //Before we accept the new cert, we should check the SHA-256
       String SHATLS = TLSJson["sha"];
       String NewCert = TLSJson["cert"];
-      //The SHA is the hash of [SerialNumber]:[Password]:[Cert]
+      //The SHA is the hash of "[SerialNumber]:[Password]:[Cert]""
       Serial.print(F("JSON Hash:       ")); Serial.println(SHATLS);
       Serial.print(F("Calculated Hash: ")); Serial.println(getSHA256(SerialNumber + ":" + Key + ":" + NewCert));
       if(SHATLS.equalsIgnoreCase(getSHA256(SerialNumber + ":" + Key + ":" + NewCert))){
@@ -1187,8 +1215,8 @@ void NetworkConnect(){
         NoNetwork = true;
         FaultReason = "TLS hash does not match!";
         Serial.println(F("CRITICAL ERROR: ATTEMPT WAS MADE TO LOAD BAD TLS CERTS!"));
-        Message = "Attmpted to load cert with bad hash?";
-        MessageToSend = true;
+        //Message = "Attmpted to load cert with bad hash?";
+        //MessageToSend = true;
         delay(1000);
         goto retryNetwork;
       }

@@ -7,30 +7,44 @@ This task is responsible for talking with any connected screen.
 
 */
 
-void sendCurrent(bool sendTime = false){
+void sendCurrent(bool sendOneTime = false){
   //Sends the common regular information the screen needs
   JsonDocument CurrentStates;
-  if(sendTime){
+  if(sendOneTime){
     //Send the current time
     CurrentStates["time"] = rtc.getEpoch();
+    //Send WiFi credentials
+    if(SSID != ""){
+      //We have valid WiFi credentials to send;
+      CurrentStates["WiFi-Available"] = true;
+      CurrentStates["WiFi-SSID"] = SSID;
+      CurrentStates["WiFi-Password"] = Password;
+      CurrentStates["TLS-Cert"] = RootCert;
+    } else{
+      CurrentStates["WiFi-Available"] = false;
+    }
   }
   if(WelcomeMode){
     CurrentStates["welcoming"] = true;
   } else{
     CurrentStates["welcoming"] = false;
   }
-
   CurrentStates["noNetwork"] = NoNetwork;
   //Channel-related things;
   CurrentStates["channels"] = ChannelCount;
   JsonArray stateArray = CurrentStates["state"].to<JsonArray>();
   JsonArray deniedReasonArray = CurrentStates["deniedReason"].to<JsonArray>();
   JsonArray expirationArray = CurrentStates["currentAuthExpires"].to<JsonArray>();
+  JsonArray machineArray = CurrentStates["deviceNames"].to<JsonArray>();
   for(int i = 0; i < ChannelCount; i++){
     stateArray.add(State[i]);
     deniedReasonArray.add(AuthReason[i]);
     expirationArray.add(CurrentTapExpires[i]);
+    machineArray.add(HMIMachineName[i]);
   }
+  CurrentStates["makerspace"] = HMIMakerspace;
+  CurrentStates["deviceName"] = HMIDeviceName;
+  CurrentStates["ACSRole"] = HMIRole;
   CurrentStates["mode"] = InputMode;
   CurrentStates["denied"] = AccessDenied;
   CurrentStates["faultMessage"] = FaultReason;
@@ -38,7 +52,12 @@ void sendCurrent(bool sendTime = false){
   CurrentStates["identify"] = Identify;
   CurrentStates["url"] = Server;
   CurrentStates["setRotation"] = getTargetRotation();
+  CurrentStates["crc"] = 0; //Temporary until we calculate CRC.
   String CurrentToSend;
+  serializeJson(CurrentStates, CurrentToSend);
+  //Calculate the CRC with the "crc" field set to 0;
+  uint32_t checksum = esp_crc32_le(0, (const uint8_t*)CurrentToSend.c_str(), CurrentToSend.length());
+  CurrentStates["crc"] = checksum;
   serializeJson(CurrentStates, CurrentToSend);
   Serial0.println(CurrentToSend);
   Serial0.flush();
