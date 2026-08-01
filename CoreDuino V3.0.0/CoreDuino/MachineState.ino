@@ -147,14 +147,14 @@ void MachineState(void *pvParameters){
           SendWelcome = 1;
           WelcomingPending = 1;
         }
-        if(anyChannelIs("IDLE") && !NoNetwork){
+        if((anyChannelIs("IDLE") || anyChannelIs("UNLOCKED")) && !NoNetwork){
           //Let's check for auth with the server
           PendingApproval = true;
           SendAuth = true;
-        } else if(!anyChannelIs("IDLE") && (anyChannelIs("UNLOCKED") || anyChannelIs("ALWAYS_ON"))){
-          //Logic: If there are no channels in IDLE that the user could unlock, but something is already unlocked or always on, beep to confirm.
+        } else if(!anyChannelIs("IDLE") && (!anyChannelIs("UNLOCKED") || anyChannelIs("ALWAYS_ON"))){
+          //Logic: If there are no channels in a state that the user could unlock, but something is already unlocked or always on, beep to confirm.
           SingleBeep = true;
-        } else if(anyChannelIs("IDLE") && NoNetwork){
+        } else if((anyChannelIs("IDLE") || anyChannelIs("UNLOCKED")) && NoNetwork){
           //Fault beep and deny the user due to no network
           FaultBeep = true;
           AccessDenied = true;

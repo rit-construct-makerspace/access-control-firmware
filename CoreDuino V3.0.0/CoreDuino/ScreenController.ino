@@ -36,11 +36,20 @@ void sendCurrent(bool sendOneTime = false){
   JsonArray deniedReasonArray = CurrentStates["deniedReason"].to<JsonArray>();
   JsonArray expirationArray = CurrentStates["currentAuthExpires"].to<JsonArray>();
   JsonArray machineArray = CurrentStates["deviceNames"].to<JsonArray>();
+  JsonArray durationArray = CurrentStates["durations"].to<JsonArray>();
+  JsonArray hobbsArray = CurrentStates["hobbsSeconds"].to<JsonArray>();
   for(int i = 0; i < ChannelCount; i++){
     stateArray.add(State[i]);
     deniedReasonArray.add(AuthReason[i]);
-    expirationArray.add(CurrentTapExpires[i]);
+    unsigned long TapExpirationLeft = CurrentTapExpires[i] - millis64();
+    if(TapExpirationLeft > 0){
+      expirationArray.add(TapExpirationLeft);
+    } else{
+      expirationArray.add(0);
+    }
     machineArray.add(HMIMachineName[i]);
+    durationArray.add(TapDuration[i]*1000);
+    hobbsArray.add(HobbsSeconds[i]);
   }
   CurrentStates["makerspace"] = HMIMakerspace;
   CurrentStates["deviceName"] = HMIDeviceName;
@@ -48,6 +57,7 @@ void sendCurrent(bool sendOneTime = false){
   CurrentStates["mode"] = InputMode;
   CurrentStates["denied"] = AccessDenied;
   CurrentStates["faultMessage"] = FaultReason;
+  CurrentStates["button"] = ResetLED; //ResetLED is a bool normally used for lighting animations, but it tracks with the button. 
   CurrentStates["startupMessage"] = ""; //Should be no startup message by the time we make it here.
   CurrentStates["identify"] = Identify;
   CurrentStates["url"] = Server;
