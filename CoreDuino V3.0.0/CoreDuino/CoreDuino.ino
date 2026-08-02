@@ -791,8 +791,18 @@ void loop() {
           // Bounds check to avoid crashing the MCU with array out-of-bounds
           if (id >= 0 && id < ChannelCount) {
             State[id] = item["state"].as<String>();
+            StateChangeReason[id] = "COMMANDED";
+            if(State[id] == "FAULT"){
+              //We don't go back to a fault state;
+              State[id] = "LOCKED_OUT";
+            }
+            if (State[id] == "UNLOCKED" || State[id] == "ALWAYS_ON") {
+              //We don't go back to an unlocked state;
+              State[id] = "IDLE";
+            }
           }
         }
+        SingleBeep = 1;
       }
 
       // Process the "hobbsTime" array
@@ -855,28 +865,6 @@ void loop() {
           }
         }
       }
-      if(incoming.containsKey("state")){
-        //WARNING: Assumes that all channels are sent (should be the case);
-        for(int i = 0; i < ChannelCount; i++){
-          if(State[i] == "UNKNOWN"){
-            State[i] = incoming["state"][i]["state"] | "UNKNOWN";
-            StateChangeReason[i] = "COMMANDED";
-            //We don't go back into these states from an info response.
-            if(State[i] == "UNLOCKED" || State[i] == "ALWAYS_ON"){
-              State[i] = "IDLE";
-            }
-            if(State[i] == "FAULT"){
-              State[i] = "LOCKED_OUT";
-            }
-            Serial.print(F("State of channel "));
-            Serial.print(i);
-            Serial.print(F(" set to > "));
-            Serial.print(State[i]);
-            Serial.println(F(" < on startup."));
-          }
-        }
-        SingleBeep = 1;
-      }
       if(incoming.containsKey("hobbsTime")){
         for(int i = 0; i < ChannelCount; i++){
           HobbsSeconds[i] = incoming["hobbsTime"][i]["hobbsTime"];
@@ -896,10 +884,10 @@ void loop() {
       NewCommand = 0;
       deserializeJson(incoming, CommandResponse);
       //State change command
-      if(incoming.containsKey("toState")){
+      if(incoming["toState"].is<JsonArray>()){
         JsonArray toStateArray = incoming["toState"].as<JsonArray>();
         for (JsonVariant v : toStateArray) {
-          int ch = v["channelID"] | 0;
+          int ch = v["id"] | -1;
           if (ch >= 0 && ch < ChannelCount) {
             State[ch] = v["state"] | "UNKNOWN";
             if(State[ch] == "UNLOCKED" && !CardPresent){

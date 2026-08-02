@@ -7,21 +7,32 @@ void MachineState(void *pvParameters){
     //Temporarily disabled due to too many false positives
     /*
     if(OverTemp || SealBroken){
-      if(State != "FAULT"){
+      //Check if every channel is in "FAULT";
+      byte faultCount = 0;
+      for( int i = 0; i < ChannelCount; i++){
+        if(State[i] == "FAULT"){
+          faultCount++;
+        }
+      }
+      if(ChannelCount != faultCount){
         //This is our first time going to the fault state
-        State = "FAULT";
-        StateChangeReason = "FAULT";
+        String SetFaultReason;
+        SetFaultReason = "FAULT";
         Message = "ACS Fault!";
         FaultReason = "ACS Fault!";
         if(OverTemp){
-          StateChangeReason = "OVER_TEMP";
+          SetFaultReason = "OVER_TEMP";
           Message = "Overtemperature!";
           FaultReason = "Overtemperature!";
         }
         if(SealBroken){
-          StateChangeReason = "INTEGRITY_FAIL";
+          SetFaultReason = "INTEGRITY_FAIL";
           Message = "Bus Integrity Broken!";
           FaultReason = "Bus Integrity!";
+        }
+        for (int i = 0; i < ChannelCount; i++) {
+          State[i] = "FAULT";
+          StateChangeReason[i] = SetFaultReason;
         }
         MessageToSend = 1;
         UpdateScreen = true;
