@@ -118,6 +118,10 @@ String FoundUID = ""; //Stores the last-found UID
 bool ChangeBeep = 0; //Lets the frontend know to beep.
 bool FaultBeep = 0; //We use the 3 beep normally for fault to indicate cannot welcome/auth due to no network, to differentiate from welcome/auth denied.
 
+//Variables - Hours
+JsonDocument HoursDoc;      // Global document to hold the latest hours
+int MakerspaceNumber = 36;  // number from the makerspace's URL. We need to hard-code this for now.
+
 //Variables - System State
 bool Identify = 0; //Set to 1 to play an identification alarm/buzzer.
 String InputMode = "INSERT"; //Stores how we ingest cards.
@@ -228,6 +232,7 @@ String HMIMachineName[4] = {"","","",""};
 String HMIMakerspace;
 String HMIDeviceName;
 String HMIRole;
+String StationName;
 
 void IRAM_ATTR onTimerCallback(void* arg); //IRAM task for the Hobbs counter
 
@@ -378,6 +383,18 @@ void setup() {
   }
   InterruptResponse = settings.getString("IntResp");
 
+  if(!settings.isKey("StationName")){
+    //StationName is new in 2.1.4, set to "Generic ACS" if no value.
+    settings.putString("StationName", "Generic MakeACS");
+  }
+  StationName = settings.getString("StationName");
+
+  if(!settings.isKey("SpaceNum")){
+    //MakerspaceNumber (SpaceNum) is new in 2.1.4, set to 36 (Atrium Makerspace) if no value.
+    settings.putInt("SpaceNum", 36);
+  }
+  MakerspaceNumber = settings.getInt("SpaceNum");
+
   Server = settings.getString("Server");
   Password = settings.getString("Password");
   if(Password.equalsIgnoreCase("null")){
@@ -458,7 +475,7 @@ void setup() {
   mqtt.begin(socket); //Enable MQTT on the websocket
 
   NetworkConnect();
-
+  
   //If we cared about why we restarted, this'd be the place to handle it.
 
   //Start the NFC reader, make sure it is working as expected. 
@@ -1396,6 +1413,22 @@ void CheckforConfig(){
     } else{
       Serial.println(F("Kept old InputMode"));
     }
+    String NewStationName = ConfigJson["StationName"];
+    if(ConfigJson["StationName"].is<String>()){
+      Serial.print(F("Set Station Name to: "));
+      Serial.println(NewStationName);
+      settings.putString("StationName", NewStationName);
+    } else{
+      Serial.println(F("Kept old StationName"));
+    }
+    int NewMakerspaceNumber = ConfigJson["MakerspaceNumber"];
+    if(ConfigJson["MakerspaceNumber"].is<int>()){
+      Serial.println(F("Set makerspace number to: "));
+      Serial.println(NewMakerspaceNumber);
+      settings.putInt("SpaceNum", NewMakerspaceNumber);
+    } else{
+      Serial.println(F("Kept old MakerspaceNumber."));
+    }
     String NewInterruptResponse = ConfigJson["InterruptResponse"];
     if(ConfigJson["InterruptResponse"].is<String>()){
       Serial.print(F("Set interrupt response to: "));
@@ -1495,3 +1528,4 @@ void IRAM_ATTR onTimerCallback(void* arg) {
     }
   }
 }
+
