@@ -1,6 +1,6 @@
 //ACS V3.0.0 Hardware, running CoreDuino code.
 
-#define Version "2.1.4"
+#define Version "2.2.0"
 #define Hardware "3.0.0"
 
 //How often you send a status message, in milliseconds
@@ -123,6 +123,7 @@ JsonDocument HoursDoc;      // Global document to hold the latest hours
 int MakerspaceNumber = 36;  // number from the makerspace's URL. We need to hard-code this for now.
 
 //Variables - System State
+String HWVer = "0.0.0"; //Hardware version, loaded from memory for use in OTA.
 bool Identify = 0; //Set to 1 to play an identification alarm/buzzer.
 String InputMode = "INSERT"; //Stores how we ingest cards.
 String DefaultInputMode = "INSERT"; //Stores how we should ingest cards, when not in welcome mode.
@@ -352,6 +353,13 @@ void setup() {
     }
   }
 
+  if(!settings.isKey("HWVer")){
+    //HWVer is new in 2.2.0, so firmware can run in similar hardware.
+    //Assume any deployed hardware is 3.0.0
+    settings.putString("HWVer", Hardware);
+  }
+  HWVer = settings.getString("HWVer");
+
   if(!settings.isKey("ChannelCount")){
     //ChannelCount is new in 2.1.4, set to 1 if no value
     settings.putString("ChannelCount", "1");
@@ -461,7 +469,7 @@ void setup() {
 
   //Check for an OTA update, install it if there is one present.
   ota.SetCallback(callback_percent);
-  ota.SetConfig(Hardware);
+  ota.SetConfig(HWVer);
   ota.OverrideDevice("ACS Core");
   ota.EnableSerialDebug();
   int otaresp = ota.CheckForOTAUpdate("https://raw.githubusercontent.com/rit-construct-makerspace/access-control-firmware/refs/heads/main/otadirectory.json", Version);

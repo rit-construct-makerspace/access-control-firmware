@@ -4,9 +4,6 @@ The Bus Manager is responsible for everything OneWire related
   * Checking for bus integrity
 */
 
-#define MAX_ALLOWED_MISSES 6 // Number of consecutive missed scans before faulting
-int missingScanCount = 0;    // Tracks consecutive failures
-
 void BusManager(void *pvParameters){
   unsigned long long OneWireTime = 0;      //Next time we should check the bus.
 
@@ -24,8 +21,10 @@ void BusManager(void *pvParameters){
       SealBroken = false;
       //Set state lockout;
       for(int i = 0; i < ChannelCount; i++){
-        State[i] = "LOCKED_OUT";
-        StateChangeReason[i] = "LOCAL";
+        if(State[i] == "FAULT"){
+          State[i] = "LOCKED_OUT";
+          StateChangeReason[i] = "LOCAL";
+        }
       }
       //Immediately re-run the bus scan;
       OneWireTime = 0;
@@ -189,88 +188,55 @@ void saveInventoryToFile() {
 
 void checkBusHealth() {
   byte addr[8];
-  bool foundExpected[10] = {false}; 
   bool unexpectedDeviceFound = false;
-  bool missingExpectedDevice = false;
 
   // --- 0. Physical Presence Check ---
   byte busEmpty = ds.reset();
   if (busEmpty == 0) {
-    if (deviceCount > 0) {
-      Serial.println("SECURITY ALERT: Entire bus is unresponsive!");
-      missingExpectedDevice = true;
-    } else {
-      Serial.println("Bus Health: Verified Empty & Stable.");
-      return; 
+    // If the bus is empty, there are definitely no unexpected devices.
+    if (SealBroken) {
+      Serial.println("Bus Health Restored. No unexpected devices present.");
     }
-  } else {
-    // --- 1. Full Bus Scan & Address Matching ---
-    ds.reset_search();
-    
-    while (ds.search(addr)) {
-      if (OneWire::crc8(addr, 7) == addr[7]) {
-        bool addressMatched = false;
-        
-        // Compare found address against our known inventory
-        for (int i = 0; i < deviceCount; i++) {
-          if (memcmp(addr, sensorList[i].address, 8) == 0) {
-            foundExpected[i] = true;
-            addressMatched = true;
-            break;
-          }
-        }
-        
-        if (!addressMatched) {
-          Serial.print("SECURITY ALERT: Unexpected device detected: ");
-          printAddress(addr);
-          Serial.println();
-          unexpectedDeviceFound = true;
-        }
-      } else {
-        Serial.println("Warning: Communication noise detected (CRC Mismatch)");
-      }
-    }
+    return;
+  }
 
-    // --- 2. Check for Missing Expected Devices ---
-    for (int i = 0; i < deviceCount; i++) {
-      if (!foundExpected[i]) {
-        missingExpectedDevice = true;
-        Serial.print("Warning: Expected device missing this scan: ");
-        printAddress(sensorList[i].address);
-        Serial.println();
+  // --- 1. Full Bus Scan & Address Matching ---
+  ds.reset_search();
+
+  while (ds.search(addr)) {
+    if (OneWire::crc8(addr, 7) == addr[7]) {
+      bool addressMatched = false;
+
+      // Compare found address against our known inventory
+      for (int i = 0; i < deviceCount; i++) {
+        if (memcmp(addr, sensorList[i].address, 8) == 0) {
+          addressMatched = true;
+          break;
+        }
       }
+
+      if (!addressMatched) {
+        Serial.print("SECURITY ALERT: Unexpected device detected: ");
+        printAddress(addr);
+        Serial.println();
+        unexpectedDeviceFound = true;
+      }
+    } else {
+      Serial.println("Warning: Communication noise detected (CRC Mismatch)");
     }
   }
 
-  // --- 3. State Management ---
+  // --- 2. State Management ---
   if (unexpectedDeviceFound) {
     // Immediate failure for unexpected hardware
     if (!SealBroken) {
       Serial.println("BUS SEAL RUPTURED! (Unexpected hardware detected)");
       SealBroken = true;
     }
-    missingScanCount = 0; 
-  } 
-  else if (missingExpectedDevice) {
-    // Incremental failure for missing hardware
-    missingScanCount++;
-    Serial.print("Missing device scan count: ");
-    Serial.print(missingScanCount);
-    Serial.print(" / ");
-    Serial.println(MAX_ALLOWED_MISSES);
-
-    if (missingScanCount >= MAX_ALLOWED_MISSES && !SealBroken) {
-      Serial.println("BUS SEAL RUPTURED! (Device unresponsive for too long)");
-      SealBroken = true;
-    }
-  } 
-  else {
-    // Perfect scan: All expected devices present, no unexpected devices
-    missingScanCount = 0; // Reset the tolerance counter
-    
+  } else {
+    // Perfect scan: No unexpected devices found
     if (SealBroken) {
-      Serial.println("Bus Health Restored. All devices verified.");
-      SealBroken = false;
+      Serial.println("Bus Health Restored? All active devices verified.");
     }
   }
 }

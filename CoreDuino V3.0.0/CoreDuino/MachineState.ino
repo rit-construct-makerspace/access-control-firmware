@@ -4,8 +4,6 @@ void MachineState(void *pvParameters){
     delay(50);
 
     //Step 1.1: Check for any reason we should be in a fault state
-    //Temporarily disabled due to too many false positives
-    /*
     if(OverTemp || SealBroken){
       //Check if every channel is in "FAULT";
       byte faultCount = 0;
@@ -38,7 +36,6 @@ void MachineState(void *pvParameters){
         UpdateScreen = true;
       }
     }
-    */
 
     //Interrupt Manager:
     if(!IsInterrupted){
