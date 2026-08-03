@@ -11,6 +11,8 @@ This task is responsible for talking with any connected screen.
 unsigned long long CheckAnnouncements = 600000;  //How often to check for announcements
 JsonDocument AnnouncementsDoc;  // Global document to hold the latest announcements
 
+unsigned long TodayClosingEpoch = 0;
+
 void sendCurrent(bool sendRarely = false, bool sendFrequently = true){
   //Sends the common regular information the screen needs
   JsonDocument CurrentStates;
@@ -63,6 +65,7 @@ void sendCurrent(bool sendRarely = false, bool sendFrequently = true){
       CurrentStates["welcoming"] = false;
     }
     CurrentStates["noNetwork"] = NoNetwork;
+    CurrentStates["motd"] = motd;
     //Channel-related things;
     CurrentStates["channels"] = ChannelCount;
     JsonArray stateArray = CurrentStates["state"].to<JsonArray>();
@@ -132,6 +135,9 @@ void SceenController(void *pvParameters){
         CheckAnnouncements = millis64() + 600000;
       }
     }
+
+    //If we are approaching closing time, send an motd;
+    updateClosingMOTD();
 
     //Check if it is time for a regular update of the screen
     if(NextScreenUpdate <= millis64()){
@@ -321,6 +327,8 @@ bool fetchHours() {
         JsonArray hoursData = tempDoc["obj"];
         HoursDoc["list"] = hoursData;
 
+        calculateTodayClosingEpoch();
+
         Serial.println("Hours updated successfully.");
         HoursUpdated = true;
       }
@@ -333,5 +341,93 @@ bool fetchHours() {
       HoursUpdated = false;
     }
     return HoursUpdated;
+  }
+}
+
+void calculateTodayClosingEpoch() {
+  // If no hours exist, or the array is empty, reset and abort
+  if (HoursDoc["list"].isNull() || HoursDoc["list"].size() == 0) {
+    TodayClosingEpoch = 0;
+    return;
+  }
+
+  // Grab index 0 (today)
+  JsonObject todayHours = HoursDoc["list"][0];
+
+  // If the shop is closed today, reset and abort
+  if (todayHours["closed"].as<bool>()) {
+    TodayClosingEpoch = 0;
+    return;
+  }
+
+  // Extract the time string (e.g., "19:00:00")
+  String closeTimeStr = todayHours["close"].as<String>();
+  if (closeTimeStr == "") {
+    TodayClosingEpoch = 0;
+    return;
+  }
+
+  int closeHour = closeTimeStr.substring(0, 2).toInt();
+  int closeMin = closeTimeStr.substring(3, 5).toInt();
+  int closeSec = closeTimeStr.substring(6, 8).toInt();
+
+  // Get the current local epoch
+  time_t now = rtc.getEpoch();
+
+  // Break it into components (gmtime is safe here since 'now' is already local)
+  struct tm* timeinfo = gmtime(&now);
+
+  // Overwrite the hours, minutes, and seconds with the closing time
+  timeinfo->tm_hour = closeHour;
+  timeinfo->tm_min = closeMin;
+  timeinfo->tm_sec = closeSec;
+
+  // Re-encode back into an epoch timestamp
+  TodayClosingEpoch = mktime(timeinfo);
+}
+
+void updateClosingMOTD() {
+  // If we don't have a valid closing time today (closed, or network error), do nothing.
+  if (TodayClosingEpoch == 0) {
+    motd = "";
+    return;
+  }
+
+  unsigned long currentEpoch = rtc.getEpoch();
+
+  // Handle the case where we are exactly at or past closing time
+  if (currentEpoch >= TodayClosingEpoch) {
+    unsigned long secondsSinceClose = currentEpoch - TodayClosingEpoch;
+    // Show the closed message for exactly 60 seconds after closing
+    if (secondsSinceClose <= 240) {
+      motd = "ALERT: The shop is now closed. Please make your way towards the exit immediately, and do not forget anything.";
+    } else {
+      motd = "";  // Revert to empty after 1 minute
+    }
+    return;
+  }
+
+  // Handle future closing times
+  unsigned long secondsUntilClose = TodayClosingEpoch - currentEpoch;
+
+  // 1 Hour (3600 seconds) - window is 3600 down to 3540
+  if (secondsUntilClose > 3400 && secondsUntilClose <= 3600) {
+    motd = "Reminder: The shop is closing in 1 hour.";
+  }
+  // 30 Minutes (1800 seconds) - window is 1800 down to 1740
+  else if (secondsUntilClose > 1640 && secondsUntilClose <= 1800) {
+    motd = "Warning: The shop is closing in 30 minutes. Please start wrapping up.";
+  }
+  // 15 Minutes (900 seconds) - window is 900 down to 840
+  else if (secondsUntilClose > 800 && secondsUntilClose <= 900) {
+    motd = "Warning: The shop is closing in 15 minutes. Please start cleaning up your area.";
+  }
+  // 5 Minutes (300 seconds) - window is 300 down to 240
+  else if (secondsUntilClose > 200 && secondsUntilClose <= 300) {
+    motd = "Warning: The shop is closing in 5 minutes. Please wrap up cleaning and head towards the exits.";
+  }
+  // Outside of these 60-second windows, clear the message
+  else {
+    motd = "";
   }
 }

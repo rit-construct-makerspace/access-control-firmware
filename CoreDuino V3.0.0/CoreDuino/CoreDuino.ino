@@ -50,7 +50,9 @@
   #include <ArduinoJson.h>          //Version 7.3.0 | Source: https://github.com/bblanchon/ArduinoJson
   #include <ArduinoJson.hpp>        //Version 7.3.0 | Source: https://github.com/bblanchon/ArduinoJson
   //WARNING: The original ESP32-OTA-Pull will not work with this code. Use the forked version linked below!
-  #include <ESP32OTAPull.h>         //Version 1.0.1 | Source: https://github.com/JimSHED/ESP32-OTA-Pull-GitHub
+  //#include <ESP32OTAPull.h>         //Version 1.0.1 | Source: https://github.com/JimSHED/ESP32-OTA-Pull-GitHub
+  //V2.2.0: Testing new OTA library we will have locally;
+  #include "ESP32OTAPullSecure.h"
   #include <WiFiClientSecure.h>     //Version 3.1.1 | Inherent to ESP32 Arduino
   #include <HTTPClient.h>           //Version 3.1.1 | Inherent to ESP32 Arduino
   #include <Preferences.h>          //Version 3.1.1 | Inherent to ESP32 Arduino
@@ -159,8 +161,6 @@ bool NewCommand = 0;
 bool NewPing = 1;
 bool SendPing = 0;
 unsigned long long NextPingTime = 0;
-bool OTAValid = 0;
-bool OTALocked = 0;
 bool NewWelcome = 0;
 String WelcomeResponse;
 bool WelcomingPending = 0;
@@ -234,6 +234,7 @@ String HMIMakerspace;
 String HMIDeviceName;
 String HMIRole;
 String StationName;
+String motd;
 
 void IRAM_ATTR onTimerCallback(void* arg); //IRAM task for the Hobbs counter
 
@@ -403,6 +404,15 @@ void setup() {
   }
   MakerspaceNumber = settings.getInt("SpaceNum");
 
+  //Get the reset reason;
+  if(!settings.isKey("ResetReason")){
+    //We don't know why we reset?
+
+  } else{
+    ResetReason = settings.getString("ResetReason");
+    settings.remove("ResetReason"); //So we know we read it.
+  }
+
   Server = settings.getString("Server");
   Password = settings.getString("Password");
   if(Password.equalsIgnoreCase("null")){
@@ -443,41 +453,63 @@ void setup() {
   WiFi.begin(SSID, Password);
   WiFi.setSleep(false);
   WiFi.setAutoReconnect(true);
-  if(WiFi.status() != WL_CONNECTED){
-    WiFi.reconnect(); //Force a manual connect attempt
+  unsigned long WiFiStart = millis64();
+
+  if (WiFi.status() != WL_CONNECTED) {
+    WiFi.reconnect();  //Force a manual connect attempt
     Serial.println(F("Waiting for first WiFi connect"));
-    while(WiFi.status() != WL_CONNECTED){
+    while (WiFi.status() != WL_CONNECTED && millis64() - WiFiStart < 15000) {
       Serial.print(".");
       delay(500);
     }
   }
-  Serial.println(F("WiFi connected."));
-  
-  sendStartup("WiFi Started.");
-  //Also get rid of "No NET" on screen
-  JsonDocument NoNetStart;
-  NoNetStart["noNetwork"] = false;
-  String NoNetToSend;
-  serializeJson(NoNetStart, NoNetToSend);
-  Serial0.println(NoNetToSend);
 
-  delay(500);
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println(F("WiFi connected."));
+    sendStartup("WiFi Started.");
 
-  sendStartup("Checking for OTA...");
-  Serial.println(F("Checking for OTA..."));
+    // Also get rid of "No NET" on screen
+    JsonDocument NoNetStart;
+    NoNetStart["noNetwork"] = false;
+    String NoNetToSend;
+    serializeJson(NoNetStart, NoNetToSend);
+    Serial0.println(NoNetToSend);
 
+    delay(500);
 
-  //Check for an OTA update, install it if there is one present.
-  ota.SetCallback(callback_percent);
-  ota.SetConfig(HWVer);
-  ota.OverrideDevice("ACS Core");
-  ota.EnableSerialDebug();
-  int otaresp = ota.CheckForOTAUpdate("https://raw.githubusercontent.com/rit-construct-makerspace/access-control-firmware/refs/heads/main/otadirectory.json", Version);
-  Serial.print(F("OTA Response: "));
-  Serial.println(errtext(otaresp));
+    // --- OTA LOGIC STARTS HERE ---
+    // We only verify and check for updates if we are actually online.
+    sendStartup("Checking for OTA...");
+    Serial.println(F("Checking for OTA..."));
 
-  //If we made it past the OTA, then we are ready for normal operation.
+    // 1. Configure all OTA settings first
+    ota.EnableSerialDebug();
+    //We use the same cert on our server as Github does.
+    ota.SetCACert(RootCert.c_str());
+    ota.SetCallback(callback_percent);
+    ota.SetConfig(HWVer.c_str()); 
+    ota.OverrideDevice("ACS Core");
 
+    // 2. Verify the current firmware can reach the JSON (or rollback)
+    const char* jsonUrl = "https://raw.githubusercontent.com/rit-construct-makerspace/access-control-firmware/refs/heads/main/otadirectory.json";
+    bool isValid = ota.VerifyOrRevert(jsonUrl, Version);
+
+    // 3. If validation succeeded, check for a new update
+    if (isValid) {
+      int otaresp = ota.CheckForOTAUpdate(jsonUrl, Version);
+      Serial.print(F("OTA Response: "));
+      Serial.println(errtext(otaresp));
+    }
+    // --- OTA LOGIC ENDS HERE ---
+
+  } else {
+    // Device is offline. We skip OTA checks entirely to avoid false rollbacks.
+    Serial.println(F("WiFi failed to connect after timeout! Booting offline."));
+    sendStartup("WiFi failed to start?");
+  }
+
+  // If we made it past the OTA (or skipped it because offline),
+  // then we are ready for normal operation.
   sendStartup("Connecting MQTT...");
 
   mqtt.begin(socket); //Enable MQTT on the websocket
@@ -736,21 +768,6 @@ void loop() {
       outgoing.clear();
       String WelcomeTopic = BaseTopic + "/welcome/request";
       publish(WelcomeTopic, WelcomePayload);
-    }
-
-    //Step 4.2: If we got a message, mark the OTA as secure.
-    if(OTAValid && !OTALocked){
-      //We got a message from the server, so we know the OTA is safe to keep.
-      OTALocked = 1; //No need to do this again.
-      const esp_partition_t *running_partition = esp_ota_get_running_partition();
-      esp_ota_img_states_t ota_state;
-      esp_ota_get_state_partition(running_partition, &ota_state);
-      if(ota_state == ESP_OTA_IMG_PENDING_VERIFY){
-        esp_ota_mark_app_valid_cancel_rollback();
-        Serial.println(F("OTA update marked valid."));
-        Message = "OTA update marked valid.";
-        MessageToSend = 1;
-      }
     }
 
     JsonDocument incoming; //Json doucment to parse the incoming
@@ -1258,7 +1275,6 @@ void NetworkConnect(){
     Serial.println(payload);
     AuthResponse = payload;
     NewAuth = 1;
-    OTAValid = 1;
   });
   String SubInfo = BaseTopic + "/info/response";
   mqtt.subscribe(SubInfo, 2, [](const String& payload, const size_t size) {
@@ -1266,7 +1282,6 @@ void NetworkConnect(){
     Serial.println(payload);
     InfoResponse = payload;
     NewInfo = 1;
-    OTAValid = 1;
   });
   String SubCommand = BaseTopic + "/command";
   mqtt.subscribe(SubCommand, 2, [](const String& payload, const size_t size) {
@@ -1274,7 +1289,6 @@ void NetworkConnect(){
     Serial.println(payload);
     CommandResponse = payload;
     NewCommand = 1;
-    OTAValid = 1;
   });
   String SubWelcome = BaseTopic + "/welcome/response";
   mqtt.subscribe(SubWelcome, 2, [](const String& payload, const size_t size) {
@@ -1282,13 +1296,11 @@ void NetworkConnect(){
     Serial.println(payload);
     WelcomeResponse = payload;
     NewWelcome = 1;
-    OTAValid = 1;
   });
   String SubPing = BaseTopic + "/ping";
   mqtt.subscribe(SubPing, 2, [](const String& payload, const size_t size) {
     //Serial.println(F("Ping Loopback."));
     NewPing = 1;
-    OTAValid = 1;
   });
 
   NoNetwork = false;
