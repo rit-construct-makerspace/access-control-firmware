@@ -4,6 +4,10 @@ The Bus Manager is responsible for everything OneWire related
   * Checking for bus integrity
 */
 
+//Busmanager has been disabled, will re-visit in future hardware that has stronger OneWire drivers.
+
+/*
+
 void BusManager(void *pvParameters){
   unsigned long long OneWireTime = 0;      //Next time we should check the bus.
 
@@ -133,7 +137,7 @@ void discoverDevices() {
 
     //NEW: Set the number of channels based on what type of device was found.
     //This is not working, need to figure out why later.
-    /*
+
     for(int i = 0; i < deviceCount; i++){
       //Iterate through each device
       if(sensorList[i].deviceMode == 1){
@@ -161,7 +165,7 @@ void discoverDevices() {
         }
       }
     }
-    */
+
   }
 }
 
@@ -358,3 +362,4 @@ bool readScratchpad(byte addr[8], byte* buffer) {
   return (OneWire::crc8(buffer, 8) == buffer[8]);
 }
 
+*/
