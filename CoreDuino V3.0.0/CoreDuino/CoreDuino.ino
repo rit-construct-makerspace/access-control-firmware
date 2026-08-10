@@ -526,6 +526,8 @@ void setup() {
   mfrc630_write_reg(0x2B, 0x06);
 
   //We should initialize the OneWire bus here, check for the right devices, etc.
+  //All onewire functionality disabled until further testing can be done.
+  /*
   Serial.println(F("Starting OneWire..."));
   sendStartup("Starting OneWire...");
   discoverDevices();
@@ -540,6 +542,8 @@ void setup() {
   checkBusHealth();
   updateBusTemperatures();
   refreshLiveAddressBuffer();
+
+  */
 
   //Initialize a precise timer for the Hobbs Timer
   Serial.println(F("Starting Critical Timer for Hobbs Time..."));
@@ -559,7 +563,7 @@ void setup() {
   }
 
   //Going forward, we will check the OneWire bus in a different task to make life easier.
-  xTaskCreate(BusManager, "BusManager", 4096, NULL, 5, NULL);
+  //xTaskCreate(BusManager, "BusManager", 4096, NULL, 5, NULL);
 
   //Time to loop!
   xTaskCreate(MachineState, "MachineState", 4096, NULL, 5, NULL);
