@@ -3,6 +3,9 @@ void MachineState(void *pvParameters){
   while(1){
     delay(50);
 
+
+    //Temp disable, false positives
+    /*
     //Step 1.1: Check for any reason we should be in a fault state
     if(OverTemp || SealBroken){
       //Check if every channel is in "FAULT";
@@ -36,6 +39,8 @@ void MachineState(void *pvParameters){
         UpdateScreen = true;
       }
     }
+
+    */
 
     //Interrupt Manager:
     if(!IsInterrupted){

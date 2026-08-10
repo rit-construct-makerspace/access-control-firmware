@@ -320,14 +320,27 @@ bool fetchHours() {
         Serial.println(error.c_str());
         HoursUpdated = false;
       } else {
-        // Clear the global doc before adding new data
         HoursDoc.clear();
 
-        // Copy the 'obj' array from the response to our global document
         JsonArray hoursData = tempDoc["obj"];
-        HoursDoc["list"] = hoursData;
+        
+        // --- UPDATED LOGIC: STATIC DAY NAMES ---
+        const char* dayNames[] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
+        
+        // Loop through the JSON array and add the day name based purely on its index
+        for (int i = 0; i < hoursData.size(); i++) {
+          JsonObject dayObj = hoursData[i];
+          
+          if (i < 7) { // Safety check to prevent out-of-bounds
+            dayObj["dayName"] = dayNames[i]; 
+          }
+        }
+        // ---------------------------------------
 
-        calculateTodayClosingEpoch();
+        HoursDoc["list"] = hoursData;
+        
+        // Update the MOTD closing epoch
+        calculateTodayClosingEpoch(); 
 
         Serial.println("Hours updated successfully.");
         HoursUpdated = true;
@@ -340,20 +353,27 @@ bool fetchHours() {
       Serial.println("Connection to server failed for hours.");
       HoursUpdated = false;
     }
-    return HoursUpdated;
   }
+  return HoursUpdated;
 }
 
 void calculateTodayClosingEpoch() {
-  // If no hours exist, or the array is empty, reset and abort
-  if (HoursDoc["list"].isNull() || HoursDoc["list"].size() == 0) {
+  // If no hours exist, or the array doesn't have a full week, reset and abort
+  if (HoursDoc["list"].isNull() || HoursDoc["list"].size() < 7) {
     TodayClosingEpoch = 0;
     return;
   }
+  
+  // 1. Get the current local epoch and break it down
+  time_t now = rtc.getEpoch();
+  struct tm * timeinfo = gmtime(&now); // RTC is local, so gmtime gives local struct
+  
+  // 2. Get today's day of the week (0 = Sunday, 1 = Monday, ..., 6 = Saturday)
+  int todayWday = timeinfo->tm_wday;   
 
-  // Grab index 0 (today)
-  JsonObject todayHours = HoursDoc["list"][0];
-
+  // 3. Grab today's hours using the weekday index!
+  JsonObject todayHours = HoursDoc["list"][todayWday];
+  
   // If the shop is closed today, reset and abort
   if (todayHours["closed"].as<bool>()) {
     TodayClosingEpoch = 0;
@@ -368,24 +388,17 @@ void calculateTodayClosingEpoch() {
   }
 
   int closeHour = closeTimeStr.substring(0, 2).toInt();
-  int closeMin = closeTimeStr.substring(3, 5).toInt();
-  int closeSec = closeTimeStr.substring(6, 8).toInt();
-
-  // Get the current local epoch
-  time_t now = rtc.getEpoch();
-
-  // Break it into components (gmtime is safe here since 'now' is already local)
-  struct tm* timeinfo = gmtime(&now);
+  int closeMin  = closeTimeStr.substring(3, 5).toInt();
+  int closeSec  = closeTimeStr.substring(6, 8).toInt();
 
   // Overwrite the hours, minutes, and seconds with the closing time
   timeinfo->tm_hour = closeHour;
-  timeinfo->tm_min = closeMin;
-  timeinfo->tm_sec = closeSec;
-
+  timeinfo->tm_min  = closeMin;
+  timeinfo->tm_sec  = closeSec;
+  
   // Re-encode back into an epoch timestamp
-  TodayClosingEpoch = mktime(timeinfo);
+  TodayClosingEpoch = mktime(timeinfo); 
 }
-
 void updateClosingMOTD() {
   // If we don't have a valid closing time today (closed, or network error), do nothing.
   if (TodayClosingEpoch == 0) {
