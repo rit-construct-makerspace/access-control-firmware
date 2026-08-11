@@ -1,4 +1,8 @@
-//ACS V3.0.0 Hardware, running CoreDuino code.
+//ACS V2.4.1 Hardware, running CoreDuino code.
+//This variant is a reduced version of the CoreDuino running hardware 3.0.0, to allow old hardware to be used as sign-in readers. It should not meant to be used for actual Accsss Control readers, although it should work for that purpose.
+
+//DUE TO LIMITED MEMORY:
+//Had to disable Serial and USB CDC to get TLS working.
 
 #define Version "2.1.9"
 #define Hardware "2.4.1-LE"
@@ -53,8 +57,6 @@
   #include <esp_mac.h>
   #include "esp_efuse.h"
   #include "esp_efuse_table.h"
-  #include "SparkFun_LIS2DH12.h" //Click here to get the library: http://librarymanager/All#SparkFun_LIS2DH12
-  #include <Wire.h>
   #include <mbedtls/md.h>          //Inherent to ESP32
   #include <stdio.h>
   #include <esp_crc.h>  // ESP32 built-in CRC header
@@ -69,8 +71,6 @@
   WebSocketsClient socket;
   MQTTPubSub::PubSubClient<1024> mqtt;
   Adafruit_NeoPixel CBI(1, LED, NEO_RGB + NEO_KHZ800);
-  SPARKFUN_LIS2DH12 accel;  
-  //USBCDC Serial;
 
 extern "C" bool verifyRollbackLater() {
   //This code is run to verify the OTA before actual setup.
@@ -78,42 +78,31 @@ extern "C" bool verifyRollbackLater() {
   return true;
 }
 
-NetworkClientSecure networkclient;
-
 String RootCert; //Stores the root certificate loaded from SPIFFS
 
 //Variables - Inter-Task Communication
 bool GamerMode = 1;  //Set to 0 to disable gamer mode, i.e. cycle RGB. Used during boot.
 bool RequestReset = 0; //Other tasks can set this to 1 to tell the ResetController to start a restart. 
 String ResetReason; //Tells the RestartController why we are restarting.
-bool Access = 0; //Used to tell the frontend to enable the access signal to the bus. 
 String UID; //Stores the UID of the user currently using the machine.
 String FoundUID = ""; //Stores the last-found UID
 bool ChangeBeep = 0; //Lets the frontend know to beep.
 bool FaultBeep = 0; //We use the 3 beep normally for fault to indicate cannot welcome/auth due to no network, to differentiate from welcome/auth denied.
 
-//Variables - Hours
-JsonDocument HoursDoc;      // Global document to hold the latest hours
-int MakerspaceNumber = 36;  // number from the makerspace's URL. We need to hard-code this for now.
-
 //Variables - System State
-String HWVer = "2.1.4"; //Hardware version, loaded from memory for use in OTA.
+String HWVer = Hardware; //Hardware version, loaded from memory for use in OTA.
 bool Identify = 0; //Set to 1 to play an identification alarm/buzzer.
-String InputMode = "INSERT"; //Stores how we ingest cards.
-String DefaultInputMode = "INSERT"; //Stores how we should ingest cards, when not in welcome mode.
-bool PendingApproval = 0; //Set to 1 when we have a card present that hasn't been authed yet, this is used for LED animations. 
-bool AccessDenied = 0; //Set to 1 when a card is present but has been denied, for LED animations. 
+String InputMode = "INSERT"; //Stores how we ingest cards. 
 bool CardPresent = 0; //Used to track if there is a card present in the machine.
-bool LockWhenIdle = 0;
 bool RestartWhenUnused = 0;
-bool WelcomeMode = 0; //If 1, we are acting as a welcome reader and not a normal reader.
+bool WelcomeMode = 1; //If 1, we are acting as a welcome reader and not a normal reader.
 bool NoNetwork = 1;
 bool ScheduledRestart = false; //Used to indicate it is time for a regular restart. 
 unsigned long long ScheduledRestartTime = 0; //Used to give the user some breathing room before a shutdown occurs.
-bool ImminentShutdown = false; //Used to let the frontend know to play a flashing warning light
 String TapUID; //Stores the UID between cycles for comparison when in tap mode.
 bool UserWelcomed = 0;
 unsigned long long NextStatusTime = 0;
+bool AccessDenied = false; //Lights/sounds trigger when a user is not welcome.
 
 //Variables - Config
 String SerialNumber;
@@ -124,8 +113,6 @@ String Key;
 int MakerspaceID;
 
 //Variables - MQTT Incoming
-String AuthResponse; 
-bool NewAuth = 0;
 String InfoResponse;
 bool NewInfo = 0;
 String CommandResponse;
@@ -144,8 +131,6 @@ bool MessageToSend = 0;
 bool LogToSend = 0;
 String Log; //Non-message log to send to the server
 String LogType;
-bool SendAuth = 0;
-bool StateChange = 0;
 bool ReportConfig = 0;
 bool RequestInfo = 0;
 bool SendStatus = 0;
@@ -161,43 +146,6 @@ unsigned int Tone = 0; //Set to the tone that the buzzer should play.
 bool ResetLED = 0; //Set to 1 to take priority over the LED controller, to indicate the restart is imminent.
 bool UnlockedBeep = 0;
 bool SingleBeep = 0;
-
-//Variables - Per-channel tracking (4 channels)
-byte ChannelCount = 0; //Tracks how many channels are actually present, based on OneWire detection.
-bool ChannelAccess[1] = {0};
-String State[1] = {"UNKNOWN"};
-String LastState[1] = {"UNKNOWN"}; //What state we used to be in, used for state change detect.
-String StateChangeReason[1];
-String AuthReason[1];
-String PreservedLastState[1] = {"UNKNOWN"}; //What state we used to be in, but kept until we send it to the server.
-unsigned long TapDuration[1] = {0}; //How long a temporary tap is kept valid for.
-unsigned long long CurrentTapExpires[1] = {0}; //When each channel's timer decays.
-volatile unsigned long HobbsSeconds[1] = {0}; //Tracks how long the equipment has been running for.
-
-//Interrupt Response Mode:
-//The device can respond to an interrupt in a few different ways;
-//1: "FAULT" - Immediately put the device into a fault state.
-  //This is the normal operation of the interrupt pin
-//2: "LOCK_TEMP" - Immediately set all channels to locked, but return to IDLE once we are no longer interrupted.
-//3: "IDLE" - Put any unlocked channels into an idle state.
-  //This lets the interrupt pin be used more like a "log out" button.
-//4: "MESSAGE" - Simply notify the server a fauly occurred, but don't do anything.
-  //Useful for situtations where interrupt is used to convey info, but not necessarily shut down access.
-String InterruptResponse = "FAULT";
-bool IsInterrupted = false; //Tracks if we are in a maintained interrupt mode, so we do not constantly re-assert states.
-byte InterruptCount = 0; //Counts how many times we read an interrupt as we cycle, for debouncing.
-
-//Variables related to any connected screen;
-bool UpdateScreen = false;
-String FaultReason = "";
-String HMIMachineName[4] = {"","","",""};
-String HMIMakerspace;
-String HMIDeviceName;
-String HMIRole;
-String StationName;
-String motd;
-
-void IRAM_ATTR onTimerCallback(void* arg); //IRAM task for the Hobbs counter
 
 void setup() {
   // put your setup code here, to run once:
@@ -215,77 +163,35 @@ void setup() {
   pinMode(ACCESS, OUTPUT);
   pinMode(INTERRUPT, INPUT_PULLUP);
 
-  Serial.begin(115200);
+  //Serial.begin(115200);
 
-  Serial.println(F("STARTUP"));
-  Serial.flush();
+  //Serial.println(F("STARTUP"));
+  //Serial.flush();
   delay(500);
 
-  xTaskCreate(AVControl, "AVControl", 2048, NULL, 5, NULL);
-  xTaskCreate(RestartController, "RestartController", 2048, NULL, 5, NULL);
-
-  //Start i2C
-  Wire.begin(SDA, SCL);
-  accel.begin();
-  accel.setScale(LIS2DH12_2g);
-  accel.setDataRate(LIS2DH12_ODR_10Hz);
+  xTaskCreate(AVControl, "AVControl", 1024, NULL, 5, NULL);
+  xTaskCreate(RestartController, "RestartController", 1024, NULL, 5, NULL);
 
   //Start SPIFFS:
   if(!SPIFFS.begin(1)){
-    Serial.println(F("SPIFFS Mount Failed!"));
+    //Serial.println(F("SPIFFS Mount Failed!"));
     delay(1000);
     ESP.restart();
   }
 
-
-  /*
   //Load the TLS cert from SPIFFS
   File file = SPIFFS.open("/cert.txt", FILE_READ);
   if(!file){
-    Serial.println(F("No cert found in SPIFFS!"));
+    //Serial.println(F("No cert found in SPIFFS!"));
     RootCert = "Nothing here!";
   } else{
     RootCert = "";
     while(file.available()){
       RootCert += (char)file.read();
     }
+    //Serial.println(F("Loaded Root Cert:"));
+    //Serial.println(RootCert);
   }
-
-  */
-
-//Temporarily hard-code root certs to get online:
-  RootCert = \
-"-----BEGIN CERTIFICATE-----\n" \
-"MIIFazCCA1OgAwIBAgIRAIIQz7DSQONZRGPgu2OCiwAwDQYJKoZIhvcNAQELBQAw\n" \
-"TzELMAkGA1UEBhMCVVMxKTAnBgNVBAoTIEludGVybmV0IFNlY3VyaXR5IFJlc2Vh\n" \
-"cmNoIEdyb3VwMRUwEwYDVQQDEwxJU1JHIFJvb3QgWDEwHhcNMTUwNjA0MTEwNDM4\n" \
-"WhcNMzUwNjA0MTEwNDM4WjBPMQswCQYDVQQGEwJVUzEpMCcGA1UEChMgSW50ZXJu\n" \
-"ZXQgU2VjdXJpdHkgUmVzZWFyY2ggR3JvdXAxFTATBgNVBAMTDElTUkcgUm9vdCBY\n" \
-"MTCCAiIwDQYJKoZIhvcNAQEBBQADggIPADCCAgoCggIBAK3oJHP0FDfzm54rVygc\n" \
-"h77ct984kIxuPOZXoHj3dcKi/vVqbvYATyjb3miGbESTtrFj/RQSa78f0uoxmyF+\n" \
-"0TM8ukj13Xnfs7j/EvEhmkvBioZxaUpmZmyPfjxwv60pIgbz5MDmgK7iS4+3mX6U\n" \
-"A5/TR5d8mUgjU+g4rk8Kb4Mu0UlXjIB0ttov0DiNewNwIRt18jA8+o+u3dpjq+sW\n" \
-"T8KOEUt+zwvo/7V3LvSye0rgTBIlDHCNAymg4VMk7BPZ7hm/ELNKjD+Jo2FR3qyH\n" \
-"B5T0Y3HsLuJvW5iB4YlcNHlsdu87kGJ55tukmi8mxdAQ4Q7e2RCOFvu396j3x+UC\n" \
-"B5iPNgiV5+I3lg02dZ77DnKxHZu8A/lJBdiB3QW0KtZB6awBdpUKD9jf1b0SHzUv\n" \
-"KBds0pjBqAlkd25HN7rOrFleaJ1/ctaJxQZBKT5ZPt0m9STJEadao0xAH0ahmbWn\n" \
-"OlFuhjuefXKnEgV4We0+UXgVCwOPjdAvBbI+e0ocS3MFEvzG6uBQE3xDk3SzynTn\n" \
-"jh8BCNAw1FtxNrQHusEwMFxIt4I7mKZ9YIqioymCzLq9gwQbooMDQaHWBfEbwrbw\n" \
-"qHyGO0aoSCqI3Haadr8faqU9GY/rOPNk3sgrDQoo//fb4hVC1CLQJ13hef4Y53CI\n" \
-"rU7m2Ys6xt0nUW7/vGT1M0NPAgMBAAGjQjBAMA4GA1UdDwEB/wQEAwIBBjAPBgNV\n" \
-"HRMBAf8EBTADAQH/MB0GA1UdDgQWBBR5tFnme7bl5AFzgAiIyBpY9umbbjANBgkq\n" \
-"hkiG9w0BAQsFAAOCAgEAVR9YqbyyqFDQDLHYGmkgJykIrGF1XIpu+ILlaS/V9lZL\n" \
-"ubhzEFnTIZd+50xx+7LSYK05qAvqFyFWhfFQDlnrzuBZ6brJFe+GnY+EgPbk6ZGQ\n" \
-"3BebYhtF8GaV0nxvwuo77x/Py9auJ/GpsMiu/X1+mvoiBOv/2X/qkSsisRcOj/KK\n" \
-"NFtY2PwByVS5uCbMiogziUwthDyC3+6WVwW6LLv3xLfHTjuCvjHIInNzktHCgKQ5\n" \
-"ORAzI4JMPJ+GslWYHb4phowim57iaztXOoJwTdwJx4nLCgdNbOhdjsnvzqvHu7Ur\n" \
-"TkXWStAmzOVyyghqpZXjFaH3pO3JLF+l+/+sKAIuvtd7u+Nxe5AW0wdeRlN8NwdC\n" \
-"jNPElpzVmbUq4JUagEiuTDkHzsxHpFKVK7q4+63SM1N95R1NbdWhscdCb+ZAJzVc\n" \
-"oyi3B43njTOQ5yOf+1CceWxG1bQVs5ZufpsMljq4Ui0/1lvh+wjChP4kqKOJ2qxq\n" \
-"4RgqsahDYVvTH9w7jXbyLeiNdd8XM2w9U/t7y0Ff/9yi0GE44Za4rF2LN9d11TPA\n" \
-"mRGunUHBcnWEvgJBQl9nJEiU0Zsnvgc/ubhPgXRR4Xq37Z0j4r7g1SgEEzwxA57d\n" \
-"emyPxgcYxn/eR44/KJ4EBs+lVDR3veyJm+kXQ99b21/+jh5Xos1AnX5iItreGCc=\n" \
-"-----END CERTIFICATE-----\n";
 
   //Load settings from memory
 
@@ -297,39 +203,39 @@ void setup() {
   esp_err_t err = esp_efuse_read_field_blob(ESP_EFUSE_OPTIONAL_UNIQUE_ID, unique_id, 128);
 
   if (err == ESP_OK) {
-    Serial.print("Serial Number: ");
+    //Serial.print("Serial Number: ");
     for (int i = 0; i < 16; i++) {
       if (unique_id[i] < 0x10) SerialNumber += "0"; // Lead with zero if byte < 16
       SerialNumber += String(unique_id[i], HEX);
     }
     SerialNumber.toUpperCase();
-    Serial.print(SerialNumber);
-    Serial.println();
+    //Serial.print(SerialNumber);
+    //Serial.println();
   } else {
-    Serial.printf("Error reading eFuse: 0x%X\n", err);
-    Serial.println("Note: This ID may not exist on original ESP32 (Non-S2/S3) models.");
+    //Serial.printf("Error reading eFuse: 0x%X\n", err);
+    //Serial.println("Note: This ID may not exist on original ESP32 (Non-S2/S3) models.");
   }
 
   //Get our MAC address for printing, in V3.0.0 hardware this is our base MAC
-  Serial.print(F("WiFi MAC Address: "));
-  Serial.println(getBaseMacAddress());
+  //Serial.print(F("WiFi MAC Address: "));
+  //Serial.println(getBaseMacAddress());
 
   settings.begin("settings", false);
 
-  Serial.println(F("Have a config for me? I'll wait a second..."));
+  //Serial.println(F("Have a config for me? I'll wait a second..."));
   delay(1000);
-  CheckforConfig();
+  //CheckforConfig();
 
   if(!settings.isKey("Server")){
     //We don't have a valid config?
     while(1){
-      Serial.println(F("Missing config. Please provide a JSON with the following keys: "));
-      Serial.println(F("WiFi SSID, WiFi Password, Server, Server Key, Timezone, MakerspaceID"));
-      Serial.print(F("Device WiFi MAC Address: "));
-      Serial.println(getBaseMacAddress());
-      Serial.print(F("Device Serial Number: "));
-      Serial.println(SerialNumber);
-      CheckforConfig();
+      //Serial.println(F("Missing config. Please provide a JSON with the following keys: "));
+      //Serial.println(F("WiFi SSID, WiFi Password, Server, Server Key, Timezone, MakerspaceID"));
+      //Serial.print(F("Device WiFi MAC Address: "));
+      //Serial.println(getBaseMacAddress());
+      //Serial.print(F("Device Serial Number: "));
+      //Serial.println(SerialNumber);
+      //CheckforConfig();
       delay(1000);
     }
   }
@@ -340,52 +246,6 @@ void setup() {
     settings.putString("HWVer", Hardware);
   }
   HWVer = settings.getString("HWVer");
-
-  if(!settings.isKey("ChannelCount")){
-    //ChannelCount is new in 2.1.4, set to 1 if no value
-    settings.putString("ChannelCount", "1");
-  }
-  ChannelCount = settings.getString("ChannelCount").toInt();
-
-  if(!settings.isKey("TapDur0")){
-    //Tap Duration is new in 2.1.4, set to 0 if no value.
-    settings.putUInt("TapDur0", 0);
-  }
-  settings.getUInt("TapDur0", TapDuration[0]);
-
-  if(!settings.isKey("InputMode")){
-    //InputMode is new in 2.1.4, set to "INSERT" if no value.
-    settings.putString("InputMode", "INSERT");
-  }
-  DefaultInputMode = settings.getString("InputMode");
-  InputMode = DefaultInputMode;
-
-  if(!settings.isKey("IntResp")){
-    //Interrupt Response is new in 2.1.4, set to "FAULT" if no value.
-    settings.putString("IntResp", "FAULT");
-  }
-  InterruptResponse = settings.getString("IntResp");
-
-  if(!settings.isKey("StationName")){
-    //StationName is new in 2.1.4, set to "Generic ACS" if no value.
-    settings.putString("StationName", "Generic MakeACS");
-  }
-  StationName = settings.getString("StationName");
-
-  if(!settings.isKey("SpaceNum")){
-    //MakerspaceNumber (SpaceNum) is new in 2.1.4, set to 36 (Atrium Makerspace) if no value.
-    settings.putInt("SpaceNum", 36);
-  }
-  MakerspaceNumber = settings.getInt("SpaceNum");
-
-  //Get the reset reason;
-  if(!settings.isKey("ResetReason")){
-    //We don't know why we reset?
-
-  } else{
-    ResetReason = settings.getString("ResetReason");
-    settings.remove("ResetReason"); //So we know we read it.
-  }
 
   Server = settings.getString("Server");
   Password = settings.getString("Password");
@@ -405,19 +265,19 @@ void setup() {
   rtc.offset = TimezoneHr * 3600;
   MakerspaceID = settings.getString("MakerspaceID").toInt();
 
-  Serial.println(F("Settings loaded."));
-  Serial.flush();
+  //Serial.println(F("Settings loaded."));
+  //Serial.flush();
 
-  Serial.println(F("Started Tasks."));
-  Serial.flush();
+  //Serial.println(F("Started Tasks."));
+  //Serial.flush();
 
   //Start SPI here, in case we want to use Ethernet in the future. 
   //SCK, MISO, MOSI, SS
   pinMode(NFCCS, OUTPUT);
   SPI.begin(SCKPin, MISOPin, MOSIPin, -1);
 
-  Serial.println(F("Started SPI."));
-  Serial.flush();
+  //Serial.println(F("Started SPI."));
+  //Serial.flush();
 
   WiFi.mode(WIFI_STA);
   WiFi.begin(SSID, Password);
@@ -427,24 +287,24 @@ void setup() {
 
   if (WiFi.status() != WL_CONNECTED) {
     WiFi.reconnect();  //Force a manual connect attempt
-    Serial.println(F("Waiting for first WiFi connect"));
+    //Serial.println(F("Waiting for first WiFi connect"));
     while (WiFi.status() != WL_CONNECTED && millis64() - WiFiStart < 15000) {
-      Serial.print(".");
+      //Serial.print(".");
       delay(500);
     }
   }
 
   if (WiFi.status() == WL_CONNECTED) {
-    Serial.println(F("WiFi connected."));
+    //Serial.println(F("WiFi connected."));
 
     delay(500);
 
     // --- OTA LOGIC STARTS HERE ---
     // We only verify and check for updates if we are actually online.
-    Serial.println(F("Checking for OTA..."));
+    //Serial.println(F("Checking for OTA..."));
 
     // 1. Configure all OTA settings first
-    ota.EnableSerialDebug();
+    //ota.EnableSerialDebug();
     //We use the same cert on our server as Github does.
     ota.SetCACert(RootCert.c_str());
     ota.SetCallback(callback_percent);
@@ -458,14 +318,14 @@ void setup() {
     // 3. If validation succeeded, check for a new update
     if (isValid) {
       int otaresp = ota.CheckForOTAUpdate(jsonUrl, Version);
-      Serial.print(F("OTA Response: "));
-      Serial.println(errtext(otaresp));
+      //Serial.print(F("OTA Response: "));
+      //Serial.println(errtext(otaresp));
     }
     // --- OTA LOGIC ENDS HERE ---
 
   } else {
     // Device is offline. We skip OTA checks entirely to avoid false rollbacks.
-    Serial.println(F("WiFi failed to connect after timeout! Booting offline."));
+    //Serial.println(F("WiFi failed to connect after timeout! Booting offline."));
   }
 
   // If we made it past the OTA (or skipped it because offline),
@@ -484,25 +344,8 @@ void setup() {
   mfrc630_write_reg(0x2A, 0x11);
   mfrc630_write_reg(0x2B, 0x06);
 
-  //Initialize a precise timer for the Hobbs Timer
-  Serial.println(F("Starting Critical Timer for Hobbs Time..."));
-  const esp_timer_create_args_t timer_args = {
-    .callback = &onTimerCallback,  // The function to run
-    .arg = NULL,                   // Arguments passed to the function (optional)
-    .name = "one_second_timer"     // Name for debugging
-  };
-  esp_timer_handle_t periodic_timer;
-  err = esp_timer_create(&timer_args, &periodic_timer);
-  if (err == ESP_OK) {
-    //Start the timer to repeat every 1,000,000 microseconds (1 second)
-    esp_timer_start_periodic(periodic_timer, 1000000);
-    Serial.println("Timer started successfully!");
-  } else {
-    Serial.printf("Timer creation failed with error: %d\n", err);
-  }
-
   //Time to loop!
-  xTaskCreate(MachineState, "MachineState", 4096, NULL, 5, NULL);
+  xTaskCreate(MachineState, "MachineState", 2048, NULL, 5, NULL);
   GamerMode = 0; //Disable the startup lighting
 
 }
@@ -516,7 +359,7 @@ void loop() {
   mqtt.update();
 
   //Check for a config JSON:
-  CheckforConfig();
+  //CheckforConfig();
 
   //Step 4: Communicate with the server
 
@@ -525,14 +368,11 @@ void loop() {
 
     if(NoNetwork){
       NoNetwork = false;
-      UpdateScreen = true;
     }
 
     JsonDocument outgoing; //Json to construct the outgoing message in
 
      //Step 4.1: See if we have any outgoing messages, and send them.
-
-     //temp disabled for testing
 
     if(MessageToSend){
       //Send a message to the history
@@ -559,65 +399,15 @@ void loop() {
       publish(LogTopic, LogPayload);
       LogType = "message"; //Default value unless we say otherwise.
     }
-    if(SendAuth){
-      //Send an auth request to the server
-      SendAuth = 0;
-      outgoing["state"] = "UNLOCKED";
-      outgoing["cardTagID"] = UID;
-      String AuthPayload;
-      serializeJson(outgoing, AuthPayload);
-      outgoing.clear();
-      String AuthTopic = BaseTopic + "/authTo/request";
-      publish(AuthTopic, AuthPayload);
-    }
-    if(StateChange){
-      //Send report of a changed state
-      StateChange = 0;
-      if(!WelcomeMode){
-        //We don't report state change when we are in welcoming.
-        JsonArray stateChannels = outgoing["channels"].to<JsonArray>();
-        for( int i = 0; i < ChannelCount; i++){
-          if(State[i] != PreservedLastState[i]){
-            JsonObject stateObject = stateChannels.createNestedObject();
-            stateObject["channelID"] = i;
-            stateObject["fromState"] = PreservedLastState[i];
-            stateObject["toState"] = State[i];
-            //The server doesn't recognize the "LOCK_TEMP" state change reason
-            //So we replace if with "LOCAL":
-            if(StateChangeReason[i] == "LOCK_TEMP"){
-              stateObject["reason"] = "LOCAL";
-            } else{
-              stateObject["reason"] = StateChangeReason[i];
-            }
-            //Update the preserved last state;
-            PreservedLastState[i] = State[i];
-          }
-        }
-        outgoing["currentCardTag"] = UID;
-        String StateChangePayload;
-        serializeJson(outgoing, StateChangePayload);
-        outgoing.clear();
-        String StateChangeTopic = BaseTopic + "/stateChange";
-        publish(StateChangeTopic, StateChangePayload);
-        //At the end, set change reason to nothing:
-      }
-    }
     if(ReportConfig){
       //Report the current configuration
       ReportConfig = 0;
-      JsonArray configChannels = outgoing["channels"].to<JsonArray>();
-      for(int i = 0; i < ChannelCount; i++){
-        JsonObject configObject = configChannels.createNestedObject();
-        configObject["channelID"] = i;
-        configObject["tempDuration"] = TapDuration[i];
-      }
       outgoing["inputMode"] = InputMode;
       JsonObject configDeployment = outgoing["deployment"].to<JsonObject>();
       configDeployment["SN"] = SerialNumber;
       JsonArray configComponents = configDeployment["components"].to<JsonArray>();
       //Iterate through and add every component on the bus to the components array;
       JsonObject flags = outgoing["flags"].to<JsonObject>();
-      flags["lockWhenIdle"] = LockWhenIdle;
       flags["restartWhenUnused"] = RestartWhenUnused;
       flags["welcoming"] = WelcomeMode;
       String FWVer = "CoreDuino " + String(Version);
@@ -633,46 +423,17 @@ void loop() {
       RequestInfo = 0;
       JsonArray infoFields = outgoing["fields"].to<JsonArray>();
       infoFields.add("TIME");
-      //Check if any of the states or HobbsTimers are unknown;
-      bool AskForStates = false;
-      bool AskForHobbs = false;
-      for(int i = 0; i < ChannelCount; i++){
-        if(State[i] == "UNKNOWN"){
-          AskForStates = true;
-        }
-        if(HobbsSeconds[i] == 0){
-          AskForHobbs = true;
-        }
-      }
-      if(AskForStates){
-        //We don't know what state we should be in, so request it. 
-        infoFields.add("STATE");
-      }
-      if(AskForHobbs){
-        //We do not know what the Hobbs timer should be at, let's request that.
-        infoFields.add("HOBBS_TIME");
-      }
-      infoFields.add("FLAGS"); //Check our flags, mostly for welcoming
-      infoFields.add("HMI"); //Request human-readable info for any attached interface.
+      infoFields.add("FLAGS"); //Check our flags, mostly for welcominginterface.
       String InfoPayload;
       serializeJson(outgoing, InfoPayload);
       outgoing.clear();
       String InfoTopic = BaseTopic + "/info/request";
       publish(InfoTopic, InfoPayload);
     }
-    if(SendStatus && !anyChannelIs("UNKNOWN")){
+    if(SendStatus){
       //Send our current status to the server, we do not send it if we do not know our state. 
       SendStatus = 0;
       JsonArray statusChannels = outgoing["channels"].to<JsonArray>();
-      if(!WelcomeMode){
-        //We don't send this in welcoming mode
-        for(int i = 0; i < ChannelCount; i++){
-          JsonObject statusObject = statusChannels.createNestedObject();
-          statusObject["channelID"] = i;
-          statusObject["state"] = State[i];
-          statusObject["hobbsTime"] = HobbsSeconds[i];
-        }
-      }
       outgoing["currentCardTag"] = UID;
       String StatusPayload;
       serializeJson(outgoing, StatusPayload);
@@ -695,230 +456,83 @@ void loop() {
     
     //Step 4.3: Process any incoming messages
 
-    if(NewAuth){
-      //Process a response to an auth request.
-      NewAuth = 0;
-      deserializeJson(incoming, AuthResponse);
-      String AuthID = incoming["cardTagID"].as<String>();
-      PendingApproval = false;
-      bool SendUnlockedBeep = false;
-      bool SendAccessDenied = false;
-      for(JsonVariant v : incoming["channels"].as<JsonArray>()){
-        int ch = v["channelID"] | 0;
-        if(ch >= 0 && ch < ChannelCount){
-          bool IsAuthed = v["approved"].as<bool>();
-          AuthReason[ch] = v["reason"].as<String>();
-          
-          if(State[ch] == "IDLE" || (State[ch] == "UNLOCKED" && InputMode == "TEMP_PRESENT")){ //Unlock only if idle, or re-up unlocked channels if in tap-present mode.
-            if(IsAuthed){
-              Serial.println(F("Access Granted!"));
-              if(AuthID == UID){
-                Serial.println(F("UIDs match. Unlocking."));
-                State[ch] = "UNLOCKED";
-                StateChangeReason[ch] = "AUTHED"; 
-                SendUnlockedBeep = true;
-                if(InputMode == "TEMP_PRESENT"){
-                  //Add all the times now;
-                  CurrentTapExpires[ch] = TapDuration[ch] * 1000 + millis64();
-                }
-              }
-            } else{
-              Serial.println(F("Access Denied!"));
-              if(CardPresent){
-                SendAccessDenied = 1;
-              }
-            }
-          } else{
-            Serial.println(F("Ignoring auth due to improper state."));
-          }
-        }
-      }
-      if(SendUnlockedBeep){
-        //We do it this way so we don't trigger the beep 4 times
-        UnlockedBeep = true;
-      }
-      if(SendAccessDenied){
-        AccessDenied = true;
-      }
-      UpdateScreen = true;
-    }
     if(NewInfo){
       //Process a response to an info request.
       NewInfo = 0;
       deserializeJson(incoming, InfoResponse);
-      //Set the state;
-      if (incoming["state"].is<JsonArray>()) {
-        for (JsonObject item : incoming["state"].as<JsonArray>()) {
-          int id = item["id"] | -1; // Default to -1 if missing
-          
-          // Bounds check to avoid crashing the MCU with array out-of-bounds
-          if (id >= 0 && id < ChannelCount) {
-            State[id] = item["state"].as<String>();
-            StateChangeReason[id] = "COMMANDED";
-            if(State[id] == "FAULT"){
-              //We don't go back to a fault state;
-              State[id] = "LOCKED_OUT";
-            }
-            if (State[id] == "UNLOCKED" || State[id] == "ALWAYS_ON") {
-              //We don't go back to an unlocked state;
-              State[id] = "IDLE";
-            }
-          }
-        }
-        SingleBeep = 1;
-      }
-
-      // Process the "hobbsTime" array
-      if (incoming["hobbsTime"].is<JsonArray>()) {
-        for (JsonObject item : incoming["hobbsTime"].as<JsonArray>()) {
-          // Notice this uses "channelID" instead of "id"
-          int ch = item["channelID"] | -1; 
-          
-          if (ch >= 0 && ch < ChannelCount) {
-            HobbsSeconds[ch] = item["hobbsTime"].as<unsigned long>(); 
-          }
-        }
-      }
-      //Process the HMI info:
-      if(incoming.containsKey("hmi")){
-        HMIRole = incoming["hmi"]["role"].as<String>();
-        HMIDeviceName = incoming["hmi"]["deviceName"].as<String>();
-        HMIMakerspace = incoming["hmi"]["makerspace"].as<String>();
-        JsonArray channels = incoming["hmi"]["channels"];
-        for (JsonObject channel : channels){
-          int channelID = channel["channelID"];
-          HMIMachineName[channelID] = channel["pairedEntity"].as<String>();
-        }
-      }
       //Set the time;
       if(incoming.containsKey("time")){
         unsigned long long millisecondTime = incoming["time"];
         rtc.setTime(millisecondTime/1000);
-        Serial.print(F("Time set to: "));
-        Serial.println(rtc.getDateTime(true));
+        //Serial.print(F("Time set to: "));
+        //Serial.println(rtc.getDateTime(true));
       }
       //Set flags:
       if(incoming.containsKey("flags")){
         JsonObject flagObj = incoming["flags"].as<JsonObject>();
-        if(flagObj.containsKey("lockWhenIdle")){
-          LockWhenIdle = flagObj["lockWhenIdle"].as<bool>();
-          Serial.print(F("Server set LockWhenIdle to: "));
-          Serial.println(LockWhenIdle);
-        }
         if(flagObj.containsKey("restartWhenUnused")){
           RestartWhenUnused = flagObj["restartWhenUnused"].as<bool>();
-          Serial.print(F("Server set RestartWhenUnused to: "));
-          Serial.println(RestartWhenUnused);
+          //Serial.print(F("Server set RestartWhenUnused to: "));
+          //Serial.println(RestartWhenUnused);
         }
         if(flagObj.containsKey("welcoming")){
+          WelcomeMode = true; //We are always a welcome reader!
           if(WelcomeMode != flagObj["welcoming"].as<bool>()){
             WelcomeMode = flagObj["welcoming"].as<bool>();
             if(WelcomeMode){
-            Serial.println(F("Server flag set to enter welcoming mode."));
+            //Serial.println(F("Server flag set to enter welcoming mode."));
             } else{
-              Serial.println(F("Server flag unset for welcoming mode. Entering state 'UNKNOWN'"));
-              WelcomeMode = false;
-              for(int i = 0; i < ChannelCount; i++){
-                State[i] = "UNKNOWN";
-                StateChangeReason[i] = "SERVER_COMMANDED";
-              }
-              //We should ask what state we should be in
-              RequestInfo = 1;
+              //We should never not be in welcome mode?
+              Message = "WARNING: This device can only be operated as a sign in reader. Do not attempt to set to a normal access reader. Disregarding command.";
+              MessageToSend = true;
+              WelcomeMode = true;
             }
           }
         }
       }
-      if(incoming.containsKey("hobbsTime")){
-        for(int i = 0; i < ChannelCount; i++){
-          HobbsSeconds[i] = incoming["hobbsTime"][i]["hobbsTime"];
-          Serial.print(F("Hobbs timer for channel "));
-          Serial.print(i);
-          Serial.print(F(" set to: "));
-          Serial.print(HobbsSeconds[i]);
-          Serial.println(F(" seconds."));
-        }
-      }
       ReportConfig = 1; //Once we get some info, we should send our configuration.
       SendStatus = 1; //Once we get some info, we should send our status.
-      UpdateScreen = true;
     }
     if(NewCommand){
       //Process an incoming command.
       NewCommand = 0;
       deserializeJson(incoming, CommandResponse);
-      //State change command
-      if(incoming["toState"].is<JsonArray>()){
-        JsonArray toStateArray = incoming["toState"].as<JsonArray>();
-        for (JsonVariant v : toStateArray) {
-          int ch = v["id"] | -1;
-          if (ch >= 0 && ch < ChannelCount) {
-            State[ch] = v["state"] | "UNKNOWN";
-            if(State[ch] == "UNLOCKED" && !CardPresent){
-              State[ch] = "IDLE";
-            }
-            StateChangeReason[ch] = "COMMANDED";
-          }
-        }
-        SingleBeep = 1;
-      }
       //Set flags
       if(incoming.containsKey("flags")){
         JsonObject flagObj = incoming["flags"].as<JsonObject>();
-        if(flagObj.containsKey("lockWhenIdle")){
-          LockWhenIdle = flagObj["lockWhenIdle"].as<bool>();
-          Serial.print(F("Server set LockWhenIdle to: "));
-          Serial.println(LockWhenIdle);
-        }
         if(flagObj.containsKey("restartWhenUnused")){
           RestartWhenUnused = flagObj["restartWhenUnused"].as<bool>();
-          Serial.print(F("Server set RestartWhenUnused to: "));
-          Serial.println(RestartWhenUnused);
+          //Serial.print(F("Server set RestartWhenUnused to: "));
+          //Serial.println(RestartWhenUnused);
         }
         if(flagObj.containsKey("welcoming")){
+          WelcomeMode = true;
           if(WelcomeMode != flagObj["welcoming"].as<bool>()){
             WelcomeMode = flagObj["welcoming"].as<bool>();
             if(WelcomeMode){
-            Serial.println(F("Server flag set to enter welcoming mode."));
+              //Serial.println(F("Server flag set to enter welcoming mode."));
             } else{
-              Serial.println(F("Server flag unset for welcoming mode. Entering state 'UNKNOWN'"));
-              for(int i = 0; i < ChannelCount; i++){
-                State[i] = "UNKNOWN";
-                StateChangeReason[i] = "SERVER_COMMANDED";
-              }
-              //We should ask what state we should be in
-              RequestInfo = 1;
+              //We should never not be in welcome mode?
+              Message = "WARNING: This device can only be operated as a sign in reader. Do not attempt to set to a normal access reader. Disregarding command.";
+              MessageToSend = true;
+              WelcomeMode = true;
             }
-          }
-        }
-      }
-      //Set HobbsTime
-      if(incoming.containsKey("hobbsTime")){
-        JsonArray hobbsTimeArray = incoming["hobbsTime"].as<JsonArray>();
-        for (JsonVariant v : hobbsTimeArray) {
-          int ch = v["hobbsTime"] | 0;
-          if (ch >= 0 && ch < ChannelCount) {
-            HobbsSeconds[ch] = v["channelID"] | 0;
-            Serial.print(F("Hobbs timer for channel "));
-            Serial.print(ch);
-            Serial.print(F(" set to: "));
-            Serial.print(HobbsSeconds[ch]);
-            Serial.println(F(" seconds."));
           }
         }
       }
       //Action to do something
       if(incoming.containsKey("action")){
         if(incoming["action"] == "RESTART"){
-          Serial.println(F("Server commanded restart!"));
-          Serial.flush();
+          //Serial.println(F("Server commanded restart!"));
+          //Serial.flush();
           ResetReason = "Server Ordered";
           RequestReset = true;
         }
         if((incoming["action"] == "SEAL")){
-          Serial.println(F("Server commanded bus integrity re-seal."));
+          //Serial.println(F("Server commanded bus integrity re-seal."));
         }
         if(incoming["action"] == "IDENTIFY"){
-          Serial.println(F("Server commanded identify."));
+          //Serial.println(F("Server commanded identify."));
           Identify = !Identify;
           if(!Identify){
             //Play a single beep to end the identify command.
@@ -926,51 +540,49 @@ void loop() {
           }
         }
         if(incoming["action"] == "SCHEDULED_RESTART"){
-          Serial.println(F("Server indicated it is time for a scheduled restart."));
+          //Serial.println(F("Server indicated it is time for a scheduled restart."));
           ScheduledRestart = true;
         }
 
       }
-      UpdateScreen = true;
     }
     if(NewWelcome){
       //Response to welcoming a user
       NewWelcome = 0;
+      WelcomingPending = 0;
       deserializeJson(incoming, WelcomeResponse);
       bool IsWelcomed = incoming["welcomed"];
       String WelcomeID = incoming["cardTagID"];
       String WelcomeReason = incoming["reason"];
       if(IsWelcomed){
         //User was welcomed into the space properly.
-        Serial.println(F("User welcomed!"));
+        //Serial.println(F("User welcomed!"));
         if(UID == WelcomeID){
           //The user's card is still here, so beep and light up.
           UserWelcomed = 1;
         } else{
-          Serial.println(F("But their card isn't here anymore, so we will skip the lights/sounds."));
+          //Serial.println(F("But their card isn't here anymore, so we will skip the lights/sounds."));
         }
       } else{
         //User was denied entry into the space.
-        Serial.print(F("User denied! Reason: "));
-        Serial.println(WelcomeReason);
+        //Serial.print(F("User denied! Reason: "));
+        //Serial.println(WelcomeReason);
         AccessDenied = 1; //Act like we denied the user access
       }
-      UpdateScreen = true;
     }
     
     //Step 4.4: Send a ping if requested
     if(SendPing){
       String PingTopic = BaseTopic + "/ping";
       publish(PingTopic, "Ping!");
-      //Serial.println(F("Ping sent."));
+      ////Serial.println(F("Ping sent."));
       SendPing = 0;
       NextPingTime = millis64() + 1000;
     }
     
   } else{
-    Serial.println(F("No network?"));
+    //Serial.println(F("No network?"));
     NoNetwork = true;
-    UpdateScreen = true;
     NetworkConnect();
   }
 
@@ -978,41 +590,14 @@ void loop() {
 
 void callback_percent(int offset, int totallength) {
   //Used to display percentage of OTA installation
-
   static int prev_percent = -1;
   int percent = 100 * offset / totallength;
   if (percent != prev_percent) {
-    Serial.printf("Updating %d of %d (%02d%%)...\n", offset, totallength, 100 * offset / totallength);
+    //Serial.printf("Updating %d of %d (%02d%%)...\n", offset, totallength, 100 * offset / totallength);
     prev_percent = percent;
   }
 }
 
-const char *errtext(int code) {
-  //Deciphers OTA code response
-  switch (code) {
-    case ESP32OTAPull::UPDATE_AVAILABLE:
-      return "An update is available but wasn't installed";
-    case ESP32OTAPull::NO_UPDATE_PROFILE_FOUND:
-      return "No profile matches";
-    case ESP32OTAPull::NO_UPDATE_AVAILABLE:
-      return "Profile matched, but update not applicable";
-    case ESP32OTAPull::UPDATE_OK:
-      return "An update was done, but no reboot";
-    case ESP32OTAPull::HTTP_FAILED:
-      return "HTTP GET failure";
-    case ESP32OTAPull::WRITE_ERROR:
-      return "Write error";
-    case ESP32OTAPull::JSON_PROBLEM:
-      return "Invalid JSON";
-    case ESP32OTAPull::OTA_UPDATE_FAIL:
-      return "Update fail (no OTA partition?)";
-    default:
-      if (code > 0)
-        return "Unexpected HTTP response code";
-      break;
-  }
-  return "Unknown error";
-}
 
 uint64_t millis64(){
   //This simple function replaces the 32 bit default millis. Means that overflow now occurs in 290,000 years instead of 50 days
@@ -1020,187 +605,216 @@ uint64_t millis64(){
   return esp_timer_get_time() / 1000;
 }
 
-void NetworkConnect(){
-  //Check the WiFi first
-  byte TLSRetryCount = 0; //Tracks how many failed TLS attempts we had in a row.
-  retryNetwork:
-  if(WiFi.status() != WL_CONNECTED){
-    WiFi.reconnect(); //Force a manual connect attempt
-    Serial.println(F("No WiFi? Waiting for reconnect"));
+void NetworkConnect() {
+// 1. Check the WiFi first
+retryNetwork:
+  if (WiFi.status() != WL_CONNECTED) {
+    WiFi.reconnect();  //Force a manual connect attempt
+    //Serial.println(F("No WiFi? Waiting for reconnect"));
     unsigned long long WiFiTime = millis64() + 15000;
-    while(WiFi.status() != WL_CONNECTED){
-      Serial.print(".");
+    while (WiFi.status() != WL_CONNECTED) {
+      //Serial.print(".");
       delay(500);
-      if(WiFiTime <= millis64()){
-        Serial.println(F("Failed to connect to WiFi! Retrying..."));
+      if (WiFiTime <= millis64()) {
+        //Serial.println(F("Failed to connect to WiFi! Retrying..."));
         goto retryNetwork;
       }
     }
-    Serial.println(F(" Connected!"));
-  } else{
-    Serial.println(F("Already had WiFi connection, skipping to websocket connection."));
+    //Serial.println(F(" Connected!"));
+  } else {
+    //Serial.println(F("Already had WiFi connection."));
   }
-  
-  //Start our websocket connection
-  socket.disconnect();
-  const char* global_ca_pointer = RootCert.c_str();
-  socket.beginSslWithCA(Server.c_str(), 443, "/mqtt", global_ca_pointer, "mqtt");
-  //Give the socket some time to stabilize:
-  unsigned long long wsTimeout = millis64() + 5000;
-  while(!socket.isConnected() && millis64() <= wsTimeout){
-    socket.loop();
-    delay(2);
+
+  //Before we test the TLS, let's make sure our clock is right
+  //The mbedTLS library may be checking if the certs are at a valid date.
+  if(rtc.getYear() <= 2025){
+    //The RTC is not set!
+    configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+    struct tm timeinfo;
+    int retryCount = 0;
+
+    // Wait up to 10 seconds for the time to sync from the NTP server
+    while (!getLocalTime(&timeinfo) && retryCount < 10) {
+      //Serial.print(".");
+      delay(1000);
+      retryCount++;
+    }
+
+    if (retryCount < 10) {
+      //Serial.println(F("\nTime synced successfully!"));
+
+      // Grab the current Unix epoch time from the system
+      time_t now;
+      time(&now);
+
+      // Push the synced time into your existing ESP32Time rtc object
+      rtc.setTime(now);
+
+      //Serial.print(F("Current RTC Time: "));
+      //Serial.println(rtc.getDateTime(true));
+    } else {
+      //Serial.println(F("\nFailed to sync time. TLS test may still fail."));
+    }
   }
-  //Did the socket work?
-  if(!socket.isConnected()){
-    Serial.println(F("Websocket connection failed..."));
-    socket.disconnect();
-    //Is the server alive?
-    if(!Ping.ping(Server.c_str())){
-      //Server is not responding?
-      Serial.println(F("Cannot ping the server. No network?"));
-      NoNetwork = true;
-      return;
-    } else{
-      Serial.println(F("Server is online. Bad TLS cert?"));
-      Serial.println(F("Trying TLS certs again to make sure..."));
-      if(TLSRetryCount <=5){
-        Serial.print(F("That was attempt: "));
-        Serial.print(TLSRetryCount);
-        Serial.println(F("/5 attempts before we get new certs."));
-        delay(1000);
-        TLSRetryCount++;
-        goto retryNetwork;
-      }
-      Serial.println(F("Getting new TLS certs from server."));
-      networkclient.setInsecure();
-      networkclient.connect(Server.c_str(), 443);
-      
-      networkclient.print("GET /api/rootCA HTTP/1.1\r\n");
-      networkclient.print("Host: ");
-      networkclient.print(Server.c_str());
-      networkclient.print("\r\n");
 
-      networkclient.print("shlug-sn: ");
-      networkclient.print(SerialNumber.c_str());
-      networkclient.print("\r\n");
-      
-      networkclient.print("Connection: close\r\n");
-      
-      // End of headers boundary
-      networkclient.print("\r\n");
+  // 2. Test TLS Certificate before touching the websocket
+  //Serial.println(F("Testing TLS connection..."));
+  //Scope block to destroy networkclientsecure when done with it.
+  {
+    NetworkClientSecure networkclient;
+    networkclient.setCACert(RootCert.c_str());  // Set the current known root cert
 
-      while (networkclient.connected()) {
-        String line = networkclient.readStringUntil('\n');
-        if (line == "\r") {
-          Serial.println("Headers received, body:");
-          break;
-        }
+    if (networkclient.connect(Server.c_str(), 443)) {
+      //Serial.println(F("TLS connection successful. Cert is valid."));
+      networkclient.stop();  // CRITICAL: Free the TLS buffer so the websocket has heap to run!
+    } else {
+      //Serial.println(F("TLS connection failed..."));
+
+      // Is the server alive?
+      if (!Ping.ping(Server.c_str())) {
+        //Serial.println(F("Cannot ping the server. No network?"));
+        NoNetwork = true;
+        return;
       }
-      unsigned long timeout = millis();
-      while (networkclient.available() == 0) {
-        if (millis() - timeout > 5000) { // 5 second timeout
-          Serial.println("!!! Client Timeout awaiting body! !!!");
-          networkclient.stop();
+
+      //Serial.println(F("Server is online. Bad TLS cert?"));
+      //Serial.println(F("Getting new TLS certs from server over plain HTTP."));
+
+      networkclient.stop();  // Ensure the secure client is completely shut down to free heap
+
+      // Use your existing HTTPClient to fetch the cert over plain HTTP
+      String url = "http://" + Server + "/api/rootCA";
+      http.begin(url);
+      http.addHeader("shlug-sn", SerialNumber);
+
+      int httpCode = http.GET();
+      String TLSPayload = "";
+
+      if (httpCode > 0) {
+        if (httpCode == HTTP_CODE_OK) {
+          TLSPayload = http.getString();
+          //Serial.println(F("Successfully downloaded new cert payload."));
+        } else {
+          //Serial.print(F("HTTP GET failed, error code: "));
+          //Serial.println(httpCode);
+          http.end();  // Clean up
+          NoNetwork = true;
           return;
         }
-        delay(10); 
+      } else {
+        //Serial.print(F("HTTP GET failed, error: "));
+        //Serial.println(http.errorToString(httpCode).c_str());
+        http.end();  // Clean up
         NoNetwork = true;
-        goto retryNetwork;
+        return;
       }
 
-      // The body is a JSON, let's capture it in a string.
-      String TLSPayload;
-      while(networkclient.available()){
-        char c = networkclient.read();
-        TLSPayload += c;
-      }
-      
-      Serial.println(TLSPayload);
-      networkclient.stop(); // Always close the socket when finished!
+      http.end();  // Always free the HTTPClient resources when done
 
       //Parse the JSON payload
       JsonDocument TLSJson;
       deserializeJson(TLSJson, TLSPayload);
+
       //Before we accept the new cert, we should check the SHA-256
       String SHATLS = TLSJson["sha"];
       String NewCert = TLSJson["cert"];
-      //The SHA is the hash of "[SerialNumber]:[Password]:[Cert]""
-      Serial.print(F("JSON Hash:       ")); Serial.println(SHATLS);
-      Serial.print(F("Calculated Hash: ")); Serial.println(getSHA256(SerialNumber + ":" + Key + ":" + NewCert));
-      if(SHATLS.equalsIgnoreCase(getSHA256(SerialNumber + ":" + Key + ":" + NewCert))){
-       //The hashes match!
-       Serial.println(F("TLS cert was verified. Saving to memory..."));
-       SPIFFS.remove("/cert.txt");
-       File file = SPIFFS.open("/cert.txt", FILE_WRITE);
-       //Need to change the written /n to an actual newline, clean up any other oddities in the file:
-       NewCert.replace("\\n","\n");
-       NewCert.replace("\r","");
-       NewCert.replace("\"","");
-       NewCert.trim();
-       NewCert += "\n";
-       if(file.print(NewCert)){
-        file.close();
-        RootCert = NewCert;
-        Serial.println(F("New cert has been saved. Regular operation can now resume."));
-        Serial.println(F("Our new cert is:"));
-        Serial.println(RootCert);
-        Serial.flush();
-        delay(10);
-        goto retryNetwork;
-       } else{
-        NoNetwork = true;
-        Serial.println(F("Unknown error, could not write new cert to file?"));
-        goto retryNetwork;
-       }
 
-      } else{
-        //The hashes did not match, potental attack in progress!
+      //Serial.print(F("JSON Hash:       "));
+      //Serial.println(SHATLS);
+      //Serial.print(F("Calculated Hash: "));
+      //Serial.println(getSHA256(SerialNumber + ":" + Key + ":" + NewCert));
+
+      if (SHATLS.equalsIgnoreCase(getSHA256(SerialNumber + ":" + Key + ":" + NewCert))) {
+        //Serial.println(F("TLS cert was verified."));
+
+        NewCert.replace("\\n", "\n");
+        NewCert.replace("\r", "");
+        NewCert.replace("\"", "");
+        NewCert.trim();
+        NewCert += "\n";
+
+        if (RootCert.equals(NewCert)) {
+          //Serial.println(F("The new cert is the same as the old cert? False alarm."));
+          LogToSend = true;
+          LogType = "network";
+          Log = "Attempt to load identical cert";
+          goto retryNetwork;
+        } else {
+            SPIFFS.remove("/cert.txt");
+            File file = SPIFFS.open("/cert.txt", FILE_WRITE);
+          if (file.print(NewCert)) {
+            file.close();
+            RootCert = NewCert;
+            //Serial.println(F("New cert saved. Regular operation can now resume."));
+            //Serial.println(RootCert);
+            //Serial.flush();
+            delay(10);
+            goto retryNetwork;  // Restart the function with the new cert
+          } else {
+            NoNetwork = true;
+            //Serial.println(F("Unknown error, could not write new cert to file?"));
+            goto retryNetwork;
+          }
+        }
+      } else {
         NoNetwork = true;
-        FaultReason = "TLS hash does not match!";
-        Serial.println(F("CRITICAL ERROR: ATTEMPT WAS MADE TO LOAD BAD TLS CERTS!"));
-        //Message = "Attmpted to load cert with bad hash?";
-        //MessageToSend = true;
+        //Serial.println(F("CRITICAL ERROR: ATTEMPT WAS MADE TO LOAD BAD TLS CERTS!"));
+        Message = "Attmpted to load cert with bad hash?";
+        MessageToSend = true;
         delay(1000);
         goto retryNetwork;
       }
     }
-  } //If not this, the connection worked and we can continue.
-  socket.setReconnectInterval(2000); //Attempt to reconnect every 2 seconds if we lose connection
-  Serial.println(F("Connecting to MQTT Broker"));
-  unsigned long long SocketTime = millis64() + 15000;
-  while(!mqtt.connect(SerialNumber, SerialNumber, Key)){ //Use serial number as unique ID, username, and key as password.
-    Serial.print(".");
+  }
+
+  // 3. Start our websocket connection
+  // At this point, HTTP and networkclient are stopped, heap is free, and RootCert is verified valid.
+  socket.disconnect();
+  const char* global_ca_pointer = RootCert.c_str();
+  socket.beginSslWithCA(Server.c_str(), 443, "/mqtt", global_ca_pointer, "mqtt");
+
+  //Give the socket some time to stabilize:
+  unsigned long long wsTimeout = millis64() + 5000;
+  while (!socket.isConnected() && millis64() <= wsTimeout) {
     socket.loop();
+    delay(2);
+  }
+
+  if (!socket.isConnected()) {
+    //Serial.println(F("Websocket connection failed despite valid certs. Retrying..."));
+    socket.disconnect();
+    goto retryNetwork;
+  }
+
+  // 4. Connect to MQTT
+  socket.setReconnectInterval(2000);  //Attempt to reconnect every 2 seconds if we lose connection
+  //Serial.println(F("Connecting to MQTT Broker"));
+  unsigned long long SocketTime = millis64() + 15000;
+
+  while (!mqtt.connect(SerialNumber, SerialNumber, Key)) {
+    //Serial.print(".");
     delay(500);
-    if(SocketTime <= millis64()){
-      Serial.println(F("Failed to connect to websocket! Retrying network altogether..."));
+    if (SocketTime <= millis64()) {
+      //Serial.println(F("Failed to connect to MQTT broker! Retrying network altogether..."));
       goto retryNetwork;
     }
-  } 
-  Serial.println(F(" MQTT Connected!"));
-  NoNetwork = false;
+  }
+  //Serial.println(F(" MQTT Connected!"));
 
-  //Subscribe to all MQTT topics relevant to us;
+  // Subscribe to all MQTT topics relevant to us;
   BaseTopic = "makerspace/device/" + SerialNumber;
-  String SubAuth = BaseTopic + "/authTo/response";
-  mqtt.subscribe(SubAuth, 2, [](const String& payload, const size_t size) {
-    Serial.print(F("AuthTo Response: "));
-    Serial.println(payload);
-    AuthResponse = payload;
-    NewAuth = 1;
-  });
   String SubInfo = BaseTopic + "/info/response";
   mqtt.subscribe(SubInfo, 2, [](const String& payload, const size_t size) {
-    Serial.print(F("Info Response: "));
-    Serial.println(payload);
+    //Serial.print(F("Info Response: "));
+    //Serial.println(payload);
     InfoResponse = payload;
     NewInfo = 1;
   });
+
   String SubCommand = BaseTopic + "/command";
   mqtt.subscribe(SubCommand, 2, [](const String& payload, const size_t size) {
-    Serial.print(F("Command Input: "));
-    Serial.println(payload);
+    //Serial.print(F("Command Input: "));
+    //Serial.println(payload);
     CommandResponse = payload;
     NewCommand = 1;
   });
@@ -1213,30 +827,32 @@ void NetworkConnect(){
   });
   String SubPing = BaseTopic + "/ping";
   mqtt.subscribe(SubPing, 2, [](const String& payload, const size_t size) {
-    //Serial.println(F("Ping Loopback."));
     NewPing = 1;
   });
 
   NoNetwork = false;
-  UpdateScreen = true;
 
   //We should request and report things when we (re)connect
   ReportConfig = 1;
   RequestInfo = 1;
   SendPing = 1;
   NextPingTime = millis64() + 1000;
-  LogType = "Network Connected";
-  Log = "Network Connected";
-  LogToSend = true;
+
+  //Don't overwrite more important logs, like getting a new cert.
+  if (!LogToSend) {
+    LogType = "network";
+    Log = "Network Connected";
+    LogToSend = true;
+  }
 }
 
 void publish(String Topic, String Payload){
   if(Payload != "Ping!"){
     //No point in printing the ping payload constantly
-    Serial.print(F("Publishing "));
-    Serial.print(Payload);
-    Serial.print(F(" to topic "));
-    Serial.println(Topic);
+    //Serial.print(F("Publishing "));
+    //Serial.print(Payload);
+    //Serial.print(F(" to topic "));
+    //Serial.println(Topic);
   }
   mqtt.publish(Topic, Payload, false, 2); //Send not retained at QoS 2
 }
@@ -1260,6 +876,7 @@ void mfrc630_SPI_unselect() {
   SPI.endTransaction();    // release the SPI bus
 }
 
+/*
 String readCDCString(uint32_t timeout = 20) {
   String result = "";
   unsigned long long deadline = millis64() + timeout;
@@ -1274,102 +891,102 @@ String readCDCString(uint32_t timeout = 20) {
 
 void CheckforConfig(){
   //Called to see if a config JSON has been sent via USB.
-  if(Serial.available()){
+  if(//Serial.available()){
     String USBConfig = readCDCString(20);
     JsonDocument ConfigJson;
     deserializeJson(ConfigJson, USBConfig);
     String NewSSID = ConfigJson["SSID"];
     if(ConfigJson["SSID"].is<String>()){
-      Serial.print(F("Set WiFi SSID to: "));
-      Serial.println(NewSSID);
+      //Serial.print(F("Set WiFi SSID to: "));
+      //Serial.println(NewSSID);
       settings.putString("SSID", NewSSID);
     } else{
-      Serial.println(F("Kept old WiFi SSID."));
+      //Serial.println(F("Kept old WiFi SSID."));
     }
     String NewPassword = ConfigJson["Password"];
     if(ConfigJson["Password"].is<String>()){
-      Serial.print(F("Set WiFi password to: "));
-      Serial.println(NewPassword);
+      //Serial.print(F("Set WiFi password to: "));
+      //Serial.println(NewPassword);
       settings.putString("Password", NewPassword);
     } else{
-      Serial.println(F("Kept old WiFi password."));
+      //Serial.println(F("Kept old WiFi password."));
     }
     String NewServer = ConfigJson["Server"];
     if(ConfigJson["Server"].is<String>()){
-      Serial.print(F("Set server to: "));
-      Serial.println(NewServer);
+      //Serial.print(F("Set server to: "));
+      //Serial.println(NewServer);
       settings.putString("Server", NewServer);
     } else{
-      Serial.println(F("Kept old server."));
+      //Serial.println(F("Kept old server."));
     }
     String NewKey = ConfigJson["Key"];
     if(ConfigJson["Key"].is<String>()){
-      Serial.println(F("Set a new key (not printed for security)"));
+      //Serial.println(F("Set a new key (not printed for security)"));
       settings.putString("Key", NewKey);
     } else{
-      Serial.println(F("Kept old key."));
+      //Serial.println(F("Kept old key."));
     }
     String NewTimezone = ConfigJson["Timezone"];
     if(ConfigJson["Timezone"].is<String>()){
-      Serial.print(F("Set timezone to: "));
-      Serial.println(NewTimezone);
+      //Serial.print(F("Set timezone to: "));
+      //Serial.println(NewTimezone);
       settings.putString("Timezone", NewTimezone);
     } else{
-      Serial.println(F("Kept old timezone."));
+      //Serial.println(F("Kept old timezone."));
     }
     String NewMakerspaceID = ConfigJson["MakerspaceID"];
     if(ConfigJson["MakerspaceID"].is<String>()){
-      Serial.print(F("Set makerspace ID to: "));
-      Serial.println(NewMakerspaceID);
+      //Serial.print(F("Set makerspace ID to: "));
+      //Serial.println(NewMakerspaceID);
       settings.putString("MakerspaceID", NewMakerspaceID);
     } else{
-      Serial.println(F("Kept old makerspace ID."));
+      //Serial.println(F("Kept old makerspace ID."));
     }
     String NewChannelCount = ConfigJson["ChannelCount"];
     if(ConfigJson["ChannelCount"].is<String>()){
-      Serial.print(F("Set Channel Count to: "));
-      Serial.println(NewChannelCount);
+      //Serial.print(F("Set Channel Count to: "));
+      //Serial.println(NewChannelCount);
       settings.putString("ChannelCount", NewChannelCount);
     } else{
-      Serial.println(F("Kept old ChannelCount."));
+      //Serial.println(F("Kept old ChannelCount."));
     }
     String NewInputMode = ConfigJson["InputMode"];
     if(ConfigJson["InputMode"].is<String>()){
-      Serial.print(F("Set InputMode to: "));
-      Serial.println(NewInputMode);
+      //Serial.print(F("Set InputMode to: "));
+      //Serial.println(NewInputMode);
       settings.putString("InputMode", NewInputMode);
     } else{
-      Serial.println(F("Kept old InputMode"));
+      //Serial.println(F("Kept old InputMode"));
     }
     String NewStationName = ConfigJson["StationName"];
     if(ConfigJson["StationName"].is<String>()){
-      Serial.print(F("Set Station Name to: "));
-      Serial.println(NewStationName);
+      //Serial.print(F("Set Station Name to: "));
+      //Serial.println(NewStationName);
       settings.putString("StationName", NewStationName);
     } else{
-      Serial.println(F("Kept old StationName"));
+      //Serial.println(F("Kept old StationName"));
     }
     int NewMakerspaceNumber = ConfigJson["MakerspaceNumber"];
     if(ConfigJson["MakerspaceNumber"].is<int>()){
-      Serial.println(F("Set makerspace number to: "));
-      Serial.println(NewMakerspaceNumber);
+      //Serial.println(F("Set makerspace number to: "));
+      //Serial.println(NewMakerspaceNumber);
       settings.putInt("SpaceNum", NewMakerspaceNumber);
     } else{
-      Serial.println(F("Kept old MakerspaceNumber."));
+      //Serial.println(F("Kept old MakerspaceNumber."));
     }
     String NewInterruptResponse = ConfigJson["InterruptResponse"];
     if(ConfigJson["InterruptResponse"].is<String>()){
-      Serial.print(F("Set interrupt response to: "));
-      Serial.println(NewInterruptResponse);
+      //Serial.print(F("Set interrupt response to: "));
+      //Serial.println(NewInterruptResponse);
       settings.putString("IntResp", NewInterruptResponse);
     } else{
-      Serial.println(F("Kept old InterruptResponse."));
+      //Serial.println(F("Kept old InterruptResponse."));
     }
     if (ConfigJson["TapDuration"].is<JsonArray>()) {
       JsonArray durations = ConfigJson["TapDuration"].as<JsonArray>();
 
       if (durations.size() == 4) {
-        Serial.print(F("Set Tap Durations (seconds) to: ["));
+        //Serial.print(F("Set Tap Durations (seconds) to: ["));
         for (int i = 0; i < 4; i++) {
           uint32_t dur = durations[i].as<uint32_t>();
           
@@ -1378,19 +995,20 @@ void CheckforConfig(){
           String key = "TapDur" + String(i);
           settings.putUInt(key.c_str(), dur);
 
-          Serial.print(dur);
-          if (i < 3) Serial.print(F(", "));
+          //Serial.print(dur);
+          if (i < 3) //Serial.print(F(", "));
         }
-        Serial.println(F("]"));
+        //Serial.println(F("]"));
       } else {
-        Serial.println(F("Error: TapDuration must contain exactly 4 values. Kept old values."));
+        //Serial.println(F("Error: TapDuration must contain exactly 4 values. Kept old values."));
       }
     } else {
-      Serial.println(F("Kept old TapDuration."));
+      //Serial.println(F("Kept old TapDuration."));
     }
-    Serial.println(F("Above settings have been saved to memory. Restart device to apply settings."));
+    //Serial.println(F("Above settings have been saved to memory. Restart device to apply settings."));
   }
 }
+*/
 
 String getBaseMacAddress() {
   uint8_t baseMac[6];
@@ -1438,13 +1056,3 @@ String getSHA256(String input) {
   
   return hashStr;
 }
-
-void IRAM_ATTR onTimerCallback(void* arg) {
-  //This is called in an ISR to increment the Hobbs timer very precisely!
-  for(int i = 0; i < ChannelCount; i++){
-    if(ChannelAccess[i]){
-      HobbsSeconds[i]++;
-    }
-  }
-}
-

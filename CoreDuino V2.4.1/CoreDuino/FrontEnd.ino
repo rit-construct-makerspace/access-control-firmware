@@ -16,79 +16,32 @@ void AVControl(void *pvParameters){
   byte DonePlaying;
   byte MelodyStep;
   uint64_t MelodyTime = 0;
-  Serial.println(F("AVControl Started."));
+  bool AnimationHelper = false; //Generic global bool for animations to use
+  //Serial.println(F("AVControl Started."));
   while(1){
-    vTaskDelay(20 / portTICK_PERIOD_MS);
+    vTaskDelay(10 / portTICK_PERIOD_MS);
     //First, set the animation state:
     //Animation triggers are not exclusive, so if statements written in reverse-priority order.
 
-    //NEW: Since there are 4 channels, we need to consider all 4 before we set a light.
-    //Lighting should be based on the most permissive level currently available...
-    //i.e. if Ch 1 is unlocked and Ch 2 is locked out, show a light as if we are unlocked
-    //But, any channel being in fault or unknown takes priority.
-    //So, we do a reverse-priority order collection of the states here to use for old lighting code.
-    String LightState = "NOTHING";
-    int highestPriority = 0;
-    for (int i = 0; i < ChannelCount; i++) {
-      int currentPriority = 0;
-
-      // Tier 4 (Absolute Priority): Faults or Unknown states
-      if (State[i] == "FAULT" || State[i] == "UNKNOWN") {
-        currentPriority = 4;
-      } 
-      // Tier 3 (Most Permissive): Active access states
-      else if (State[i] == "UNLOCKED" || State[i] == "ALWAYS_ON") {
-        currentPriority = 3;
-      } 
-      // Tier 2 (Neutral): Waiting for interaction
-      else if (State[i] == "IDLE") {
-        currentPriority = 2;
-      } 
-      // Tier 1 (Least Permissive): Completely locked out
-      else if (State[i] == "LOCKED_OUT") {
-        currentPriority = 1;
-      }
-
-      // If this channel outranks the previous ones, update the LightState
-      if (currentPriority > highestPriority) {
-        highestPriority = currentPriority;
-        LightState = State[i]; // Inherit the actual state string (e.g., grabs "ALWAYS_ON" vs "UNLOCKED")
-      }
-    }
-    if(LightState == "NOTHING"){
-      LightState = "UNKNOWN";
-    }
-
-    if(LightState.equals("IDLE")){
-      //Animation 3: Solid Yellow
-      LEDAnimation = 3;
-    }
     if(WelcomeMode){
       //For now it is solid yellow, TODO switch to a slow blink yellow 10% duty cycle or so to catch user attention.
-      LEDAnimation = 3;
+      LEDAnimation = 12;
     }
-    if(PendingApproval || WelcomingPending){
+    if(WelcomingPending){
       //Animation 4: Flashing Yellow
       LEDAnimation = 4;
     }
-    if(LightState.equals("UNLOCKED") || LightState.equals("ALWAYS_ON") || UserWelcomed){
-      //Animation 2: Solid Green
+    if(UserWelcomed){
+      //The user was welcomed!
+      //Act like we are giving access;
+      //(Solid Green)
       LEDAnimation = 2;
     }
-    if(LightState.equals("UNKNOWN") || NoNetwork){
+    if(NoNetwork){
       //Animation 7: Solid Blue
       LEDAnimation = 7;
     }
-    if((LightState.equals("UNLOCKED") || LightState.equals("ALWAYS_ON")) && NoNetwork){
-      //Animation 5: Alternate blue/green
-      LEDAnimation = 5;
-    }
-    if(ImminentShutdown){
-      //Play a warning alternating between red and green
-      //Used when a machine is unlocked, but we should tell the user to stop.
-      LEDAnimation = 11;
-    }
-    if(LightState.equals("LOCKED_OUT") || AccessDenied){
+    if(AccessDenied){
       //Animation 1: Solid Red
       LEDAnimation = 1;
     }
@@ -100,9 +53,6 @@ void AVControl(void *pvParameters){
       //Animation 8: Solid Purple
       LEDAnimation = 8;
     }
-    if(LightState.equals("FAULT")){
-      LEDAnimation = 0;
-    }
     if(GamerMode){
       LEDAnimation = 10;
     }
@@ -110,6 +60,8 @@ void AVControl(void *pvParameters){
     if(LEDAnimation != OldLEDAnimation){
       OldLEDAnimation = LEDAnimation;
       AnimationTime = 0; //Force an update of the animation block
+      AnimationBlock = 0;
+      AnimationHelper = false; 
     } 
     if(AnimationTime <= millis64()){
       //It is time to advance to the next animation block
@@ -117,7 +69,10 @@ void AVControl(void *pvParameters){
       if(LEDAnimation == 5){
         //Animation 5 runs at a slower speed
         AnimationTime = millis64() + 3000;
-      } else{
+      } else if(LEDAnimation == 12){
+        //12 runs way faster
+        AnimationTime = millis64() + 10;
+      }else{
         AnimationTime = millis64() + 400;
       }
       //Set the animation block here;
@@ -246,6 +201,31 @@ void AVControl(void *pvParameters){
           AnimationBlock = 0;
         }
       break;
+      case 12:
+        //Breathe up and down yellow;
+        AnimationBlock++;
+        byte DimColor = 0;
+        if (AnimationBlock == 0) {
+          //This means we rolled over, so we should invert the AnimationHelper
+          AnimationHelper = !AnimationHelper;
+        }
+        if(AnimationHelper){
+          //This means that we are at max brightness, and are now decreasing...
+          DimColor = 255 - AnimationBlock;
+        } else{
+          //This means we are not at max brightness, so we should increase...
+          DimColor = AnimationBlock;
+        }
+        if (DimColor <= 50) {
+          //Don't get too dim!
+          DimColor = 50;
+        }
+        //Write the values;
+        Red = DimColor;
+        Green = DimColor;
+        Blue = 0;
+
+      break;
       }
 
       CBI.setPixelColor(0, Red, Green, Blue);
@@ -268,7 +248,7 @@ void AVControl(void *pvParameters){
       Melody = 1;
     } else if(AccessDenied){
       Melody = 2;
-    } else if(LightState == "FAULT" || FaultBeep){
+    } else if(FaultBeep){
       Melody = 3;
     } else if(SingleBeep){
       Melody = 4;
@@ -390,7 +370,7 @@ void AVControl(void *pvParameters){
 
 void RestartController(void *pvParameters){
   unsigned long long ButtonTime = 0;
-  Serial.println(F("RestartController Started"));
+  //Serial.println(F("RestartController Started"));
   while(1){
     //First, check if the button is being held to trigger a restart;
     delay(100);
@@ -411,15 +391,12 @@ void RestartController(void *pvParameters){
     //Next, check if anything has asked for the device to be restarted.
     if(RequestReset){
       vTaskSuspendAll(); //Stop all other tasks
-      Serial.print(F("Restarting. Source: "));
-      Serial.println(ResetReason);
-      Serial.flush();
+      //Serial.print(F("Restarting. Source: "));
+      //Serial.println(ResetReason);
+      //Serial.flush();
       CBI.setPixelColor(0, 255, 0, 0);
       CBI.show();
       settings.putString("ResetReason",ResetReason);
-      //Tell the frontend, if connected;
-      Serial0.println("{\"command\":\"restart\"}");
-      Serial0.flush();
       delay(50);
       ESP.restart();
     }
