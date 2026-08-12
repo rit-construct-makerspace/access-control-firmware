@@ -2,7 +2,7 @@
 //This variant is a reduced version of the CoreDuino running hardware 3.0.0, to allow old hardware to be used as sign-in readers. It should not meant to be used for actual Accsss Control readers, although it should work for that purpose.
 
 //DUE TO LIMITED MEMORY:
-//Had to disable Serial and USB CDC to get TLS working.
+//Had to disable //Serial and USB CDC to get TLS working.
 
 #define Version "2.1.9"
 #define Hardware "2.4.1-LE"
@@ -103,6 +103,7 @@ String TapUID; //Stores the UID between cycles for comparison when in tap mode.
 bool UserWelcomed = 0;
 unsigned long long NextStatusTime = 0;
 bool AccessDenied = false; //Lights/sounds trigger when a user is not welcome.
+bool TLSFalseAlarm = false; //Tracks if we have had repeated bad TLS connections. It may be a heap issue, and we should restart instead of continuing to try. 
 
 //Variables - Config
 String SerialNumber;
@@ -195,7 +196,7 @@ void setup() {
 
   //Load settings from memory
 
-  //Get our serial number;
+  //Get our Serial number;
   // The ID is 128 bits = 16 bytes
   uint8_t unique_id[16]; 
   
@@ -203,10 +204,10 @@ void setup() {
   esp_err_t err = esp_efuse_read_field_blob(ESP_EFUSE_OPTIONAL_UNIQUE_ID, unique_id, 128);
 
   if (err == ESP_OK) {
-    //Serial.print("Serial Number: ");
+    //Serial.print("//Serial Number: ");
     for (int i = 0; i < 16; i++) {
       if (unique_id[i] < 0x10) SerialNumber += "0"; // Lead with zero if byte < 16
-      SerialNumber += String(unique_id[i], HEX);
+    SerialNumber += String(unique_id[i], HEX);
     }
     SerialNumber.toUpperCase();
     //Serial.print(SerialNumber);
@@ -233,7 +234,7 @@ void setup() {
       //Serial.println(F("WiFi SSID, WiFi Password, Server, Server Key, Timezone, MakerspaceID"));
       //Serial.print(F("Device WiFi MAC Address: "));
       //Serial.println(getBaseMacAddress());
-      //Serial.print(F("Device Serial Number: "));
+      //Serial.print(F("Device //Serial Number: "));
       //Serial.println(SerialNumber);
       //CheckforConfig();
       delay(1000);
@@ -248,6 +249,7 @@ void setup() {
   HWVer = settings.getString("HWVer");
 
   Server = settings.getString("Server");
+
   Password = settings.getString("Password");
   if(Password.equalsIgnoreCase("null")){
     //Use a real NULL password.
@@ -304,7 +306,7 @@ void setup() {
     //Serial.println(F("Checking for OTA..."));
 
     // 1. Configure all OTA settings first
-    //ota.EnableSerialDebug();
+    //ota.Enable//SerialDebug();
     //We use the same cert on our server as Github does.
     ota.SetCACert(RootCert.c_str());
     ota.SetCallback(callback_percent);
@@ -319,7 +321,7 @@ void setup() {
     if (isValid) {
       int otaresp = ota.CheckForOTAUpdate(jsonUrl, Version);
       //Serial.print(F("OTA Response: "));
-      //Serial.println(errtext(otaresp));
+      //Serial.println(otaresp);
     }
     // --- OTA LOGIC ENDS HERE ---
 
@@ -735,6 +737,16 @@ retryNetwork:
 
         if (RootCert.equals(NewCert)) {
           //Serial.println(F("The new cert is the same as the old cert? False alarm."));
+          if(TLSFalseAlarm){
+            //This is the second false alarm in a row! Let's restart to clear cache.
+            RequestReset = true;
+            while(1){
+              delay(100);
+            }
+          } else{
+            //First time having an isue, may be a fluke.
+            TLSFalseAlarm = true;
+          }
           LogToSend = true;
           LogType = "network";
           Log = "Attempt to load identical cert";
@@ -800,6 +812,7 @@ retryNetwork:
     }
   }
   //Serial.println(F(" MQTT Connected!"));
+  TLSFalseAlarm = false; //We were able to connect, clear any false alarms.
 
   // Subscribe to all MQTT topics relevant to us;
   BaseTopic = "makerspace/device/" + SerialNumber;
@@ -820,8 +833,8 @@ retryNetwork:
   });
   String SubWelcome = BaseTopic + "/welcome/response";
   mqtt.subscribe(SubWelcome, 2, [](const String& payload, const size_t size) {
-    Serial.print(F("Welcome Response: "));
-    Serial.println(payload);
+    //Serial.print(F("Welcome Response: "));
+    //Serial.println(payload);
     WelcomeResponse = payload;
     NewWelcome = 1;
   });
@@ -877,21 +890,23 @@ void mfrc630_SPI_unselect() {
 }
 
 /*
+
 String readCDCString(uint32_t timeout = 20) {
   String result = "";
   unsigned long long deadline = millis64() + timeout;
   while (millis64() < deadline) {
-    while (Serial.available() > 0) {
-      result += (char)Serial.read();
+    while (//Serial.available() > 0) {
+      result += (char)//Serial.read();
     }
     delay(1);
   }
   return result;
 }
 
+
 void CheckforConfig(){
   //Called to see if a config JSON has been sent via USB.
-  if(//Serial.available()){
+  if(Serial.available()){
     String USBConfig = readCDCString(20);
     JsonDocument ConfigJson;
     deserializeJson(ConfigJson, USBConfig);
@@ -1008,6 +1023,7 @@ void CheckforConfig(){
     //Serial.println(F("Above settings have been saved to memory. Restart device to apply settings."));
   }
 }
+
 */
 
 String getBaseMacAddress() {
@@ -1025,6 +1041,8 @@ String getBaseMacAddress() {
     return String("00:00:00:00:00:00");
   }
 }
+
+
 
 String getSHA256(String input) {
   // Create a buffer to hold the 32-byte (256-bit) hash output

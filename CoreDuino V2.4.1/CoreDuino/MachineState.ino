@@ -52,6 +52,7 @@ void MachineState(void *pvParameters){
         SendWelcome = 0;
         WelcomingPending = 0;
         UserWelcomed = 0;
+        AccessDenied = 0;
       }
     }
 
