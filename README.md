@@ -2,6 +2,10 @@
 
 ## NOTICE: This repository has been retired, anything related to V3.X hardware and beyond can be found at https://github.com/makeacs
 
+The only code still in-use in this repo is CYD screen (pending transfer to MakeACS) and 2.4.1 Coreduino (will not be transferred). 
+
+-----
+
 This repository contains the firmware for our makerspace access control system, to allow for automatic OTA updates.
 
 Repository is organized into folders corresponding to each hardware revision.
