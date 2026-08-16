@@ -3,7 +3,7 @@
     {
       "Device": "ACS Core",
       "Config": "2.3.2-LE",
-      "Version": "2.2.2,
+      "Version": "2.2.2",
       "URL": "https://github.com/MakeACS/HW-NFC-Core/releases/download/3.0.0/firmware_core-v2-3-2.bin"
     },
     {
